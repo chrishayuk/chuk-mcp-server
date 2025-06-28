@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chuk-mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncio>=3.4.3",
+    "httptools>=0.6.4",
+    "orjson>=3.10.18",
+    "starlette>=0.47.1",
+    "uvicorn>=0.35.0",
+    "uvloop>=0.21.0",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["chuk_mcp_server*"]
+
+[dependency-groups]
+dev = [
+    "aiohttp>=3.12.13",
+]
+
+[project.entry-points.console_scripts]
+chuk-mcp-server = "chuk_mcp_server.main:main"
