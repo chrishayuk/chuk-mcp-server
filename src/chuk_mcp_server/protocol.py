@@ -1,313 +1,384 @@
 #!/usr/bin/env python3
 """
-protocol.py - MCP Protocol Implementation
-
-Handles all MCP protocol operations including:
-- Session management and initialization
-- Tool discovery and execution
-- Resource listing and reading
-- Protocol validation and error handling
+CleanMCP Protocol Handler - Core MCP protocol implementation with working chuk_mcp
 """
 
+import asyncio
 import json
 import time
-from typing import Dict, Any, Optional, Tuple
+import uuid
+import logging
+from typing import Dict, Any, Optional, List
 
-from .models import get_state, MCPSession
+from .types import Tool, Resource, ServerInfo, Capabilities, format_content
+
+# Try to import chuk_mcp components with proper fallback
+try:
+    from chuk_mcp.mcp_client.messages.initialize.mcp_server_info import MCPServerInfo
+    from chuk_mcp.mcp_client.messages.initialize.mcp_server_capabilities import (
+        MCPServerCapabilities, ToolsCapability, ResourcesCapability, PromptsCapability
+    )
+    from chuk_mcp.mcp_client.messages.tools.tool import Tool as ChukTool
+    from chuk_mcp.mcp_client.messages.resources.resource import Resource as ChukResource
+    from chuk_mcp.mcp_client.messages.resources.resource_content import ResourceContent
+    CHUK_MCP_AVAILABLE = True
+    print("✅ chuk_mcp integration enabled")
+except ImportError as e:
+    CHUK_MCP_AVAILABLE = False
+    print(f"⚠️ chuk_mcp not available: {e}")
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Protocol Constants
+# Session Management
 # ============================================================================
 
-PROTOCOL_VERSION = "2025-06-18"
-SERVER_NAME = "fast-mcp-server"
-SERVER_VERSION = "1.0.0"
-
-# JSON-RPC Error Codes
-PARSE_ERROR = -32700
-INVALID_REQUEST = -32600
-METHOD_NOT_FOUND = -32601
-INVALID_PARAMS = -32602
-INTERNAL_ERROR = -32603
-
-
-# ============================================================================
-# Core Protocol Handlers
-# ============================================================================
-
-def handle_initialize(params: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
-    """
-    Handle MCP initialize request
+class SessionManager:
+    """Manage MCP sessions."""
     
-    Returns:
-        Tuple of (result_dict, session_id)
-    """
-    state = get_state()
+    def __init__(self):
+        self.sessions: Dict[str, Dict[str, Any]] = {}
     
-    # Extract client information
-    client_info = params.get("clientInfo", {"name": "unknown", "version": "0.0.0"})
-    protocol_version = params.get("protocolVersion", PROTOCOL_VERSION)
+    def create_session(self, client_info: Dict[str, Any], protocol_version: str) -> str:
+        """Create a new session."""
+        session_id = str(uuid.uuid4()).replace("-", "")
+        self.sessions[session_id] = {
+            "id": session_id,
+            "client_info": client_info,
+            "protocol_version": protocol_version,
+            "created_at": time.time(),
+            "last_activity": time.time()
+        }
+        logger.info(f"Created session {session_id[:8]}... for {client_info.get('name', 'unknown')}")
+        return session_id
     
-    # Create new session
-    session = state.create_session(client_info, protocol_version)
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get session by ID."""
+        return self.sessions.get(session_id)
     
-    # Build capabilities response
-    capabilities = {
-        "tools": {"listChanged": True},
-        "resources": {"listChanged": True},
-        "logging": {}
-    }
+    def update_activity(self, session_id: str):
+        """Update session last activity."""
+        if session_id in self.sessions:
+            self.sessions[session_id]["last_activity"] = time.time()
     
-    # Build server info
-    server_info = {
-        "name": SERVER_NAME,
-        "version": SERVER_VERSION
-    }
-    
-    result = {
-        "protocolVersion": PROTOCOL_VERSION,
-        "capabilities": capabilities,
-        "serverInfo": server_info
-    }
-    
-    return result, session.session_id
-
-
-def handle_ping(params: Dict[str, Any], session: Optional[MCPSession] = None) -> Dict[str, Any]:
-    """Handle ping request - simple heartbeat"""
-    return {}
-
-
-def handle_tools_list(params: Dict[str, Any], session: Optional[MCPSession] = None) -> Dict[str, Any]:
-    """Handle tools/list request"""
-    state = get_state()
-    state.increment_tool_calls()
-    
-    tools = state.get_tools()
-    return {"tools": tools}
-
-
-def handle_tools_call(params: Dict[str, Any], session: Optional[MCPSession] = None) -> Dict[str, Any]:
-    """Handle tools/call request"""
-    state = get_state()
-    state.increment_tool_calls()
-    
-    tool_name = params.get("name")
-    arguments = params.get("arguments", {})
-    
-    if not tool_name:
-        raise ValueError("Tool name is required")
-    
-    # Get tool definition
-    tool = state.get_tool_by_name(tool_name)
-    if not tool:
-        raise ValueError(f"Unknown tool: {tool_name}")
-    
-    # Execute the tool
-    result = execute_tool(tool_name, arguments)
-    
-    return {
-        "content": [
-            {"type": "text", "text": result}
+    def cleanup_expired(self, max_age: int = 3600):
+        """Remove expired sessions."""
+        now = time.time()
+        expired = [
+            sid for sid, session in self.sessions.items()
+            if now - session["last_activity"] > max_age
         ]
-    }
+        for sid in expired:
+            del self.sessions[sid]
+            logger.info(f"Cleaned up expired session {sid[:8]}...")
 
 
-def handle_resources_list(params: Dict[str, Any], session: Optional[MCPSession] = None) -> Dict[str, Any]:
-    """Handle resources/list request"""
-    state = get_state()
-    
-    resources = state.get_resources()
-    return {"resources": resources}
+# ============================================================================
+# Protocol Handler with Fixed chuk_mcp Integration
+# ============================================================================
 
-
-def handle_resources_read(params: Dict[str, Any], session: Optional[MCPSession] = None) -> Dict[str, Any]:
-    """Handle resources/read request"""
-    state = get_state()
-    state.increment_resource_reads()
+class MCPProtocolHandler:
+    """Core MCP protocol handler with working chuk_mcp integration."""
     
-    uri = params.get("uri")
-    if not uri:
-        raise ValueError("Resource URI is required")
+    def __init__(self, server_info: ServerInfo, capabilities: Capabilities):
+        self.server_info = server_info
+        self.capabilities = capabilities
+        self.session_manager = SessionManager()
+        
+        # Tool and resource registries
+        self.tools: Dict[str, Tool] = {}
+        self.resources: Dict[str, Resource] = {}
+        
+        # Setup chuk_mcp if available
+        if CHUK_MCP_AVAILABLE:
+            self._setup_chuk_mcp()
+            logger.info("✅ chuk_mcp integration active")
+        else:
+            logger.info("📦 Using fallback MCP implementation")
     
-    # Get resource definition
-    resource = state.get_resource_by_uri(uri)
-    if not resource:
-        raise ValueError(f"Unknown resource: {uri}")
+    def _setup_chuk_mcp(self):
+        """Setup chuk_mcp components with proper error handling."""
+        try:
+            # Create chuk_mcp server info
+            self.chuk_server_info = MCPServerInfo(
+                name=self.server_info.name,
+                version=self.server_info.version,
+                title=self.server_info.title or self.server_info.name
+            )
+            
+            # Create chuk_mcp capabilities
+            caps_dict = {}
+            
+            if self.capabilities.tools:
+                caps_dict["tools"] = ToolsCapability(listChanged=True)
+            
+            if self.capabilities.resources:
+                caps_dict["resources"] = ResourcesCapability(
+                    listChanged=True, 
+                    subscribe=False
+                )
+            
+            if self.capabilities.prompts:
+                caps_dict["prompts"] = PromptsCapability(listChanged=True)
+            
+            self.chuk_capabilities = MCPServerCapabilities(**caps_dict)
+            
+            logger.debug("chuk_mcp components initialized successfully")
+            
+        except Exception as e:
+            logger.warning(f"chuk_mcp setup failed: {e}, falling back to manual implementation")
+            global CHUK_MCP_AVAILABLE
+            CHUK_MCP_AVAILABLE = False
     
-    # Read the resource content
-    content = read_resource(uri)
+    def register_tool(self, tool: Tool):
+        """Register a tool."""
+        self.tools[tool.name] = tool
+        logger.debug(f"Registered tool: {tool.name}")
     
-    return {
-        "contents": [
-            {
-                "uri": uri,
-                "mimeType": resource.mime_type,
-                "text": content
+    def register_resource(self, resource: Resource):
+        """Register a resource."""
+        self.resources[resource.uri] = resource
+        logger.debug(f"Registered resource: {resource.uri}")
+    
+    def get_tools_list(self) -> List[Dict[str, Any]]:
+        """Get list of tools in MCP format."""
+        tools_list = []
+        
+        for tool in self.tools.values():
+            if CHUK_MCP_AVAILABLE:
+                try:
+                    # Use chuk_mcp Tool class for robust serialization
+                    chuk_tool = ChukTool(
+                        name=tool.name,
+                        description=tool.description,
+                        inputSchema=tool.to_mcp_format()["inputSchema"]
+                    )
+                    tools_list.append(chuk_tool.model_dump())
+                except Exception as e:
+                    logger.warning(f"chuk_mcp tool serialization failed for {tool.name}: {e}")
+                    tools_list.append(tool.to_mcp_format())
+            else:
+                tools_list.append(tool.to_mcp_format())
+        
+        return tools_list
+    
+    def get_resources_list(self) -> List[Dict[str, Any]]:
+        """Get list of resources in MCP format."""
+        resources_list = []
+        
+        for resource in self.resources.values():
+            if CHUK_MCP_AVAILABLE:
+                try:
+                    # Use chuk_mcp Resource class for robust serialization
+                    chuk_resource = ChukResource(
+                        uri=resource.uri,
+                        name=resource.name,
+                        description=resource.description,
+                        mimeType=resource.mime_type
+                    )
+                    resources_list.append(chuk_resource.model_dump())
+                except Exception as e:
+                    logger.warning(f"chuk_mcp resource serialization failed for {resource.uri}: {e}")
+                    resources_list.append(resource.to_mcp_format())
+            else:
+                resources_list.append(resource.to_mcp_format())
+        
+        return resources_list
+    
+    async def handle_request(self, message: Dict[str, Any], session_id: Optional[str] = None) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Handle an MCP request with robust error handling."""
+        try:
+            method = message.get("method")
+            params = message.get("params", {})
+            msg_id = message.get("id")
+            
+            logger.debug(f"Handling {method} (ID: {msg_id})")
+            
+            # Update session activity
+            if session_id:
+                self.session_manager.update_activity(session_id)
+            
+            # Route to appropriate handler
+            if method == "initialize":
+                return await self._handle_initialize(params, msg_id)
+            elif method == "notifications/initialized":
+                logger.info("✅ Initialized notification received")
+                return None, None  # Notifications don't return responses
+            elif method == "ping":
+                return await self._handle_ping(msg_id)
+            elif method == "tools/list":
+                return await self._handle_tools_list(msg_id)
+            elif method == "tools/call":
+                return await self._handle_tools_call(params, msg_id)
+            elif method == "resources/list":
+                return await self._handle_resources_list(msg_id)
+            elif method == "resources/read":
+                return await self._handle_resources_read(params, msg_id)
+            else:
+                return self._create_error_response(msg_id, -32601, f"Method not found: {method}"), None
+        
+        except Exception as e:
+            logger.error(f"Error handling request: {e}", exc_info=True)
+            return self._create_error_response(msg_id, -32603, f"Internal error: {str(e)}"), None
+    
+    async def _handle_initialize(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], str]:
+        """Handle initialize request with chuk_mcp integration."""
+        client_info = params.get("clientInfo", {})
+        protocol_version = params.get("protocolVersion", "2025-03-26")
+        
+        # Create session
+        session_id = self.session_manager.create_session(client_info, protocol_version)
+        
+        # Build response using chuk_mcp if available
+        if CHUK_MCP_AVAILABLE and hasattr(self, 'chuk_server_info') and hasattr(self, 'chuk_capabilities'):
+            try:
+                result = {
+                    "protocolVersion": protocol_version,
+                    "serverInfo": self.chuk_server_info.model_dump(),
+                    "capabilities": self.chuk_capabilities.model_dump(exclude_none=True)
+                }
+                logger.debug("Using chuk_mcp for initialize response")
+            except Exception as e:
+                logger.warning(f"chuk_mcp initialize failed: {e}, using fallback")
+                result = self._create_fallback_initialize_result(protocol_version)
+        else:
+            result = self._create_fallback_initialize_result(protocol_version)
+        
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result
+        }
+        
+        client_name = client_info.get('name', 'unknown')
+        logger.info(f"🤝 Initialized session {session_id[:8]}... for {client_name} (v{protocol_version})")
+        return response, session_id
+    
+    def _create_fallback_initialize_result(self, protocol_version: str) -> Dict[str, Any]:
+        """Create fallback initialize result without chuk_mcp."""
+        return {
+            "protocolVersion": protocol_version,
+            "serverInfo": self.server_info.to_dict(),
+            "capabilities": self.capabilities.to_dict()
+        }
+    
+    async def _handle_ping(self, msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle ping request."""
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {}
+        }, None
+    
+    async def _handle_tools_list(self, msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle tools/list request."""
+        tools_list = self.get_tools_list()
+        result = {"tools": tools_list}
+        
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result
+        }
+        
+        logger.info(f"📋 Returning {len(tools_list)} tools")
+        return response, None
+    
+    async def _handle_tools_call(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle tools/call request."""
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
+        
+        if tool_name not in self.tools:
+            return self._create_error_response(msg_id, -32602, f"Unknown tool: {tool_name}"), None
+        
+        try:
+            tool = self.tools[tool_name]
+            result = await tool.execute(arguments)
+            
+            # Format response content
+            content = format_content(result)
+            
+            response = {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"content": content}
             }
-        ]
-    }
-
-
-# ============================================================================
-# Tool Execution Engine
-# ============================================================================
-
-def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
-    """
-    Execute a tool with given arguments
+            
+            logger.info(f"🔧 Executed tool {tool_name}")
+            return response, None
+            
+        except Exception as e:
+            logger.error(f"Tool execution error for {tool_name}: {e}")
+            return self._create_error_response(msg_id, -32603, f"Tool execution error: {str(e)}"), None
     
-    This is where you'd integrate with chuk-tool-processor
-    For now, we have demo implementations
-    """
-    
-    if tool_name == "add":
-        a = arguments.get("a", 0)
-        b = arguments.get("b", 0)
+    async def _handle_resources_list(self, msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle resources/list request."""
+        resources_list = self.get_resources_list()
+        result = {"resources": resources_list}
         
-        # Validate inputs
-        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-            raise ValueError("Both 'a' and 'b' must be numbers")
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result
+        }
         
-        result = a + b
-        return f"The sum of {a} and {b} is {result}"
+        logger.info(f"📂 Returning {len(resources_list)} resources")
+        return response, None
     
-    elif tool_name == "hello":
-        name = arguments.get("name", "World")
+    async def _handle_resources_read(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle resources/read request with chuk_mcp integration."""
+        uri = params.get("uri")
         
-        # Validate input
-        if not isinstance(name, str):
-            raise ValueError("Name must be a string")
+        if uri not in self.resources:
+            return self._create_error_response(msg_id, -32602, f"Unknown resource: {uri}"), None
         
-        return f"Hello, {name}! 👋 Greetings from {SERVER_NAME}!"
+        try:
+            resource = self.resources[uri]
+            content = await resource.read()
+            
+            # Use chuk_mcp ResourceContent if available
+            if CHUK_MCP_AVAILABLE:
+                try:
+                    resource_content = ResourceContent(
+                        uri=uri,
+                        mimeType=resource.mime_type,
+                        text=content
+                    )
+                    content_dict = resource_content.model_dump()
+                    logger.debug("Using chuk_mcp ResourceContent")
+                except Exception as e:
+                    logger.warning(f"chuk_mcp ResourceContent failed: {e}, using fallback")
+                    content_dict = {
+                        "uri": uri,
+                        "mimeType": resource.mime_type,
+                        "text": content
+                    }
+            else:
+                content_dict = {
+                    "uri": uri,
+                    "mimeType": resource.mime_type,
+                    "text": content
+                }
+            
+            response = {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"contents": [content_dict]}
+            }
+            
+            logger.info(f"📖 Read resource {uri}")
+            return response, None
+            
+        except Exception as e:
+            logger.error(f"Resource read error for {uri}: {e}")
+            return self._create_error_response(msg_id, -32603, f"Resource read error: {str(e)}"), None
     
-    elif tool_name == "time":
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
-        timestamp = time.time()
-        return f"Current time: {current_time} (timestamp: {timestamp})"
-    
-    else:
-        raise ValueError(f"Tool '{tool_name}' is not implemented")
-
-
-# ============================================================================
-# Resource Reading Engine
-# ============================================================================
-
-def read_resource(uri: str) -> str:
-    """
-    Read resource content by URI
-    
-    This is where you'd integrate with your resource providers
-    For now, we have demo implementations
-    """
-    state = get_state()
-    
-    if uri == "demo://server-info":
-        content = state.get_server_info()
-        return json.dumps(content, indent=2)
-    
-    elif uri == "demo://metrics":
-        metrics = state.metrics.to_dict()
-        return json.dumps(metrics, indent=2)
-    
-    elif uri == "demo://tools":
-        tools = state.get_tools()
-        return json.dumps(tools, indent=2)
-    
-    else:
-        raise ValueError(f"Resource '{uri}' is not implemented")
-
-
-# ============================================================================
-# Protocol Message Routing
-# ============================================================================
-
-# Method routing table
-METHOD_HANDLERS = {
-    "initialize": handle_initialize,
-    "ping": handle_ping,
-    "tools/list": handle_tools_list,
-    "tools/call": handle_tools_call,
-    "resources/list": handle_resources_list,
-    "resources/read": handle_resources_read,
-}
-
-
-def route_method(method: str, params: Dict[str, Any], session: Optional[MCPSession] = None) -> Tuple[Dict[str, Any], Optional[str]]:
-    """
-    Route MCP method to appropriate handler
-    
-    Returns:
-        Tuple of (result, session_id) - session_id only for initialize
-    """
-    
-    if method not in METHOD_HANDLERS:
-        raise ValueError(f"Method not found: {method}")
-    
-    handler = METHOD_HANDLERS[method]
-    
-    # Special case for initialize which returns session_id
-    if method == "initialize":
-        return handler(params)
-    else:
-        result = handler(params, session)
-        return result, None
-
-
-def validate_jsonrpc_message(message: Dict[str, Any]) -> Tuple[bool, str]:
-    """
-    Validate basic JSON-RPC 2.0 message structure
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    
-    # Check JSON-RPC version
-    if message.get("jsonrpc") != "2.0":
-        return False, "Invalid Request: Must be JSON-RPC 2.0"
-    
-    # Check method exists
-    if "method" not in message:
-        return False, "Invalid Request: Missing method"
-    
-    # Check method is string
-    if not isinstance(message["method"], str):
-        return False, "Invalid Request: Method must be string"
-    
-    # Check params if present
-    if "params" in message and not isinstance(message["params"], dict):
-        return False, "Invalid Request: Params must be object"
-    
-    return True, ""
-
-
-def is_notification(message: Dict[str, Any]) -> bool:
-    """Check if message is a notification (no 'id' field)"""
-    return "id" not in message
-
-
-# ============================================================================
-# Error Handling
-# ============================================================================
-
-class MCPProtocolError(Exception):
-    """Custom exception for MCP protocol errors"""
-    
-    def __init__(self, code: int, message: str, data: Any = None):
-        self.code = code
-        self.message = message
-        self.data = data
-        super().__init__(f"MCP Error {code}: {message}")
-
-
-def create_error_dict(code: int, message: str, data: Any = None) -> Dict[str, Any]:
-    """Create JSON-RPC error object"""
-    error = {
-        "code": code,
-        "message": message
-    }
-    if data is not None:
-        error["data"] = data
-    return error
+    def _create_error_response(self, msg_id: Any, code: int, message: str) -> Dict[str, Any]:
+        """Create error response."""
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {"code": code, "message": message}
+        }

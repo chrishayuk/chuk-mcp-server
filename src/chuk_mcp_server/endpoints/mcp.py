@@ -1,408 +1,209 @@
 #!/usr/bin/env python3
+# chuk_mcp_server/endpoints/mcp.py
 """
-endpoints/mcp.py - Core MCP Protocol Endpoints
-
-Focused, high-performance implementation of the MCP protocol endpoints.
-Optimized for maximum throughput and minimal latency.
+MCP Endpoint - Handles core MCP protocol requests with SSE support
 """
-
+import logging
 import orjson
-from typing import Any, Dict, Optional
+from typing import Dict, Any, Optional
+
+# starletter
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
-from ..models import get_state
-from ..protocol import (
-    route_method, 
-    validate_jsonrpc_message, 
-    is_notification,
-    PARSE_ERROR, 
-    INVALID_REQUEST, 
-    METHOD_NOT_FOUND, 
-    INVALID_PARAMS, 
-    INTERNAL_ERROR
-)
+# chuk_mcp_server
+from ..protocol import MCPProtocolHandler
 
+# logger
+logger = logging.getLogger(__name__)
 
-# ============================================================================
-# Main MCP Protocol Endpoint
-# ============================================================================
-
-async def mcp_endpoint(request: Request) -> Response:
-    """
-    Main MCP protocol endpoint - ultra-optimized for performance
+class MCPEndpoint:
+    """Core MCP endpoint handler with SSE support for Inspector compatibility."""
     
-    Handles all JSON-RPC 2.0 MCP protocol requests with sub-millisecond
-    response times. This is the core endpoint that achieves 9,800+ RPS.
-    """
-    state = get_state()
-    state.increment_requests()
+    def __init__(self, protocol_handler: MCPProtocolHandler):
+        self.protocol = protocol_handler
     
-    try:
-        # Fast body parsing - critical path optimization
-        body = await request.body()
-        if not body:
-            return _create_error_response(None, PARSE_ERROR, "Parse error: Empty body")
+    async def handle_request(self, request: Request) -> Response:
+        """Main MCP endpoint handler."""
         
-        # Parse JSON with orjson for maximum speed
-        try:
-            message = orjson.loads(body)
-        except orjson.JSONDecodeError as e:
-            return _create_error_response(None, PARSE_ERROR, f"Parse error: {str(e)}")
+        # Handle CORS preflight
+        if request.method == "OPTIONS":
+            return self._cors_response()
         
-        # Extract message components - avoid multiple dict lookups
-        method = message.get("method")
-        params = message.get("params", {})
-        msg_id = message.get("id")
+        # Handle GET - return server info
+        if request.method == "GET":
+            return await self._handle_get(request)
         
-        # Validate JSON-RPC structure
-        is_valid, error_msg = validate_jsonrpc_message(message)
-        if not is_valid:
-            return _create_error_response(msg_id, INVALID_REQUEST, error_msg)
+        # Handle POST - process MCP requests
+        if request.method == "POST":
+            return await self._handle_post(request)
         
-        # Handle notifications with early return
-        if is_notification(message):
-            if method == "notifications/initialized":
-                return Response("", status_code=204)
-            else:
-                # Unknown notification - silently ignore per JSON-RPC spec
-                return Response("", status_code=204)
-        
-        # Get session for non-initialize requests
-        session = None
-        if method != "initialize":
-            session_id = request.headers.get("Mcp-Session-Id")
-            session = state.get_session(session_id)
-            # Note: We allow requests without session for compatibility
-        
-        # Route to method handler - core business logic
-        try:
-            result, new_session_id = route_method(method, params, session)
-            response = _create_success_response(msg_id, result)
-            
-            # Add session header for initialize
-            if new_session_id:
-                response.headers["Mcp-Session-Id"] = new_session_id
-            
-            return response
-            
-        except ValueError as e:
-            # Invalid parameters or method not found
-            error_str = str(e)
-            if "not found" in error_str.lower() or "unknown" in error_str.lower():
-                return _create_error_response(msg_id, METHOD_NOT_FOUND, error_str)
-            else:
-                return _create_error_response(msg_id, INVALID_PARAMS, error_str)
-        
-        except Exception as e:
-            # Internal server error
-            state.increment_errors()
-            return _create_error_response(msg_id, INTERNAL_ERROR, f"Internal error: {str(e)}")
+        return Response("Method not allowed", status_code=405)
     
-    except Exception as e:
-        # Catch-all for unexpected errors
-        state.increment_errors()
-        return _create_error_response(None, INTERNAL_ERROR, f"Server error: {str(e)}")
-
-
-# ============================================================================
-# Specialized MCP Endpoints (Optional - for direct access)
-# ============================================================================
-
-async def mcp_initialize_endpoint(request: Request) -> Response:
-    """
-    Direct initialize endpoint for easier testing/integration
+    def _cors_response(self) -> Response:
+        """Return CORS preflight response."""
+        return Response("", headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true"
+        })
     
-    Alternative to sending JSON-RPC through /mcp endpoint.
-    """
-    state = get_state()
-    state.increment_requests()
-    
-    try:
-        body = await request.body()
-        if body:
-            params = orjson.loads(body)
-        else:
-            params = {}
-        
-        # Route directly to initialize handler
-        from ..protocol import handle_initialize
-        result, session_id = handle_initialize(params)
-        
-        response = _create_success_response(1, result)
-        if session_id:
-            response.headers["Mcp-Session-Id"] = session_id
-        
-        return response
-        
-    except Exception as e:
-        return _create_error_response(1, INTERNAL_ERROR, f"Initialize error: {str(e)}")
-
-
-async def mcp_ping_endpoint(request: Request) -> Response:
-    """
-    Direct ping endpoint for ultra-fast health checks
-    
-    Optimized ping without JSON-RPC overhead.
-    """
-    state = get_state()
-    state.increment_requests()
-    
-    # Pre-computed pong response for maximum speed
-    body = orjson.dumps({"ping": "pong", "timestamp": state.metrics.start_time + state.metrics.uptime()})
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "no-cache",
-            "server": "fast-mcp-server",
-            "content-length": str(len(body)),
-            "x-mcp-ping": "true"
+    async def _handle_get(self, request: Request) -> Response:
+        """Handle GET request - return server information."""
+        server_info = {
+            "name": self.protocol.server_info.name,
+            "version": self.protocol.server_info.version,
+            "protocol": "MCP 2025-03-26",
+            "status": "ready",
+            "tools": len(self.protocol.tools),
+            "resources": len(self.protocol.resources),
+            "powered_by": "CleanMCP with chuk_mcp"
         }
-    )
-
-
-async def mcp_tools_endpoint(request: Request) -> Response:
-    """
-    Direct tools endpoint for REST-style access
+        
+        return Response(
+            orjson.dumps(server_info),
+            media_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
     
-    GET: List tools
-    POST: Call a tool
-    """
-    state = get_state()
-    state.increment_requests()
-    
-    if request.method == "GET":
-        # List tools
-        from ..protocol import handle_tools_list
-        result = handle_tools_list({})
-        return _create_success_response(None, result)
-    
-    elif request.method == "POST":
-        # Call a tool
+    async def _handle_post(self, request: Request) -> Response:
+        """Handle POST request - process MCP protocol messages."""
+        accept_header = request.headers.get("accept", "")
+        session_id = request.headers.get("mcp-session-id")
+        
         try:
+            # Parse request body
             body = await request.body()
-            params = orjson.loads(body) if body else {}
+            request_data = orjson.loads(body) if body else {}
+            method = request_data.get("method")
             
-            from ..protocol import handle_tools_call
-            result = handle_tools_call(params)
-            return _create_success_response(None, result)
+            logger.debug(f"Processing {method} request")
+            
+            # Route based on Accept header
+            if "text/event-stream" in accept_header:
+                # SSE streaming
+                return await self._handle_sse_request(request_data, session_id)
+            else:
+                # Regular JSON-RPC request
+                return await self._handle_json_request(request_data, session_id, method)
+                
+        except orjson.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            return self._error_response(None, -32700, f"Parse error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Request processing error: {e}")
+            return self._error_response(None, -32603, f"Internal error: {str(e)}")
+    
+    async def _handle_json_request(self, request_data: Dict[str, Any], 
+                                 session_id: Optional[str], method: str) -> Response:
+        """Handle regular JSON-RPC request."""
+        
+        # Validate session ID for non-initialize requests
+        if method != "initialize" and not session_id:
+            return self._error_response(
+                request_data.get("id", "server-error"),
+                -32600, 
+                "Bad Request: Missing session ID"
+            )
+        
+        # Process the request through protocol handler
+        response, new_session_id = await self.protocol.handle_request(request_data, session_id)
+        
+        # Handle notifications (no response)
+        if response is None:
+            return Response("", status_code=202, headers={"Access-Control-Allow-Origin": "*"})
+        
+        # Build response headers
+        headers = {"Access-Control-Allow-Origin": "*"}
+        if new_session_id:
+            headers["Mcp-Session-Id"] = new_session_id
+        
+        return Response(
+            orjson.dumps(response),
+            media_type="application/json",
+            headers=headers
+        )
+    
+    async def _handle_sse_request(self, request_data: Dict[str, Any], 
+                                session_id: Optional[str]) -> StreamingResponse:
+        """Handle SSE request for Inspector compatibility."""
+        
+        created_session_id = None
+        method = request_data.get("method")
+        
+        # Create session ID for initialize requests
+        if method == "initialize":
+            client_info = request_data.get("params", {}).get("clientInfo", {})
+            protocol_version = request_data.get("params", {}).get("protocolVersion", "2025-03-26")
+            created_session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
+            logger.info(f"🔑 Created SSE session: {created_session_id[:8]}...")
+        
+        return StreamingResponse(
+            self._sse_stream_generator(request_data, created_session_id or session_id, method),
+            media_type="text/event-stream",
+            headers=self._sse_headers(created_session_id)
+        )
+    
+    async def _sse_stream_generator(self, request_data: Dict[str, Any], 
+                                  session_id: Optional[str], method: str):
+        """Generate SSE stream response."""
+        try:
+            # Process the request through protocol handler
+            response, _ = await self.protocol.handle_request(request_data, session_id)
+            
+            if response:
+                logger.debug(f"📡 Streaming SSE response for {method}")
+                
+                # Send complete SSE event in proper format
+                # CRITICAL: Must send all 3 parts as separate yields for Inspector compatibility
+                yield f"event: message\r\n"
+                yield f"data: {orjson.dumps(response).decode()}\r\n"
+                yield f"\r\n"
+                
+                logger.debug(f"✅ SSE response sent for {method}")
+            
+            # For notifications, we don't send anything (which is correct)
             
         except Exception as e:
-            return _create_error_response(None, INTERNAL_ERROR, f"Tool call error: {str(e)}")
+            logger.error(f"SSE stream error: {e}")
+            
+            # Send error event
+            error_response = {
+                "jsonrpc": "2.0",
+                "id": request_data.get("id"),
+                "error": {"code": -32603, "message": str(e)}
+            }
+            yield f"event: error\r\n"
+            yield f"data: {orjson.dumps(error_response).decode()}\r\n"
+            yield f"\r\n"
     
-    else:
-        return _create_error_response(None, METHOD_NOT_FOUND, "Method not allowed")
-
-
-async def mcp_resources_endpoint(request: Request) -> Response:
-    """
-    Direct resources endpoint for REST-style access
-    
-    GET: List resources or read specific resource
-    """
-    state = get_state()
-    state.increment_requests()
-    
-    if request.method == "GET":
-        # Check if specific resource is requested
-        uri = request.query_params.get("uri")
-        
-        if uri:
-            # Read specific resource
-            try:
-                from ..protocol import handle_resources_read
-                result = handle_resources_read({"uri": uri})
-                return _create_success_response(None, result)
-            except Exception as e:
-                return _create_error_response(None, INVALID_PARAMS, f"Resource read error: {str(e)}")
-        else:
-            # List all resources
-            from ..protocol import handle_resources_list
-            result = handle_resources_list({})
-            return _create_success_response(None, result)
-    
-    else:
-        return _create_error_response(None, METHOD_NOT_FOUND, "Method not allowed")
-
-
-# ============================================================================
-# Session Management Endpoints
-# ============================================================================
-
-async def mcp_sessions_endpoint(request: Request) -> Response:
-    """
-    Session management endpoint for debugging and monitoring
-    """
-    state = get_state()
-    
-    if request.method == "GET":
-        # List active sessions
-        sessions_info = {
-            "active_sessions": len(state.sessions),
-            "sessions": [
-                {
-                    "session_id": session.session_id[:8] + "...",  # Truncated for privacy
-                    "client": session.client_info.get("name", "unknown"),
-                    "protocol_version": session.protocol_version,
-                    "age_seconds": round(session.age(), 2),
-                    "idle_seconds": round(session.idle_time(), 2)
-                }
-                for session in state.sessions.values()
-            ],
-            "timestamp": state.metrics.start_time + state.metrics.uptime()
+    def _sse_headers(self, session_id: Optional[str]) -> Dict[str, str]:
+        """Build SSE response headers."""
+        headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
         }
         
-        body = orjson.dumps(sessions_info)
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        
+        return headers
+    
+    def _error_response(self, msg_id: Any, code: int, message: str) -> Response:
+        """Create error response."""
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {"code": code, "message": message}
+        }
+        
+        status_code = 400 if code in [-32700, -32600] else 500
+        
         return Response(
-            body,
+            orjson.dumps(error_response),
+            status_code=status_code,
             media_type="application/json",
-            headers={
-                "cache-control": "no-cache",
-                "server": "fast-mcp-server"
-            }
+            headers={"Access-Control-Allow-Origin": "*"}
         )
-    
-    elif request.method == "DELETE":
-        # Cleanup expired sessions
-        expired_count = state.cleanup_expired_sessions()
-        
-        cleanup_info = {
-            "cleaned_up": expired_count,
-            "remaining_sessions": len(state.sessions),
-            "timestamp": state.metrics.start_time + state.metrics.uptime()
-        }
-        
-        body = orjson.dumps(cleanup_info)
-        return Response(
-            body,
-            media_type="application/json",
-            headers={
-                "cache-control": "no-cache",
-                "server": "fast-mcp-server"
-            }
-        )
-    
-    else:
-        return _create_error_response(None, METHOD_NOT_FOUND, "Method not allowed")
-
-
-# ============================================================================
-# Optimized Response Helpers
-# ============================================================================
-
-def _create_success_response(msg_id: Any, result: Any) -> Response:
-    """
-    Create optimized JSON-RPC success response
-    
-    Optimized for speed with minimal object allocation.
-    """
-    response_data = {
-        "jsonrpc": "2.0",
-        "id": msg_id,
-        "result": result
-    }
-    
-    # Use orjson for fastest serialization
-    body = orjson.dumps(response_data)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "no-cache",
-            "server": "fast-mcp-server",
-            "content-length": str(len(body))
-        }
-    )
-
-
-def _create_error_response(msg_id: Any, code: int, message: str, data: Any = None) -> Response:
-    """
-    Create optimized JSON-RPC error response
-    
-    Optimized for speed with minimal object allocation.
-    """
-    error_obj = {
-        "code": code,
-        "message": message
-    }
-    if data is not None:
-        error_obj["data"] = data
-    
-    response_data = {
-        "jsonrpc": "2.0",
-        "id": msg_id,
-        "error": error_obj
-    }
-    
-    # Use orjson for fastest serialization
-    body = orjson.dumps(response_data)
-    
-    # HTTP status code based on JSON-RPC error
-    if code == PARSE_ERROR:
-        status_code = 400  # Bad Request
-    elif code == INVALID_REQUEST:
-        status_code = 400  # Bad Request
-    elif code == METHOD_NOT_FOUND:
-        status_code = 404  # Not Found
-    elif code == INVALID_PARAMS:
-        status_code = 422  # Unprocessable Entity
-    else:
-        status_code = 500  # Internal Server Error
-    
-    return Response(
-        body,
-        status_code=status_code,
-        media_type="application/json",
-        headers={
-            "cache-control": "no-cache",
-            "server": "fast-mcp-server",
-            "content-length": str(len(body))
-        }
-    )
-
-
-# ============================================================================
-# Performance Monitoring for MCP Endpoints
-# ============================================================================
-
-async def mcp_performance_endpoint(request: Request) -> Response:
-    """
-    MCP-specific performance metrics
-    """
-    state = get_state()
-    
-    perf_data = {
-        "mcp_performance": {
-            "protocol_version": "2025-06-18",
-            "total_requests": state.metrics.total_requests,
-            "requests_per_second": round(state.metrics.rps(), 2),
-            "operations": {
-                "tool_calls": state.metrics.tool_calls,
-                "resource_reads": state.metrics.resource_reads,
-                "active_sessions": len(state.sessions)
-            },
-            "error_rate": round(
-                (state.metrics.errors / max(state.metrics.total_requests, 1)) * 100, 2
-            ),
-            "target_performance": {
-                "rps": "10,000+",
-                "response_time": "< 1ms",
-                "achieved_rps": round(state.metrics.rps(), 2)
-            }
-        },
-        "timestamp": state.metrics.start_time + state.metrics.uptime()
-    }
-    
-    body = orjson.dumps(perf_data)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "no-cache",
-            "server": "fast-mcp-server"
-        }
-    )

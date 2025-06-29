@@ -10,8 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "asyncio>=3.4.3",
+    "chuk-mcp>=0.2",
     "httptools>=0.6.4",
     "orjson>=3.10.18",
+    "pydantic>=2.11.7",
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
     "uvloop>=0.21.0",
@@ -27,6 +29,7 @@ include = ["chuk_mcp_server*"]
 [dependency-groups]
 dev = [
     "aiohttp>=3.12.13",
+    "requests>=2.32.4",
 ]
 
 [project.entry-points.console_scripts]

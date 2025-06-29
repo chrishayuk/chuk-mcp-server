@@ -1,545 +1,281 @@
 #!/usr/bin/env python3
+# chuk_mcp_server/endpoints/info.py
 """
-endpoints/info.py - Information and Discovery Endpoints
+Info Endpoint - Provides comprehensive server information and documentation
+"""
 
-Endpoints for server information, API discovery, documentation,
-and developer-friendly interfaces.
-"""
+import logging
+from typing import Dict, Any
 
 import orjson
-import time
-from typing import Dict, Any, List
 from starlette.requests import Request
-from starlette.responses import Response, PlainTextResponse
+from starlette.responses import Response
 
-from ..models import get_state
+from ..protocol import MCPProtocolHandler
+
+logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# Main Information Endpoints
-# ============================================================================
-
-async def root_endpoint(request: Request) -> Response:
-    """
-    Root endpoint with comprehensive server information
+class InfoEndpoint:
+    """Server information endpoint with comprehensive documentation."""
     
-    Provides a developer-friendly overview of the server capabilities,
-    endpoints, and current status.
-    """
-    state = get_state()
+    def __init__(self, protocol_handler: MCPProtocolHandler):
+        self.protocol = protocol_handler
     
-    current_time = time.time()
-    uptime = current_time - state.metrics.start_time
+    async def handle_request(self, request: Request) -> Response:
+        """Handle server information request."""
+        
+        if request.method == "GET":
+            return await self._handle_info_request(request)
+        else:
+            return Response("Method not allowed", status_code=405)
     
-    info = {
-        "server": "fast-mcp-server",
-        "version": "1.0.0",
-        "protocol": "MCP 2025-06-18",
-        "description": "High-performance MCP protocol server with sub-millisecond response times",
+    async def _handle_info_request(self, request: Request) -> Response:
+        """Return comprehensive server information."""
         
-        "endpoints": {
-            "mcp": {
-                "path": "/mcp",
-                "method": "POST",
-                "description": "MCP protocol endpoint for JSON-RPC requests",
-                "content_type": "application/json"
-            },
-            "health": {
-                "path": "/health",
-                "method": "GET", 
-                "description": "Fast health check for load balancers"
-            },
-            "metrics": {
-                "path": "/metrics",
-                "method": "GET",
-                "description": "Detailed performance metrics"
-            },
-            "info": {
-                "path": "/info",
-                "method": "GET",
-                "description": "Detailed server information"
-            },
-            "discovery": {
-                "path": "/api",
-                "method": "GET",
-                "description": "API discovery and documentation"
-            }
-        },
+        base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
         
-        "features": [
-            "High-performance MCP protocol implementation",
-            "Session management with automatic cleanup",
-            "Tool execution framework",
-            "Resource reading system",
-            "Real-time performance metrics",
-            "Sub-millisecond response times",
-            "Kubernetes-ready health probes",
-            "Prometheus metrics support"
-        ],
-        
-        "performance": {
-            "target_rps": "10,000+",
-            "benchmark_rps": state.metrics.rps(),
-            "uptime_seconds": round(uptime, 2),
-            "total_requests": state.metrics.total_requests,
-            "avg_response_time": "< 1ms",
-            "error_rate": round(
-                (state.metrics.errors / max(state.metrics.total_requests, 1)) * 100, 2
-            )
-        },
-        
-        "capabilities": {
+        # Build comprehensive server information
+        info = {
+            "server": self.protocol.server_info.to_dict(),
+            "capabilities": self.protocol.capabilities.to_dict(),
+            "protocol": {
+                "version": "MCP 2025-03-26",
+                "transport": "HTTP with SSE",
+                "inspector_compatible": True
+            },
+            "framework": {
+                "name": "CleanMCP",
+                "powered_by": "chuk_mcp",
+                "features": [
+                    "Type-safe tools with automatic schema generation",
+                    "Rich resources with multiple MIME types", 
+                    "Perfect Inspector compatibility",
+                    "SSE streaming support",
+                    "Robust session management",
+                    "Comprehensive error handling",
+                    "Modular architecture"
+                ]
+            },
+            "endpoints": {
+                "mcp": f"{base_url}/mcp",
+                "health": f"{base_url}/health",
+                "info": f"{base_url}/",
+                "documentation": f"{base_url}/?format=docs"
+            },
             "tools": {
-                "count": len(state.get_tools()),
-                "available": [tool["name"] for tool in state.get_tools()[:5]]  # First 5
+                "count": len(self.protocol.tools),
+                "available": list(self.protocol.tools.keys()),
+                "details": self._get_tools_details()
             },
             "resources": {
-                "count": len(state.get_resources()),
-                "available": [res["name"] for res in state.get_resources()[:5]]  # First 5
+                "count": len(self.protocol.resources),
+                "available": list(self.protocol.resources.keys()),
+                "details": self._get_resources_details()
             },
-            "sessions": {
-                "active": len(state.sessions),
-                "max_concurrent": "high"
-            }
-        },
+            "quick_start": {
+                "health_check": f"curl {base_url}/health",
+                "mcp_initialize": self._get_initialize_example(base_url),
+                "inspector_setup": {
+                    "transport": "Streamable HTTP",
+                    "url": "Use proxy pointing to this server",
+                    "note": "Fully compatible with MCP Inspector"
+                }
+            },
+            "examples": self._get_usage_examples()
+        }
         
-        "getting_started": {
-            "test_connection": f"curl {request.url.scheme}://{request.headers.get('host', 'localhost')}/health",
-            "mcp_initialize": {
-                "url": f"{request.url.scheme}://{request.headers.get('host', 'localhost')}/mcp",
-                "method": "POST",
-                "sample_request": {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "protocolVersion": "2025-06-18",
-                        "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        # Return different formats based on query parameter
+        format_type = request.query_params.get("format", "json").lower()
+        
+        if format_type == "docs":
+            return self._render_documentation(info, base_url)
+        else:
+            return Response(
+                orjson.dumps(info, option=orjson.OPT_INDENT_2),
+                media_type="application/json",
+                headers={
+                    "Cache-Control": "public, max-age=300",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+    
+    def _get_tools_details(self) -> Dict[str, Any]:
+        """Get detailed information about all tools."""
+        tools_details = {}
+        
+        for tool_name, tool in self.protocol.tools.items():
+            tools_details[tool_name] = {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": [
+                    {
+                        "name": param.name,
+                        "type": param.type,
+                        "required": param.required,
+                        "description": param.description,
+                        "default": param.default
                     }
-                }
-            },
-            "benchmark": f"python quick_benchmark.py {request.url.scheme}://{request.headers.get('host', 'localhost')}/mcp"
-        },
-        
-        "timestamp": current_time
-    }
-    
-    body = orjson.dumps(info, option=orjson.OPT_INDENT_2)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "public, max-age=300",  # Cache for 5 minutes
-            "server": "fast-mcp-server",
-            "content-length": str(len(body)),
-            "x-server-info": "true"
-        }
-    )
-
-
-async def info_endpoint(request: Request) -> Response:
-    """
-    Detailed server information endpoint
-    
-    More comprehensive information than the root endpoint,
-    including detailed configuration and runtime data.
-    """
-    state = get_state()
-    
-    current_time = time.time()
-    uptime = current_time - state.metrics.start_time
-    
-    detailed_info = {
-        "server": {
-            "name": "fast-mcp-server",
-            "version": "1.0.0",
-            "protocol_version": "2025-06-18",
-            "start_time": state.metrics.start_time,
-            "uptime_seconds": round(uptime, 2),
-            "architecture": "modular"
-        },
-        
-        "runtime": {
-            "framework": "starlette",
-            "json_library": "orjson",
-            "async_model": "asyncio",
-            "performance_optimizations": [
-                "orjson serialization",
-                "pre-computed responses",
-                "minimal allocations",
-                "optimized routing",
-                "efficient state management"
-            ]
-        },
-        
-        "metrics": {
-            "requests": {
-                "total": state.metrics.total_requests,
-                "per_second": round(state.metrics.rps(), 2),
-                "errors": state.metrics.errors
-            },
-            "mcp_operations": {
-                "tool_calls": state.metrics.tool_calls,
-                "resource_reads": state.metrics.resource_reads,
-                "active_sessions": len(state.sessions)
+                    for param in tool.parameters
+                ],
+                "schema": tool.to_mcp_format()["inputSchema"]
             }
-        },
         
-        "tools": {
-            "count": len(state.get_tools()),
-            "definitions": state.get_tools()
-        },
+        return tools_details
+    
+    def _get_resources_details(self) -> Dict[str, Any]:
+        """Get detailed information about all resources."""
+        resources_details = {}
         
-        "resources": {
-            "count": len(state.get_resources()),
-            "definitions": state.get_resources()
-        },
-        
-        "configuration": {
-            "session_timeout": "3600 seconds",
-            "cleanup_frequency": "every 100 requests",
-            "max_concurrent_sessions": "unlimited",
-            "response_caching": "enabled"
-        },
-        
-        "health": {
-            "status": "healthy",
-            "checks": {
-                "tools_loaded": len(state.get_tools()) > 0,
-                "resources_loaded": len(state.get_resources()) > 0,
-                "low_error_rate": state.metrics.errors < 100,
-                "acceptable_load": state.metrics.rps() < 50000  # Theoretical max
+        for resource_uri, resource in self.protocol.resources.items():
+            resources_details[resource_uri] = {
+                "uri": resource.uri,
+                "name": resource.name,
+                "description": resource.description,
+                "mimeType": resource.mime_type,
+                "schema": resource.to_mcp_format()
             }
-        },
         
-        "timestamp": current_time
-    }
+        return resources_details
     
-    body = orjson.dumps(detailed_info, option=orjson.OPT_INDENT_2)
+    def _get_initialize_example(self, base_url: str) -> str:
+        """Get MCP initialize example command."""
+        return (
+            f'curl -X POST {base_url}/mcp '
+            f'-H "Content-Type: application/json" '
+            f'-d \'{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-03-26\",\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}\''
+        )
     
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "no-cache",
-            "server": "fast-mcp-server",
-            "content-length": str(len(body))
-        }
-    )
-
-
-# ============================================================================
-# API Discovery and Documentation
-# ============================================================================
-
-async def api_discovery_endpoint(request: Request) -> Response:
-    """
-    API discovery endpoint with OpenAPI-style information
-    
-    Provides structured information about all available endpoints
-    and their specifications.
-    """
-    base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
-    
-    api_spec = {
-        "openapi": "3.0.0",
-        "info": {
-            "title": "Fast MCP Server API",
-            "version": "1.0.0",
-            "description": "High-performance MCP protocol server with REST endpoints",
-            "contact": {
-                "name": "Fast MCP Server",
-                "url": base_url
-            }
-        },
-        
-        "servers": [
-            {
-                "url": base_url,
-                "description": "Fast MCP Server"
-            }
-        ],
-        
-        "paths": {
-            "/": {
-                "get": {
-                    "summary": "Server Information",
-                    "description": "Get comprehensive server information and capabilities",
-                    "responses": {
-                        "200": {
-                            "description": "Server information",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type": "object"}
-                                }
-                            }
-                        }
-                    },
-                    "tags": ["Information"]
-                }
-            },
-            
-            "/mcp": {
-                "post": {
-                    "summary": "MCP Protocol Endpoint",
-                    "description": "JSON-RPC 2.0 endpoint for MCP protocol operations",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "jsonrpc": {"type": "string", "enum": ["2.0"]},
-                                        "method": {"type": "string"},
-                                        "params": {"type": "object"},
-                                        "id": {"type": ["string", "number", "null"]}
-                                    },
-                                    "required": ["jsonrpc", "method"]
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "JSON-RPC response",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type": "object"}
-                                }
-                            }
-                        }
-                    },
-                    "tags": ["MCP Protocol"]
-                }
-            },
-            
-            "/health": {
-                "get": {
-                    "summary": "Health Check",
-                    "description": "Fast health check endpoint for load balancers",
-                    "responses": {
-                        "200": {
-                            "description": "Server is healthy",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "status": {"type": "string"},
-                                            "uptime": {"type": "number"},
-                                            "timestamp": {"type": "number"}
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "tags": ["Health"]
-                }
-            },
-            
-            "/metrics": {
-                "get": {
-                    "summary": "Performance Metrics",
-                    "description": "Detailed performance and operational metrics",
-                    "responses": {
-                        "200": {
-                            "description": "Performance metrics",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type": "object"}
-                                }
-                            }
-                        }
-                    },
-                    "tags": ["Monitoring"]
-                }
-            }
-        },
-        
-        "tags": [
-            {
-                "name": "Information",
-                "description": "Server information and discovery"
-            },
-            {
-                "name": "MCP Protocol", 
-                "description": "Model Context Protocol operations"
-            },
-            {
-                "name": "Health",
-                "description": "Health checks and status"
-            },
-            {
-                "name": "Monitoring",
-                "description": "Metrics and monitoring"
-            }
-        ]
-    }
-    
-    body = orjson.dumps(api_spec, option=orjson.OPT_INDENT_2)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "public, max-age=3600",  # Cache for 1 hour
-            "server": "fast-mcp-server",
-            "content-length": str(len(body))
-        }
-    )
-
-
-async def tools_info_endpoint(request: Request) -> Response:
-    """
-    Detailed information about available tools
-    """
-    state = get_state()
-    
-    tools_info = {
-        "tools": {
-            "count": len(state.get_tools()),
-            "definitions": state.get_tools(),
-            "usage": {
-                "total_calls": state.metrics.tool_calls,
-                "endpoint": "/mcp",
-                "method": "tools/call"
-            },
-            "examples": [
+    def _get_usage_examples(self) -> Dict[str, Any]:
+        """Get usage examples for tools and resources."""
+        return {
+            "tool_calls": [
                 {
-                    "tool": "add",
-                    "request": {
+                    "description": "Call a tool",
+                    "method": "tools/call",
+                    "example": {
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "tools/call",
                         "params": {
-                            "name": "add",
-                            "arguments": {"a": 5, "b": 3}
+                            "name": "hello" if "hello" in self.protocol.tools else list(self.protocol.tools.keys())[0] if self.protocol.tools else "example_tool",
+                            "arguments": {"name": "World"} if "hello" in self.protocol.tools else {}
                         }
                     }
                 }
-            ]
-        },
-        "timestamp": time.time()
-    }
-    
-    body = orjson.dumps(tools_info, option=orjson.OPT_INDENT_2)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "public, max-age=600",  # Cache for 10 minutes
-            "server": "fast-mcp-server"
-        }
-    )
-
-
-async def resources_info_endpoint(request: Request) -> Response:
-    """
-    Detailed information about available resources
-    """
-    state = get_state()
-    
-    resources_info = {
-        "resources": {
-            "count": len(state.get_resources()),
-            "definitions": state.get_resources(),
-            "usage": {
-                "total_reads": state.metrics.resource_reads,
-                "endpoint": "/mcp",
-                "method": "resources/read"
-            },
-            "examples": [
+            ],
+            "resource_reads": [
                 {
-                    "resource": "demo://server-info",
-                    "request": {
+                    "description": "Read a resource",
+                    "method": "resources/read", 
+                    "example": {
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "resources/read",
                         "params": {
-                            "uri": "demo://server-info"
+                            "uri": list(self.protocol.resources.keys())[0] if self.protocol.resources else "example://resource"
                         }
                     }
                 }
+            ],
+            "basic_flow": [
+                "1. Initialize connection with server",
+                "2. List available tools and resources",
+                "3. Call tools or read resources as needed",
+                "4. Handle responses and errors appropriately"
             ]
-        },
-        "timestamp": time.time()
-    }
-    
-    body = orjson.dumps(resources_info, option=orjson.OPT_INDENT_2)
-    
-    return Response(
-        body,
-        media_type="application/json",
-        headers={
-            "cache-control": "public, max-age=600",  # Cache for 10 minutes
-            "server": "fast-mcp-server"
         }
-    )
-
-
-# ============================================================================
-# Help and Documentation
-# ============================================================================
-
-async def help_endpoint(request: Request) -> PlainTextResponse:
-    """
-    Text-based help endpoint for command-line users
-    """
-    base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
     
-    help_text = f"""Fast MCP Server - Help
+    def _render_documentation(self, info: Dict[str, Any], base_url: str) -> Response:
+        """Render human-readable documentation."""
+        
+        docs = f"""# {info['server']['name']} - CleanMCP Server
 
-Welcome to the Fast MCP Server! This is a high-performance implementation
-of the Model Context Protocol (MCP) with sub-millisecond response times.
+**Version:** {info['server']['version']}  
+**Protocol:** {info['protocol']['version']}  
+**Framework:** {info['framework']['name']} powered by {info['framework']['powered_by']}
 
-📋 ENDPOINTS:
-  GET  /              Server information (JSON)
-  POST /mcp           MCP protocol endpoint (JSON-RPC 2.0)
-  GET  /health        Health check (fast)
-  GET  /metrics       Performance metrics
-  GET  /info          Detailed server info
-  GET  /api           API discovery (OpenAPI)
-  GET  /help          This help text
+## 🚀 Features
 
-🚀 QUICK START:
-  1. Test health:     curl {base_url}/health
-  2. Get server info: curl {base_url}/
-  3. MCP initialize:  See /info endpoint for sample request
-  4. Benchmark:       python quick_benchmark.py {base_url}/mcp
-
-⚡ PERFORMANCE:
-  • Target: 10,000+ RPS
-  • Response time: < 1ms
-  • Protocol: MCP 2025-06-18
-  • Framework: Starlette + orjson
-
-🔧 MCP OPERATIONS:
-  • initialize        - Start MCP session
-  • ping             - Health check
-  • tools/list       - List available tools
-  • tools/call       - Execute a tool
-  • resources/list   - List available resources
-  • resources/read   - Read a resource
-
-📊 MONITORING:
-  • /health          - Load balancer health check
-  • /health/detailed - Comprehensive health info
-  • /readiness       - Kubernetes readiness probe
-  • /liveness        - Kubernetes liveness probe
-  • /metrics         - JSON metrics
-  • /metrics/prometheus - Prometheus format
-
-For more information, visit {base_url}/ or {base_url}/api
 """
-    
-    return PlainTextResponse(
-        help_text,
-        headers={
-            "cache-control": "public, max-age=3600",
-            "server": "fast-mcp-server"
-        }
-    )
+        
+        for feature in info['framework']['features']:
+            docs += f"- {feature}\n"
+        
+        docs += f"""
+## 🔧 Available Tools ({info['tools']['count']})
+
+"""
+        
+        for tool_name in info['tools']['available']:
+            tool_details = info['tools']['details'][tool_name]
+            docs += f"### {tool_name}\n\n"
+            docs += f"{tool_details['description']}\n\n"
+            
+            if tool_details['parameters']:
+                docs += "**Parameters:**\n"
+                for param in tool_details['parameters']:
+                    required = "required" if param['required'] else "optional"
+                    docs += f"- `{param['name']}` ({param['type']}, {required}): {param.get('description', 'No description')}\n"
+                docs += "\n"
+        
+        docs += f"""
+## 📂 Available Resources ({info['resources']['count']})
+
+"""
+        
+        for resource_uri in info['resources']['available']:
+            resource_details = info['resources']['details'][resource_uri]
+            docs += f"### {resource_details['name']}\n\n"
+            docs += f"**URI:** `{resource_details['uri']}`  \n"
+            docs += f"**MIME Type:** `{resource_details['mimeType']}`  \n"
+            docs += f"**Description:** {resource_details['description']}\n\n"
+        
+        docs += f"""
+## 🔗 Endpoints
+
+- **MCP Protocol:** `{info['endpoints']['mcp']}`
+- **Health Check:** `{info['endpoints']['health']}`
+- **Server Info:** `{info['endpoints']['info']}`
+
+## 🔍 MCP Inspector Setup
+
+1. **Transport Type:** Streamable HTTP
+2. **URL:** Use proxy pointing to `{info['endpoints']['mcp']}`
+3. **Compatibility:** Fully supported with SSE streaming
+
+## 🚀 Quick Start
+
+```bash
+# Health check
+{info['quick_start']['health_check']}
+
+# Initialize MCP connection
+{info['quick_start']['mcp_initialize']}
+```
+
+## 📖 Example Tool Call
+
+```json
+{orjson.dumps(info['examples']['tool_calls'][0]['example'], option=orjson.OPT_INDENT_2).decode()}
+```
+
+## 📖 Example Resource Read
+
+```json
+{orjson.dumps(info['examples']['resource_reads'][0]['example'], option=orjson.OPT_INDENT_2).decode()}
+```
+
+---
+
+**Powered by CleanMCP with chuk_mcp integration** 🚀
+"""
+        
+        return Response(
+            docs,
+            media_type="text/markdown",
+            headers={
+                "Cache-Control": "public, max-age=300",
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
