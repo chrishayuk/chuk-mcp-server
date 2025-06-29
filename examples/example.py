@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CleanMCP - Production Ready Example
+ChukMCPServer - Production Ready Example
 
 This is the final optimized version that works perfectly with Inspector
 and demonstrates all the modular components working together.
@@ -13,8 +13,8 @@ import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# Import our modular CleanMCP framework
-from chuk_mcp_server import CleanMCP, Capabilities
+# Import our modular ChukMCPServer framework
+from chuk_mcp_server import ChukMCPServer, Capabilities
 
 # Configure logging for production
 logging.basicConfig(
@@ -22,12 +22,12 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Create CleanMCP server with full configuration
-mcp = CleanMCP(
-    name="CleanMCP Example",
+# Create ChukMCP Server with full configuration
+mcp = ChukMCPServer(
+    name="ChukMCPServer Example",
     version="1.0.0", 
-    title="CleanMCP Production Server",
-    description="A fully featured MCP server demonstrating CleanMCP framework",
+    title="ChukMCPServer Production Server",
+    description="A fully featured MCP server demonstrating ChukMCPServer framework",
     capabilities=Capabilities(
         tools=True,
         resources=True,
@@ -43,7 +43,7 @@ mcp = CleanMCP(
 @mcp.tool
 def hello(name: str) -> str:
     """Say hello to someone."""
-    return f"Hello, {name}! Welcome to CleanMCP!"
+    return f"Hello, {name}! Welcome to ChukMCPServer!"
 
 @mcp.tool(description="Add two numbers together")
 def add(x: int, y: int) -> int:
@@ -204,12 +204,12 @@ def list_tools() -> Dict[str, Any]:
 def server_status() -> Dict[str, Any]:
     """Get comprehensive server status."""
     return {
-        "server": "CleanMCP Example",
+        "server": "ChukMCPServer Example",
         "status": "running",
         "uptime": time.time(),
         "tools_count": len(mcp.get_tools()),
         "resources_count": len(mcp.get_resources()),
-        "framework": "CleanMCP with chuk_mcp",
+        "framework": "ChukMCPServer with chuk_mcp",
         "inspector_compatible": True,
         "session_count": len(mcp.protocol.session_manager.sessions),
         "timestamp": time.time(),
@@ -220,9 +220,9 @@ def server_status() -> Dict[str, Any]:
 def get_settings() -> Dict[str, Any]:
     """Get server configuration and capabilities."""
     return {
-        "app_name": "CleanMCP Example Server",
+        "app_name": "ChukMCPServer Example Server",
         "version": "1.0.0",
-        "framework": "CleanMCP",
+        "framework": "ChukMCPServer",
         "powered_by": "chuk_mcp",
         "features": [
             "Type-safe tools",
@@ -249,9 +249,9 @@ def get_settings() -> Dict[str, Any]:
 @mcp.resource("docs://readme", mime_type="text/markdown")
 def get_readme() -> str:
     """Get comprehensive documentation."""
-    return """# CleanMCP Example Server
+    return """# ChukMCPServer Example Server
 
-This is a demonstration of CleanMCP's clean and simple API powered by chuk_mcp.
+This is a demonstration of ChukMCPServer's clean and simple API powered by chuk_mcp.
 
 ## 🚀 Features
 
@@ -308,7 +308,7 @@ This is a demonstration of CleanMCP's clean and simple API powered by chuk_mcp.
 
 ## 🏗️ Built With
 
-- **CleanMCP** - Developer-friendly MCP framework
+- **ChukMCPServer** - Developer-friendly MCP framework
 - **chuk_mcp** - Robust MCP protocol handling
 - **Starlette** - Modern ASGI web framework
 - **uvicorn** - Lightning-fast ASGI server
@@ -323,19 +323,19 @@ This is a demonstration of CleanMCP's clean and simple API powered by chuk_mcp.
 
 ---
 
-**Powered by CleanMCP with chuk_mcp integration!** 🚀
+**Powered by ChukMCPServer with chuk_mcp integration!** 🚀
 """
 
 @mcp.resource("data://examples", mime_type="application/json") 
 def get_examples() -> Dict[str, Any]:
     """Get comprehensive tool usage examples."""
     return {
-        "description": "Comprehensive tool usage examples for CleanMCP server",
+        "description": "Comprehensive tool usage examples for ChukMCP Server",
         "server_info": {
-            "name": "CleanMCP Example",
+            "name": "ChukMCPServer Example",
             "version": "1.0.0",
             "tools_count": len(mcp.get_tools()),
-            "framework": "CleanMCP with chuk_mcp"
+            "framework": "ChukMCPServer with chuk_mcp"
         },
         "examples": [
             {
@@ -345,7 +345,7 @@ def get_examples() -> Dict[str, Any]:
                         "tool": "hello",
                         "arguments": {"name": "World"},
                         "description": "Simple greeting",
-                        "expected_result": "Hello, World! Welcome to CleanMCP!"
+                        "expected_result": "Hello, World! Welcome to ChukMCPServer!"
                     },
                     {
                         "tool": "add",
@@ -450,14 +450,14 @@ def get_examples() -> Dict[str, Any]:
 
 def main():
     """Main entry point for production server."""
-    print("🚀 CleanMCP Production Server")
+    print("🚀 ChukMCPServer Production Server")
     print("=" * 50)
     
     # Show server information
     info = mcp.info()
     print(f"Server: {info['server']['name']}")
     print(f"Version: {info['server']['version']}")
-    print(f"Framework: CleanMCP with chuk_mcp")
+    print(f"Framework: ChukMCPServer with chuk_mcp")
     print()
     
     # Handle both old and new info structure

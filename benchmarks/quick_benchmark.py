@@ -379,7 +379,7 @@ async def main():
     
     if len(sys.argv) < 2:
         print("Usage: python quick_benchmark.py <server_url> [server_name]")
-        print("Example: python quick_benchmark.py http://localhost:8000/mcp 'My FastMCP Server'")
+        print("Example: python quick_benchmark.py http://localhost:8000/mcp 'My MCP Server'")
         return
     
     server_url = sys.argv[1]

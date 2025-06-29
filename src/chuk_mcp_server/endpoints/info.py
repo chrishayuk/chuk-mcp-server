@@ -45,7 +45,7 @@ class InfoEndpoint:
                 "inspector_compatible": True
             },
             "framework": {
-                "name": "CleanMCP",
+                "name": "ChukMCPServer",
                 "powered_by": "chuk_mcp",
                 "features": [
                     "Type-safe tools with automatic schema generation",
@@ -189,7 +189,7 @@ class InfoEndpoint:
     def _render_documentation(self, info: Dict[str, Any], base_url: str) -> Response:
         """Render human-readable documentation."""
         
-        docs = f"""# {info['server']['name']} - CleanMCP Server
+        docs = f"""# {info['server']['name']} - ChukMCP Server
 
 **Version:** {info['server']['version']}  
 **Protocol:** {info['protocol']['version']}  
@@ -268,7 +268,7 @@ class InfoEndpoint:
 
 ---
 
-**Powered by CleanMCP with chuk_mcp integration** 🚀
+**Powered by ChukMCPServer with chuk_mcp integration** 🚀
 """
         
         return Response(

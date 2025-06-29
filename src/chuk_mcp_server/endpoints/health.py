@@ -44,7 +44,7 @@ class HealthEndpoint:
                 "name": self.protocol.server_info.name,
                 "version": self.protocol.server_info.version,
                 "protocol": "MCP 2025-03-26",
-                "powered_by": "CleanMCP with chuk_mcp"
+                "powered_by": "ChukMCPServer with chuk_mcp"
             },
             "capabilities": {
                 "tools": len(self.protocol.tools),

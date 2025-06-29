@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-CleanMCP - A developer-friendly MCP framework powered by chuk_mcp
+Chuk MCP Server - A developer-friendly MCP framework powered by chuk_mcp
 
 Simple, clean API similar to FastMCP but with chuk_mcp robustness:
 
-    from cleanmcp import CleanMCP
+    from ChukMCPServer import ChukMCPServer
     
-    mcp = CleanMCP()
+    mcp = ChukMCPServer()
     
     @mcp.tool
     def hello(name: str) -> str:
@@ -20,13 +20,13 @@ Simple, clean API similar to FastMCP but with chuk_mcp robustness:
         mcp.run(transport="http", port=8000)
 """
 
-from .core import CleanMCP
+from .core import ChukMCPServer
 from .decorators import tool, resource
 from .types import Tool, Resource, ServerInfo, Capabilities
 
 __version__ = "1.0.0"
 __all__ = [
-    "CleanMCP",
+    "ChukMCPServer",
     "tool", 
     "resource",
     "Tool",

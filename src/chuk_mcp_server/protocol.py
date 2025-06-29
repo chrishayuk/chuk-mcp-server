@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CleanMCP Protocol Handler - Core MCP protocol implementation with chuk_mcp
+ChukMCPServer Protocol Handler - Core MCP protocol implementation with chuk_mcp
 """
 
 import asyncio

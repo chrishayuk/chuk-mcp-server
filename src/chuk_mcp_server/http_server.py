@@ -43,7 +43,7 @@ class HTTPServer:
         logger.info("HTTP server initialized with registry-driven architecture")
     
     def _register_core_endpoints(self):
-        """Register core CleanMCP endpoints in the endpoint registry."""
+        """Register core ChukMCPServer endpoints in the endpoint registry."""
         
         # Create endpoint handlers
         mcp_endpoint = MCPEndpoint(self.protocol)
@@ -120,7 +120,7 @@ class HTTPServer:
         # Register utility ping endpoint
         async def ping_handler(request: Request) -> Response:
             return Response(
-                '{"status": "pong", "server": "CleanMCP", "timestamp": ' + str(time.time()) + '}',
+                '{"status": "pong", "server": "ChukMCPServer", "timestamp": ' + str(time.time()) + '}',
                 media_type="application/json",
                 headers={"Access-Control-Allow-Origin": "*"}
             )
@@ -171,7 +171,7 @@ class HTTPServer:
     def _build_middleware_stack(self, middleware_configs: List) -> List[Middleware]:
         """Build middleware stack from registry plus defaults."""
         
-        # Start with default CleanMCP middleware
+        # Start with default ChukMCPServer middleware
         middleware = [
             Middleware(
                 CORSMiddleware,
@@ -283,13 +283,13 @@ class HTTPServer:
         """Log comprehensive startup information."""
         import time
         
-        logger.info("🚀 Starting CleanMCP HTTP Server")
+        logger.info("🚀 Starting ChukMCPServer HTTP Server")
         logger.info("=" * 60)
         logger.info(f"Server: {self.protocol.server_info.name}")
         logger.info(f"Version: {self.protocol.server_info.version}")
         logger.info(f"Host: {host}:{port}")
         logger.info(f"Debug: {debug}")
-        logger.info(f"Framework: CleanMCP with chuk_mcp")
+        logger.info(f"Framework: ChukMCPServer with chuk_mcp")
         logger.info("")
         
         # Log MCP capabilities

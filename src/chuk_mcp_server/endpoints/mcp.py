@@ -58,7 +58,7 @@ class MCPEndpoint:
             "status": "ready",
             "tools": len(self.protocol.tools),
             "resources": len(self.protocol.resources),
-            "powered_by": "CleanMCP with chuk_mcp"
+            "powered_by": "ChukMCPServer with chuk_mcp"
         }
         
         return Response(

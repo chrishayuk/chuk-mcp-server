@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Core - Main CleanMCP class with separate registry systems
+Core - Main ChukMCP Server class with separate registry systems
 """
 
 import logging
@@ -20,15 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Main CleanMCP Class - Updated with Separate Registries
+# Main ChukMCPServer Class - Updated with Separate Registries
 # ============================================================================
 
-class CleanMCP:
+class ChukMCPServer:
     """
-    CleanMCP - A developer-friendly MCP framework with clean architecture.
+    ChukMCPServer - A developer-friendly MCP framework with clean architecture.
     
     Usage:
-        mcp = CleanMCP(name="My Server")
+        mcp = ChukMCPServer(name="My Server")
         
         @mcp.tool
         def hello(name: str) -> str:
@@ -42,13 +42,13 @@ class CleanMCP:
     """
     
     def __init__(self, 
-                 name: str = "CleanMCP Server",
+                 name: str = "ChukMCP Server",
                  version: str = "1.0.0",
                  title: Optional[str] = None,
                  description: Optional[str] = None,
                  capabilities: Optional[Capabilities] = None):
         """
-        Initialize CleanMCP server.
+        Initialize ChukMCP Server.
         
         Args:
             name: Server name
@@ -80,7 +80,7 @@ class CleanMCP:
         # HTTP server will be created when needed
         self._server = None
         
-        logger.info(f"Initialized CleanMCP server: {name} v{version}")
+        logger.info(f"Initialized ChukMCP Server: {name} v{version}")
     
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
@@ -384,14 +384,14 @@ class CleanMCP:
     
     def _print_startup_info(self, host: str, port: int, debug: bool):
         """Print comprehensive startup information."""
-        print("🚀 CleanMCP Server")
+        print("🚀 ChukMCP Server")
         print("=" * 50)
         
         # Server information
         info = self.info()
         print(f"Server: {info['server']['name']}")
         print(f"Version: {info['server']['version']}")
-        print(f"Framework: CleanMCP with chuk_mcp")
+        print(f"Framework: ChukMCPServer with chuk_mcp")
         print()
         
         # MCP Components
@@ -461,14 +461,14 @@ class CleanMCP:
 # Factory Functions
 # ============================================================================
 
-def create_mcp_server(name: str, **kwargs) -> CleanMCP:
-    """Factory function to create a CleanMCP server."""
-    return CleanMCP(name=name, **kwargs)
+def create_mcp_server(name: str, **kwargs) -> ChukMCPServer:
+    """Factory function to create a ChukMCP Server."""
+    return ChukMCPServer(name=name, **kwargs)
 
 
-def quick_server(name: str = "Quick Server") -> CleanMCP:
+def quick_server(name: str = "Quick Server") -> ChukMCPServer:
     """Create a server with minimal configuration for quick prototyping."""
-    return CleanMCP(
+    return ChukMCPServer(
         name=name,
         version="0.1.0",
         capabilities=Capabilities(tools=True, resources=True)
