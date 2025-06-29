@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CleanMCP Protocol Handler - Core MCP protocol implementation with working chuk_mcp
+CleanMCP Protocol Handler - Core MCP protocol implementation with chuk_mcp
 """
 
 import asyncio
@@ -12,20 +12,14 @@ from typing import Dict, Any, Optional, List
 
 from .types import Tool, Resource, ServerInfo, Capabilities, format_content
 
-# Try to import chuk_mcp components with proper fallback
-try:
-    from chuk_mcp.mcp_client.messages.initialize.mcp_server_info import MCPServerInfo
-    from chuk_mcp.mcp_client.messages.initialize.mcp_server_capabilities import (
-        MCPServerCapabilities, ToolsCapability, ResourcesCapability, PromptsCapability
-    )
-    from chuk_mcp.mcp_client.messages.tools.tool import Tool as ChukTool
-    from chuk_mcp.mcp_client.messages.resources.resource import Resource as ChukResource
-    from chuk_mcp.mcp_client.messages.resources.resource_content import ResourceContent
-    CHUK_MCP_AVAILABLE = True
-    print("✅ chuk_mcp integration enabled")
-except ImportError as e:
-    CHUK_MCP_AVAILABLE = False
-    print(f"⚠️ chuk_mcp not available: {e}")
+# chuk_mcp imports (always available as dependency)
+from chuk_mcp.mcp_client.messages.initialize.mcp_server_info import MCPServerInfo
+from chuk_mcp.mcp_client.messages.initialize.mcp_server_capabilities import (
+    MCPServerCapabilities, ToolsCapability, ResourcesCapability, PromptsCapability
+)
+from chuk_mcp.mcp_client.messages.tools.tool import Tool as ChukTool
+from chuk_mcp.mcp_client.messages.resources.resource import Resource as ChukResource
+from chuk_mcp.mcp_client.messages.resources.resource_content import ResourceContent
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +69,11 @@ class SessionManager:
 
 
 # ============================================================================
-# Protocol Handler with Fixed chuk_mcp Integration
+# Protocol Handler with chuk_mcp Integration
 # ============================================================================
 
 class MCPProtocolHandler:
-    """Core MCP protocol handler with working chuk_mcp integration."""
+    """Core MCP protocol handler powered by chuk_mcp."""
     
     def __init__(self, server_info: ServerInfo, capabilities: Capabilities):
         self.server_info = server_info
@@ -90,46 +84,38 @@ class MCPProtocolHandler:
         self.tools: Dict[str, Tool] = {}
         self.resources: Dict[str, Resource] = {}
         
-        # Setup chuk_mcp if available
-        if CHUK_MCP_AVAILABLE:
-            self._setup_chuk_mcp()
-            logger.info("✅ chuk_mcp integration active")
-        else:
-            logger.info("📦 Using fallback MCP implementation")
+        # Setup chuk_mcp components
+        self._setup_chuk_mcp()
+        
+        logger.info("✅ MCP protocol handler initialized with chuk_mcp")
     
     def _setup_chuk_mcp(self):
-        """Setup chuk_mcp components with proper error handling."""
-        try:
-            # Create chuk_mcp server info
-            self.chuk_server_info = MCPServerInfo(
-                name=self.server_info.name,
-                version=self.server_info.version,
-                title=self.server_info.title or self.server_info.name
+        """Setup chuk_mcp components."""
+        # Create chuk_mcp server info
+        self.chuk_server_info = MCPServerInfo(
+            name=self.server_info.name,
+            version=self.server_info.version,
+            title=self.server_info.title or self.server_info.name
+        )
+        
+        # Create chuk_mcp capabilities
+        caps_dict = {}
+        
+        if self.capabilities.tools:
+            caps_dict["tools"] = ToolsCapability(listChanged=True)
+        
+        if self.capabilities.resources:
+            caps_dict["resources"] = ResourcesCapability(
+                listChanged=True, 
+                subscribe=False
             )
-            
-            # Create chuk_mcp capabilities
-            caps_dict = {}
-            
-            if self.capabilities.tools:
-                caps_dict["tools"] = ToolsCapability(listChanged=True)
-            
-            if self.capabilities.resources:
-                caps_dict["resources"] = ResourcesCapability(
-                    listChanged=True, 
-                    subscribe=False
-                )
-            
-            if self.capabilities.prompts:
-                caps_dict["prompts"] = PromptsCapability(listChanged=True)
-            
-            self.chuk_capabilities = MCPServerCapabilities(**caps_dict)
-            
-            logger.debug("chuk_mcp components initialized successfully")
-            
-        except Exception as e:
-            logger.warning(f"chuk_mcp setup failed: {e}, falling back to manual implementation")
-            global CHUK_MCP_AVAILABLE
-            CHUK_MCP_AVAILABLE = False
+        
+        if self.capabilities.prompts:
+            caps_dict["prompts"] = PromptsCapability(listChanged=True)
+        
+        self.chuk_capabilities = MCPServerCapabilities(**caps_dict)
+        
+        logger.debug("chuk_mcp components initialized")
     
     def register_tool(self, tool: Tool):
         """Register a tool."""
@@ -142,52 +128,38 @@ class MCPProtocolHandler:
         logger.debug(f"Registered resource: {resource.uri}")
     
     def get_tools_list(self) -> List[Dict[str, Any]]:
-        """Get list of tools in MCP format."""
+        """Get list of tools in MCP format using chuk_mcp."""
         tools_list = []
         
         for tool in self.tools.values():
-            if CHUK_MCP_AVAILABLE:
-                try:
-                    # Use chuk_mcp Tool class for robust serialization
-                    chuk_tool = ChukTool(
-                        name=tool.name,
-                        description=tool.description,
-                        inputSchema=tool.to_mcp_format()["inputSchema"]
-                    )
-                    tools_list.append(chuk_tool.model_dump())
-                except Exception as e:
-                    logger.warning(f"chuk_mcp tool serialization failed for {tool.name}: {e}")
-                    tools_list.append(tool.to_mcp_format())
-            else:
-                tools_list.append(tool.to_mcp_format())
+            # Use chuk_mcp Tool class for robust serialization
+            chuk_tool = ChukTool(
+                name=tool.name,
+                description=tool.description,
+                inputSchema=tool.to_mcp_format()["inputSchema"]
+            )
+            tools_list.append(chuk_tool.model_dump())
         
         return tools_list
     
     def get_resources_list(self) -> List[Dict[str, Any]]:
-        """Get list of resources in MCP format."""
+        """Get list of resources in MCP format using chuk_mcp."""
         resources_list = []
         
         for resource in self.resources.values():
-            if CHUK_MCP_AVAILABLE:
-                try:
-                    # Use chuk_mcp Resource class for robust serialization
-                    chuk_resource = ChukResource(
-                        uri=resource.uri,
-                        name=resource.name,
-                        description=resource.description,
-                        mimeType=resource.mime_type
-                    )
-                    resources_list.append(chuk_resource.model_dump())
-                except Exception as e:
-                    logger.warning(f"chuk_mcp resource serialization failed for {resource.uri}: {e}")
-                    resources_list.append(resource.to_mcp_format())
-            else:
-                resources_list.append(resource.to_mcp_format())
+            # Use chuk_mcp Resource class for robust serialization
+            chuk_resource = ChukResource(
+                uri=resource.uri,
+                name=resource.name,
+                description=resource.description,
+                mimeType=resource.mime_type
+            )
+            resources_list.append(chuk_resource.model_dump())
         
         return resources_list
     
     async def handle_request(self, message: Dict[str, Any], session_id: Optional[str] = None) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Handle an MCP request with robust error handling."""
+        """Handle an MCP request."""
         try:
             method = message.get("method")
             params = message.get("params", {})
@@ -223,27 +195,19 @@ class MCPProtocolHandler:
             return self._create_error_response(msg_id, -32603, f"Internal error: {str(e)}"), None
     
     async def _handle_initialize(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], str]:
-        """Handle initialize request with chuk_mcp integration."""
+        """Handle initialize request using chuk_mcp."""
         client_info = params.get("clientInfo", {})
         protocol_version = params.get("protocolVersion", "2025-03-26")
         
         # Create session
         session_id = self.session_manager.create_session(client_info, protocol_version)
         
-        # Build response using chuk_mcp if available
-        if CHUK_MCP_AVAILABLE and hasattr(self, 'chuk_server_info') and hasattr(self, 'chuk_capabilities'):
-            try:
-                result = {
-                    "protocolVersion": protocol_version,
-                    "serverInfo": self.chuk_server_info.model_dump(),
-                    "capabilities": self.chuk_capabilities.model_dump(exclude_none=True)
-                }
-                logger.debug("Using chuk_mcp for initialize response")
-            except Exception as e:
-                logger.warning(f"chuk_mcp initialize failed: {e}, using fallback")
-                result = self._create_fallback_initialize_result(protocol_version)
-        else:
-            result = self._create_fallback_initialize_result(protocol_version)
+        # Build response using chuk_mcp
+        result = {
+            "protocolVersion": protocol_version,
+            "serverInfo": self.chuk_server_info.model_dump(),
+            "capabilities": self.chuk_capabilities.model_dump(exclude_none=True)
+        }
         
         response = {
             "jsonrpc": "2.0",
@@ -254,14 +218,6 @@ class MCPProtocolHandler:
         client_name = client_info.get('name', 'unknown')
         logger.info(f"🤝 Initialized session {session_id[:8]}... for {client_name} (v{protocol_version})")
         return response, session_id
-    
-    def _create_fallback_initialize_result(self, protocol_version: str) -> Dict[str, Any]:
-        """Create fallback initialize result without chuk_mcp."""
-        return {
-            "protocolVersion": protocol_version,
-            "serverInfo": self.server_info.to_dict(),
-            "capabilities": self.capabilities.to_dict()
-        }
     
     async def _handle_ping(self, msg_id: Any) -> tuple[Dict[str, Any], None]:
         """Handle ping request."""
@@ -328,7 +284,7 @@ class MCPProtocolHandler:
         return response, None
     
     async def _handle_resources_read(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], None]:
-        """Handle resources/read request with chuk_mcp integration."""
+        """Handle resources/read request using chuk_mcp."""
         uri = params.get("uri")
         
         if uri not in self.resources:
@@ -338,34 +294,17 @@ class MCPProtocolHandler:
             resource = self.resources[uri]
             content = await resource.read()
             
-            # Use chuk_mcp ResourceContent if available
-            if CHUK_MCP_AVAILABLE:
-                try:
-                    resource_content = ResourceContent(
-                        uri=uri,
-                        mimeType=resource.mime_type,
-                        text=content
-                    )
-                    content_dict = resource_content.model_dump()
-                    logger.debug("Using chuk_mcp ResourceContent")
-                except Exception as e:
-                    logger.warning(f"chuk_mcp ResourceContent failed: {e}, using fallback")
-                    content_dict = {
-                        "uri": uri,
-                        "mimeType": resource.mime_type,
-                        "text": content
-                    }
-            else:
-                content_dict = {
-                    "uri": uri,
-                    "mimeType": resource.mime_type,
-                    "text": content
-                }
+            # Use chuk_mcp ResourceContent for robust serialization
+            resource_content = ResourceContent(
+                uri=uri,
+                mimeType=resource.mime_type,
+                text=content
+            )
             
             response = {
                 "jsonrpc": "2.0",
                 "id": msg_id,
-                "result": {"contents": [content_dict]}
+                "result": {"contents": [resource_content.model_dump()]}
             }
             
             logger.info(f"📖 Read resource {uri}")
