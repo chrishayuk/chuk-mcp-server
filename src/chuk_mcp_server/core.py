@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """
-Core - Main ChukMCP Server class with separate registry systems
+Core - Main ChukMCP Server class with direct chuk_mcp integration
 """
 
 import logging
 from typing import Callable, Optional, Dict, Any, List
 
-from .types import Tool, Resource, ServerInfo, Capabilities
+# Updated imports for direct chuk_mcp integration
+from .types import (
+    # Framework handlers
+    ToolHandler, ResourceHandler, 
+    
+    # Direct chuk_mcp types
+    ServerInfo, create_server_capabilities,
+    
+    # Legacy compatibility
+    Capabilities
+)
 from .protocol import MCPProtocolHandler
 from .http_server import create_server
 from .endpoint_registry import http_endpoint_registry
@@ -20,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Main ChukMCPServer Class - Updated with Separate Registries
+# Main ChukMCPServer Class - Updated with Direct chuk_mcp Integration
 # ============================================================================
 
 class ChukMCPServer:
@@ -34,9 +44,9 @@ class ChukMCPServer:
         def hello(name: str) -> str:
             return f"Hello, {name}!"
         
-        @mcp.endpoint("/api/data")
-        async def data_handler(request):
-            return Response('{"data": "example"}')
+        @mcp.resource("config://settings")
+        def get_settings() -> dict:
+            return {"app": "my_app"}
         
         mcp.run(port=8000)
     """
@@ -46,32 +56,56 @@ class ChukMCPServer:
                  version: str = "1.0.0",
                  title: Optional[str] = None,
                  description: Optional[str] = None,
-                 capabilities: Optional[Capabilities] = None):
+                 capabilities=None,
+                 tools: bool = True,
+                 resources: bool = True,
+                 prompts: bool = False,
+                 logging: bool = False,
+                 experimental: Optional[Dict[str, Any]] = None,
+                 **kwargs):
         """
-        Initialize ChukMCP Server.
+        Initialize ChukMCP Server with direct chuk_mcp integration.
         
         Args:
             name: Server name
             version: Server version
             title: Optional server title
             description: Optional server description
-            capabilities: Server capabilities (defaults to tools + resources)
+            capabilities: Legacy Capabilities object (for backward compatibility)
+            tools: Enable tools capability
+            resources: Enable resources capability  
+            prompts: Enable prompts capability
+            logging: Enable logging capability
+            experimental: Experimental capabilities
+            **kwargs: Additional keyword arguments (ignored)
         """
+        # Use chuk_mcp ServerInfo directly
         self.server_info = ServerInfo(
             name=name,
             version=version,
-            title=title,
-            description=description
+            title=title
         )
         
-        self.capabilities = capabilities or Capabilities(
-            tools=True,
-            resources=True,
-            prompts=False,
-            logging=False
-        )
+        # Handle capabilities flexibly
+        if capabilities is not None:
+            # Legacy Capabilities object or ServerCapabilities passed
+            if hasattr(capabilities, 'model_dump'):
+                # Already a ServerCapabilities object from chuk_mcp
+                self.capabilities = capabilities
+            else:
+                # Legacy Capabilities function result - use it directly
+                self.capabilities = capabilities
+        else:
+            # Create from individual flags
+            self.capabilities = create_server_capabilities(
+                tools=tools,
+                resources=resources,
+                prompts=prompts,
+                logging=logging,
+                experimental=experimental
+            )
         
-        # Create protocol handler
+        # Create protocol handler with direct chuk_mcp types
         self.protocol = MCPProtocolHandler(self.server_info, self.capabilities)
         
         # Register any globally decorated functions
@@ -84,15 +118,39 @@ class ChukMCPServer:
     
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
-        # Register global tools
+        # Register global tools (now as ToolHandlers)
         for tool in get_global_tools():
-            self.protocol.register_tool(tool)
-            mcp_registry.register_tool(tool.name, tool)
+            # Convert old Tool to new ToolHandler if needed
+            if hasattr(tool, 'handler'):
+                tool_handler = tool  # Already a handler
+            else:
+                # Convert old-style tool to handler
+                tool_handler = ToolHandler.from_function(
+                    tool.handler, 
+                    name=tool.name, 
+                    description=tool.description
+                )
+            
+            self.protocol.register_tool(tool_handler)
+            mcp_registry.register_tool(tool_handler.name, tool_handler)
         
-        # Register global resources
+        # Register global resources (now as ResourceHandlers)
         for resource in get_global_resources():
-            self.protocol.register_resource(resource)
-            mcp_registry.register_resource(resource.uri, resource)
+            # Convert old Resource to new ResourceHandler if needed
+            if hasattr(resource, 'handler'):
+                resource_handler = resource  # Already a handler
+            else:
+                # Convert old-style resource to handler
+                resource_handler = ResourceHandler.from_function(
+                    resource.uri,
+                    resource.handler,
+                    name=resource.name,
+                    description=resource.description,
+                    mime_type=resource.mime_type
+                )
+            
+            self.protocol.register_resource(resource_handler)
+            mcp_registry.register_resource(resource_handler.uri, resource_handler)
         
         # Clear global registry to avoid duplicate registrations
         clear_global_registry()
@@ -115,19 +173,19 @@ class ChukMCPServer:
                 return x + y
         """
         def decorator(func: Callable) -> Callable:
-            # Create tool from function
-            tool = Tool.from_function(func, name=name, description=description)
+            # Create tool handler from function
+            tool_handler = ToolHandler.from_function(func, name=name, description=description)
             
             # Register in protocol handler (for MCP functionality)
-            self.protocol.register_tool(tool)
+            self.protocol.register_tool(tool_handler)
             
             # Register in MCP registry (for introspection and management)
-            mcp_registry.register_tool(tool.name, tool, **kwargs)
+            mcp_registry.register_tool(tool_handler.name, tool_handler, **kwargs)
             
             # Add tool metadata to function
-            func._mcp_tool = tool
+            func._mcp_tool = tool_handler
             
-            logger.debug(f"Registered tool: {tool.name}")
+            logger.debug(f"Registered tool: {tool_handler.name}")
             return func
         
         # Handle both @mcp.tool and @mcp.tool() usage
@@ -155,8 +213,8 @@ class ChukMCPServer:
                 return "# My Application\\n\\nThis is awesome!"
         """
         def decorator(func: Callable) -> Callable:
-            # Create resource from function
-            resource = Resource.from_function(
+            # Create resource handler from function
+            resource_handler = ResourceHandler.from_function(
                 uri=uri, 
                 func=func, 
                 name=name, 
@@ -165,21 +223,21 @@ class ChukMCPServer:
             )
             
             # Register in protocol handler (for MCP functionality)
-            self.protocol.register_resource(resource)
+            self.protocol.register_resource(resource_handler)
             
             # Register in MCP registry (for introspection and management)
-            mcp_registry.register_resource(resource.uri, resource, **kwargs)
+            mcp_registry.register_resource(resource_handler.uri, resource_handler, **kwargs)
             
             # Add resource metadata to function
-            func._mcp_resource = resource
+            func._mcp_resource = resource_handler
             
-            logger.debug(f"Registered resource: {resource.uri}")
+            logger.debug(f"Registered resource: {resource_handler.uri}")
             return func
         
         return decorator
     
     # ============================================================================
-    # HTTP Endpoint Registration
+    # HTTP Endpoint Registration (unchanged)
     # ============================================================================
     
     def endpoint(self, path: str, methods: List[str] = None, **kwargs):
@@ -190,10 +248,6 @@ class ChukMCPServer:
             @mcp.endpoint("/api/data", methods=["GET", "POST"])
             async def data_handler(request):
                 return Response('{"data": "example"}')
-            
-            @mcp.endpoint("/health", description="Custom health check")
-            async def health_handler(request):
-                return Response('{"status": "ok"}')
         """
         def decorator(handler: Callable):
             http_endpoint_registry.register_endpoint(path, handler, methods=methods, **kwargs)
@@ -205,17 +259,17 @@ class ChukMCPServer:
     # Manual Registration Methods
     # ============================================================================
     
-    def add_tool(self, tool: Tool, **kwargs):
-        """Manually add an MCP tool."""
-        self.protocol.register_tool(tool)
-        mcp_registry.register_tool(tool.name, tool, **kwargs)
-        logger.debug(f"Added tool: {tool.name}")
+    def add_tool(self, tool_handler: ToolHandler, **kwargs):
+        """Manually add an MCP tool handler."""
+        self.protocol.register_tool(tool_handler)
+        mcp_registry.register_tool(tool_handler.name, tool_handler, **kwargs)
+        logger.debug(f"Added tool: {tool_handler.name}")
     
-    def add_resource(self, resource: Resource, **kwargs):
-        """Manually add an MCP resource."""
-        self.protocol.register_resource(resource)
-        mcp_registry.register_resource(resource.uri, resource, **kwargs)
-        logger.debug(f"Added resource: {resource.uri}")
+    def add_resource(self, resource_handler: ResourceHandler, **kwargs):
+        """Manually add an MCP resource handler."""
+        self.protocol.register_resource(resource_handler)
+        mcp_registry.register_resource(resource_handler.uri, resource_handler, **kwargs)
+        logger.debug(f"Added resource: {resource_handler.uri}")
     
     def add_endpoint(self, path: str, handler: Callable, methods: List[str] = None, **kwargs):
         """Manually add a custom HTTP endpoint."""
@@ -225,24 +279,24 @@ class ChukMCPServer:
     def register_function_as_tool(self, func: Callable, name: Optional[str] = None, 
                                 description: Optional[str] = None, **kwargs):
         """Register an existing function as an MCP tool."""
-        tool = Tool.from_function(func, name=name, description=description)
-        self.add_tool(tool, **kwargs)
-        return tool
+        tool_handler = ToolHandler.from_function(func, name=name, description=description)
+        self.add_tool(tool_handler, **kwargs)
+        return tool_handler
     
     def register_function_as_resource(self, func: Callable, uri: str, name: Optional[str] = None,
                                     description: Optional[str] = None, mime_type: str = "text/plain", **kwargs):
         """Register an existing function as an MCP resource."""
-        resource = Resource.from_function(
+        resource_handler = ResourceHandler.from_function(
             uri=uri, func=func, name=name, description=description, mime_type=mime_type
         )
-        self.add_resource(resource, **kwargs)
-        return resource
+        self.add_resource(resource_handler, **kwargs)
+        return resource_handler
     
     # ============================================================================
     # Component Search and Discovery
     # ============================================================================
     
-    def search_tools_by_tag(self, tag: str) -> List[Tool]:
+    def search_tools_by_tag(self, tag: str) -> List[ToolHandler]:
         """Search tools by tag."""
         configs = mcp_registry.search_by_tag(tag)
         return [
@@ -250,7 +304,7 @@ class ChukMCPServer:
             if config.component_type.value == "tool"
         ]
     
-    def search_resources_by_tag(self, tag: str) -> List[Resource]:
+    def search_resources_by_tag(self, tag: str) -> List[ResourceHandler]:
         """Search resources by tag."""
         configs = mcp_registry.search_by_tag(tag)
         return [
@@ -266,12 +320,12 @@ class ChukMCPServer:
     # Information and Introspection
     # ============================================================================
     
-    def get_tools(self) -> List[Tool]:
-        """Get all registered MCP tools."""
+    def get_tools(self) -> List[ToolHandler]:
+        """Get all registered MCP tool handlers."""
         return list(self.protocol.tools.values())
     
-    def get_resources(self) -> List[Resource]:
-        """Get all registered MCP resources."""
+    def get_resources(self) -> List[ResourceHandler]:
+        """Get all registered MCP resource handlers."""
         return list(self.protocol.resources.values())
     
     def get_endpoints(self) -> List[Dict[str, Any]]:
@@ -294,8 +348,8 @@ class ChukMCPServer:
     def info(self) -> Dict[str, Any]:
         """Get comprehensive server information."""
         return {
-            "server": self.server_info.to_dict(),
-            "capabilities": self.capabilities.to_dict(),
+            "server": self.server_info.model_dump(exclude_none=True),
+            "capabilities": self.capabilities.model_dump(exclude_none=True),
             "mcp_components": {
                 "tools": {
                     "count": len(self.protocol.tools),
@@ -351,7 +405,7 @@ class ChukMCPServer:
         logger.info("Cleared all components and endpoints")
     
     # ============================================================================
-    # Server Management
+    # Server Management (unchanged)
     # ============================================================================
     
     def run(self, host: str = "localhost", port: int = 8000, debug: bool = False):
@@ -391,7 +445,7 @@ class ChukMCPServer:
         info = self.info()
         print(f"Server: {info['server']['name']}")
         print(f"Version: {info['server']['version']}")
-        print(f"Framework: ChukMCPServer with chuk_mcp")
+        print(f"Framework: ChukMCPServer with direct chuk_mcp integration")
         print()
         
         # MCP Components
@@ -444,7 +498,7 @@ class ChukMCPServer:
         print("=" * 50)
     
     # ============================================================================
-    # Context Manager Support
+    # Context Manager Support (unchanged)
     # ============================================================================
     
     def __enter__(self):
@@ -458,7 +512,7 @@ class ChukMCPServer:
 
 
 # ============================================================================
-# Factory Functions
+# Factory Functions (updated for new types)
 # ============================================================================
 
 def create_mcp_server(name: str, **kwargs) -> ChukMCPServer:
@@ -471,5 +525,6 @@ def quick_server(name: str = "Quick Server") -> ChukMCPServer:
     return ChukMCPServer(
         name=name,
         version="0.1.0",
-        capabilities=Capabilities(tools=True, resources=True)
+        tools=True,
+        resources=True
     )

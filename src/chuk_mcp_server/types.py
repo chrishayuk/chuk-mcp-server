@@ -1,23 +1,37 @@
 #!/usr/bin/env python3
 """
-Types - Clean integration with chuk_mcp types
+Types - Direct integration with chuk_mcp types
 
-This module imports and re-exports chuk_mcp types while adding framework-specific
-conveniences and developer-friendly APIs on top.
+This module uses chuk_mcp types directly, eliminating unnecessary conversion layers
+and providing a cleaner, more maintainable API.
 """
 
 import inspect
 import json
+import time
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass
 from enum import Enum
 
 # ============================================================================
-# Import chuk_mcp Types (Primary Source of Truth)
+# Direct chuk_mcp imports - No Conversion Layer
 # ============================================================================
 
-# Core chuk_mcp protocol types
-from chuk_mcp.protocol.types.content import (
+# Use chuk_mcp types directly
+from chuk_mcp.protocol.types import (
+    # Server/Client info (use directly)
+    ServerInfo,
+    ClientInfo,
+    
+    # Capabilities (use directly)
+    ServerCapabilities,
+    ClientCapabilities,
+    ToolsCapability,
+    ResourcesCapability,
+    PromptsCapability,
+    LoggingCapability,
+    
+    # Content types (use directly)
     TextContent,
     ImageContent,
     AudioContent,
@@ -29,25 +43,26 @@ from chuk_mcp.protocol.types.content import (
     create_audio_content,
     create_embedded_resource,
     content_to_dict,
-    parse_content
+    parse_content,
+    
+    # Error handling
+    MCPError,
+    ProtocolError,
+    ValidationError,
+    
+    # Versioning
+    CURRENT_VERSION,
+    SUPPORTED_VERSIONS,
+    ProtocolVersion,
 )
 
-from chuk_mcp.protocol.types.capabilities import (
-    ServerCapabilities,
-    ClientCapabilities,
-    ToolsCapability,
-    ResourcesCapability,
-    PromptsCapability,
-    LoggingCapability
-)
-
-from chuk_mcp.protocol.types.info import (
-    ServerInfo as ChukServerInfo,
-    ClientInfo as ChukClientInfo
-)
+# Import chuk_mcp's Resource, Tool, and ToolInputSchema types separately to avoid naming conflicts
+from chuk_mcp.protocol.messages.resources.resource import Resource as MCPResource
+from chuk_mcp.protocol.messages.tools.tool import Tool as MCPTool
+from chuk_mcp.protocol.messages.tools.tool_input_schema import ToolInputSchema as MCPToolInputSchema
 
 # ============================================================================
-# Framework-Specific Convenience Types
+# Framework-Specific Enums (Keep Simple)
 # ============================================================================
 
 class TransportType(Enum):
@@ -57,63 +72,8 @@ class TransportType(Enum):
     SSE = "sse"
 
 
-@dataclass 
-class ServerInfo:
-    """Framework wrapper for chuk_mcp ServerInfo with conveniences."""
-    name: str
-    version: str
-    title: Optional[str] = None
-    description: Optional[str] = None
-    
-    def to_chuk_mcp(self) -> ChukServerInfo:
-        """Convert to chuk_mcp ServerInfo."""
-        return ChukServerInfo(
-            name=self.name,
-            version=self.version,
-            title=self.title
-        )
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return self.to_chuk_mcp().model_dump(exclude_none=True)
-
-
-@dataclass
-class Capabilities:
-    """Framework wrapper for chuk_mcp ServerCapabilities with conveniences."""
-    tools: bool = True
-    resources: bool = True
-    prompts: bool = False
-    logging: bool = False
-    experimental: Optional[Dict[str, Any]] = None
-    
-    def to_chuk_mcp(self) -> ServerCapabilities:
-        """Convert to chuk_mcp ServerCapabilities."""
-        caps_dict = {}
-        
-        if self.tools:
-            caps_dict["tools"] = ToolsCapability(listChanged=True)
-        if self.resources:
-            caps_dict["resources"] = ResourcesCapability(
-                listChanged=True, 
-                subscribe=False
-            )
-        if self.prompts:
-            caps_dict["prompts"] = PromptsCapability(listChanged=True)
-        if self.logging:
-            caps_dict["logging"] = LoggingCapability()
-        if self.experimental:
-            caps_dict["experimental"] = self.experimental
-        
-        return ServerCapabilities(**caps_dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to MCP capabilities format."""
-        return self.to_chuk_mcp().model_dump(exclude_none=True)
-
-
 # ============================================================================
-# Tool Parameter
+# Enhanced Tool Parameter with Modern Typing
 # ============================================================================
 
 @dataclass
@@ -129,8 +89,11 @@ class ToolParameter:
     @classmethod
     def from_annotation(cls, name: str, annotation: Any, 
                        default: Any = inspect.Parameter.empty) -> 'ToolParameter':
-        """Create parameter from function annotation."""
-        # Enhanced type mapping
+        """Create parameter from function annotation with modern typing support."""
+        import typing
+        from typing import Union, List, Dict  # Add explicit imports
+        
+        # Enhanced type mapping for modern Python
         type_map = {
             str: "string",
             int: "integer", 
@@ -138,20 +101,45 @@ class ToolParameter:
             bool: "boolean",
             list: "array",
             dict: "object",
-            List: "array",
-            Dict: "object"
         }
         
         param_type = "string"  # default
+        enum_values = None
         
-        # Handle generic types like Optional, Union, List, etc.
-        if hasattr(annotation, '__origin__'):
+        # Handle modern typing features
+        if hasattr(typing, 'get_origin') and hasattr(typing, 'get_args'):
+            origin = typing.get_origin(annotation)
+            args = typing.get_args(annotation)
+            
+            if origin is Union:
+                # Handle Optional[T] and Union types
+                if len(args) == 2 and type(None) in args:
+                    # Optional[T] case
+                    non_none_type = next(arg for arg in args if arg is not type(None))
+                    param_type = type_map.get(non_none_type, "string")
+                else:
+                    # Multiple union types - default to string
+                    param_type = "string"
+            
+            # Handle Literal types for enums
+            elif hasattr(typing, 'Literal') and origin is typing.Literal:
+                param_type = "string"
+                enum_values = list(args)
+            
+            # Handle generic containers
+            elif origin in (list, typing.List):
+                param_type = "array"
+            elif origin in (dict, typing.Dict):
+                param_type = "object"
+            else:
+                param_type = type_map.get(origin, "string")
+        
+        # Fallback for older typing or direct types
+        elif hasattr(annotation, '__origin__'):
             origin = annotation.__origin__
             if origin is Union:
-                # Handle Optional (Union[T, None])
                 args = annotation.__args__
                 if len(args) == 2 and type(None) in args:
-                    # This is Optional[T]
                     non_none_type = next(arg for arg in args if arg is not type(None))
                     param_type = type_map.get(non_none_type, "string")
                 else:
@@ -175,7 +163,7 @@ class ToolParameter:
             description=None,
             required=required,
             default=actual_default,
-            enum=None
+            enum=enum_values
         )
     
     def to_json_schema(self) -> Dict[str, Any]:
@@ -193,21 +181,44 @@ class ToolParameter:
 
 
 # ============================================================================
-# Framework Tool
+# Enhanced Framework Tool Handler with Better Error Handling
 # ============================================================================
 
+class ParameterValidationError(ValidationError):
+    """Specific error for parameter validation."""
+    def __init__(self, parameter: str, expected_type: str, received: Any):
+        message = f"Invalid parameter '{parameter}': expected {expected_type}, got {type(received).__name__}"
+        data = {
+            "parameter": parameter, 
+            "expected": expected_type, 
+            "received": type(received).__name__
+        }
+        super().__init__(message, data=data)
+
+
+class ToolExecutionError(MCPError):
+    """Error during tool execution."""
+    def __init__(self, tool_name: str, error: Exception):
+        message = f"Tool '{tool_name}' execution failed: {str(error)}"
+        data = {
+            "tool": tool_name, 
+            "error_type": type(error).__name__,
+            "error_message": str(error)
+        }
+        super().__init__(message, data=data)
+
+
 @dataclass 
-class Tool:
-    """Framework tool wrapper."""
-    name: str
-    description: str
+class ToolHandler:
+    """Framework tool handler with enhanced error handling - wraps chuk_mcp Tool."""
+    mcp_tool: MCPTool  # The actual MCP tool
     handler: Callable
     parameters: List[ToolParameter]
     
     @classmethod
     def from_function(cls, func: Callable, name: Optional[str] = None, 
-                     description: Optional[str] = None) -> 'Tool':
-        """Create Tool from a function."""
+                     description: Optional[str] = None) -> 'ToolHandler':
+        """Create ToolHandler from a function."""
         tool_name = name or func.__name__
         tool_description = description or func.__doc__ or f"Execute {tool_name}"
         
@@ -226,41 +237,51 @@ class Tool:
             )
             parameters.append(tool_param)
         
-        return cls(
-            name=tool_name,
-            description=tool_description,
-            handler=func,
-            parameters=parameters
-        )
-    
-    def to_mcp_format(self) -> Dict[str, Any]:
-        """Convert to MCP tool format."""
-        # Build JSON schema for parameters
+        # Build JSON schema for the MCP tool using the proper schema type
         properties = {}
         required = []
         
-        for param in self.parameters:
+        for param in parameters:
             properties[param.name] = param.to_json_schema()
             if param.required:
                 required.append(param.name)
         
-        input_schema = {
-            "type": "object",
-            "properties": properties
-        }
+        # Create the proper MCP ToolInputSchema
+        input_schema = MCPToolInputSchema(
+            type="object",
+            properties=properties,
+            required=required if required else None
+        )
         
-        if required:
-            input_schema["required"] = required
+        # Create the MCP tool with the proper schema
+        mcp_tool = MCPTool(
+            name=tool_name,
+            description=tool_description,
+            inputSchema=input_schema.model_dump(exclude_none=True)
+        )
         
-        return {
-            "name": self.name,
-            "description": self.description,
-            "inputSchema": input_schema
-        }
+        return cls(
+            mcp_tool=mcp_tool,
+            handler=func,
+            parameters=parameters
+        )
     
-    async def execute(self, arguments: Dict[str, Any]) -> Any:
-        """Execute the tool with given arguments."""
-        # Validate and convert arguments
+    @property
+    def name(self) -> str:
+        """Get the tool name."""
+        return self.mcp_tool.name
+    
+    @property
+    def description(self) -> Optional[str]:
+        """Get the tool description."""
+        return self.mcp_tool.description
+    
+    def to_mcp_format(self) -> Dict[str, Any]:
+        """Convert to MCP tool format."""
+        return self.mcp_tool.model_dump(exclude_none=True)
+    
+    def _validate_and_convert_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and convert arguments with specific error types."""
         validated_args = {}
         
         for param in self.parameters:
@@ -268,101 +289,216 @@ class Tool:
             
             if value is None:
                 if param.required:
-                    raise ValueError(f"Missing required parameter: {param.name}")
+                    raise ParameterValidationError(param.name, param.type, None)
                 value = param.default
             
-            # Enhanced type conversion
+            # Type validation and conversion
             if value is not None:
-                if param.type == "integer" and not isinstance(value, int):
-                    try:
-                        value = int(value)
-                    except (ValueError, TypeError):
-                        raise ValueError(f"Cannot convert {value} to integer for parameter {param.name}")
-                elif param.type == "number" and not isinstance(value, (int, float)):
-                    try:
-                        value = float(value)
-                    except (ValueError, TypeError):
-                        raise ValueError(f"Cannot convert {value} to number for parameter {param.name}")
-                elif param.type == "boolean" and not isinstance(value, bool):
-                    value = bool(value)
-            
-            if value is not None:
-                validated_args[param.name] = value
+                try:
+                    validated_value = self._convert_type(value, param)
+                    validated_args[param.name] = validated_value
+                except (ValueError, TypeError) as e:
+                    raise ParameterValidationError(param.name, param.type, value)
         
-        # Execute the function
-        if inspect.iscoroutinefunction(self.handler):
-            return await self.handler(**validated_args)
-        else:
-            return self.handler(**validated_args)
+        return validated_args
+    
+    def _convert_type(self, value: Any, param: ToolParameter) -> Any:
+        """Convert value to the expected parameter type."""
+        if param.type == "integer" and not isinstance(value, int):
+            return int(value)
+        elif param.type == "number" and not isinstance(value, (int, float)):
+            return float(value)
+        elif param.type == "boolean" and not isinstance(value, bool):
+            if isinstance(value, str):
+                return value.lower() in ('true', '1', 'yes', 'on')
+            return bool(value)
+        elif param.type == "string" and not isinstance(value, str):
+            return str(value)
+        elif param.enum and value not in param.enum:
+            raise ValueError(f"Value must be one of {param.enum}")
+        
+        return value
+    
+    async def execute(self, arguments: Dict[str, Any]) -> Any:
+        """Execute the tool with enhanced error handling."""
+        try:
+            validated_args = self._validate_and_convert_arguments(arguments)
+            
+            if inspect.iscoroutinefunction(self.handler):
+                return await self.handler(**validated_args)
+            else:
+                return self.handler(**validated_args)
+        
+        except (ParameterValidationError, ValidationError):
+            # Re-raise validation errors as-is
+            raise
+        except Exception as e:
+            # Wrap other errors in ToolExecutionError
+            raise ToolExecutionError(self.name, e)
 
 
 # ============================================================================
-# Framework Resource
+# Enhanced Framework Resource Handler with Caching
 # ============================================================================
 
 @dataclass
-class Resource:
-    """Framework resource wrapper."""
-    uri: str
-    name: str
-    description: str
-    mime_type: str
+class ResourceHandler:
+    """Framework resource handler with optional caching - wraps chuk_mcp Resource."""
+    mcp_resource: MCPResource  # The actual MCP resource
     handler: Callable
+    cache_ttl: Optional[int] = None  # Cache TTL in seconds
+    
+    def __post_init__(self):
+        self._cached_content: Optional[str] = None
+        self._cache_timestamp: Optional[float] = None
     
     @classmethod
     def from_function(cls, uri: str, func: Callable, name: Optional[str] = None, 
-                     description: Optional[str] = None, mime_type: str = "text/plain") -> 'Resource':
-        """Create Resource from a function."""
+                     description: Optional[str] = None, mime_type: str = "text/plain",
+                     cache_ttl: Optional[int] = None) -> 'ResourceHandler':
+        """Create ResourceHandler from a function."""
         resource_name = name or func.__name__.replace('_', ' ').title()
         resource_description = description or func.__doc__ or f"Resource: {uri}"
         
-        return cls(
+        # Create the MCP resource
+        mcp_resource = MCPResource(
             uri=uri,
             name=resource_name,
             description=resource_description,
-            mime_type=mime_type,
-            handler=func
+            mimeType=mime_type
         )
+        
+        return cls(
+            mcp_resource=mcp_resource,
+            handler=func,
+            cache_ttl=cache_ttl
+        )
+    
+    @property
+    def uri(self) -> str:
+        """Get the resource URI."""
+        return self.mcp_resource.uri
+    
+    @property
+    def name(self) -> str:
+        """Get the resource name."""
+        return self.mcp_resource.name
+    
+    @property
+    def description(self) -> Optional[str]:
+        """Get the resource description."""
+        return self.mcp_resource.description
+    
+    @property
+    def mime_type(self) -> Optional[str]:
+        """Get the resource MIME type."""
+        return self.mcp_resource.mimeType
     
     def to_mcp_format(self) -> Dict[str, Any]:
         """Convert to MCP resource format."""
-        return {
-            "uri": self.uri,
-            "name": self.name,
-            "description": self.description,
-            "mimeType": self.mime_type
-        }
+        return self.mcp_resource.model_dump(exclude_none=True)
     
     async def read(self) -> str:
-        """Read the resource content."""
-        if inspect.iscoroutinefunction(self.handler):
-            result = await self.handler()
-        else:
-            result = self.handler()
+        """Read the resource content with optional caching."""
+        now = time.time()
         
-        # Convert result to string if needed
-        if isinstance(result, (dict, list)):
-            return json.dumps(result, indent=2)
-        else:
+        # Check cache validity
+        if (self.cache_ttl and 
+            self._cached_content and 
+            self._cache_timestamp and
+            now - self._cache_timestamp < self.cache_ttl):
+            return self._cached_content
+        
+        # Read fresh content
+        try:
+            if inspect.iscoroutinefunction(self.handler):
+                result = await self.handler()
+            else:
+                result = self.handler()
+            
+            # Format content based on MIME type
+            content = self._format_content(result)
+            
+            # Cache if TTL is set
+            if self.cache_ttl:
+                self._cached_content = content
+                self._cache_timestamp = now
+            
+            return content
+            
+        except Exception as e:
+            raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}")
+    
+    def _format_content(self, result: Any) -> str:
+        """Format content based on MIME type."""
+        mime_type = self.mime_type or "text/plain"
+        
+        if mime_type == "application/json":
+            if isinstance(result, (dict, list)):
+                return json.dumps(result, indent=2, ensure_ascii=False)
+            else:
+                return json.dumps(result, ensure_ascii=False)
+        elif mime_type == "text/markdown":
             return str(result)
+        elif mime_type == "text/plain":
+            return str(result)
+        else:
+            # For unknown MIME types, convert to string
+            if isinstance(result, (dict, list)):
+                return json.dumps(result, indent=2)
+            else:
+                return str(result)
+    
+    def invalidate_cache(self):
+        """Manually invalidate the cached content."""
+        self._cached_content = None
+        self._cache_timestamp = None
 
 
 # ============================================================================
-# Content Formatting using chuk_mcp
+# Simplified Capabilities Helper
+# ============================================================================
+
+def create_server_capabilities(
+    tools: bool = True,
+    resources: bool = True,
+    prompts: bool = False,
+    logging: bool = False,
+    experimental: Optional[Dict[str, Any]] = None
+) -> ServerCapabilities:
+    """Create server capabilities using chuk_mcp types directly."""
+    capabilities = {}
+    
+    if tools:
+        capabilities["tools"] = ToolsCapability(listChanged=True)
+    if resources:
+        capabilities["resources"] = ResourcesCapability(
+            listChanged=True, 
+            subscribe=False
+        )
+    if prompts:
+        capabilities["prompts"] = PromptsCapability(listChanged=True)
+    if logging:
+        capabilities["logging"] = LoggingCapability()
+    if experimental:
+        capabilities["experimental"] = experimental
+    
+    return ServerCapabilities(**capabilities)
+
+
+# ============================================================================
+# Content Formatting using chuk_mcp directly
 # ============================================================================
 
 def format_content(content) -> List[Dict[str, Any]]:
-    """Format content using chuk_mcp types for robust serialization."""
+    """Format content using chuk_mcp types directly."""
     if isinstance(content, str):
-        # Use chuk_mcp's create_text_content function
         text_content = create_text_content(content)
         return [content_to_dict(text_content)]
     elif isinstance(content, dict):
-        # Convert dict to JSON string using chuk_mcp
         text_content = create_text_content(json.dumps(content, indent=2))
         return [content_to_dict(text_content)]
     elif isinstance(content, (TextContent, ImageContent, AudioContent, EmbeddedResource)):
-        # Use chuk_mcp's content_to_dict function
         return [content_to_dict(content)]
     elif isinstance(content, list):
         result = []
@@ -370,58 +506,79 @@ def format_content(content) -> List[Dict[str, Any]]:
             result.extend(format_content(item))
         return result
     else:
-        # Convert anything else to string using chuk_mcp
         text_content = create_text_content(str(content))
         return [content_to_dict(text_content)]
 
 
 # ============================================================================
-# Re-exports and Aliases
+# Legacy Compatibility (for existing code)
 # ============================================================================
 
-# Direct re-exports of chuk_mcp types
-ChukServerInfo = ChukServerInfo
-ChukClientInfo = ChukClientInfo
+# Create simple wrappers that use chuk_mcp types directly
+def Capabilities(**kwargs) -> ServerCapabilities:
+    """Legacy compatibility wrapper for create_server_capabilities."""
+    return create_server_capabilities(**kwargs)
 
-# Framework aliases for backwards compatibility
-ServerCapabilities = ServerCapabilities  # Direct chuk_mcp type
-ClientCapabilities = ClientCapabilities   # Direct chuk_mcp type
+# Aliases for backward compatibility
+Resource = ResourceHandler
+Tool = ToolHandler
+
+
+# ============================================================================
+# Clean Exports - Direct chuk_mcp types
+# ============================================================================
 
 __all__ = [
-    # Framework types
+    # Framework-specific types
     "TransportType",
-    "ServerInfo", 
-    "Capabilities",
-    "ToolParameter",
+    "ToolParameter", 
     "Tool",
-    "Resource",
+    "Resource",        # Alias for ResourceHandler
+    "ResourceHandler", # Explicit name
     
-    # chuk_mcp content types (direct)
-    "TextContent",
-    "ImageContent", 
-    "AudioContent",
-    "EmbeddedResource",
-    "Content",
-    "Annotations",
-    
-    # Content helper functions
-    "create_text_content",
-    "create_image_content", 
-    "create_audio_content",
-    "create_embedded_resource",
+    # Framework helpers
+    "create_server_capabilities",
     "format_content",
-    "content_to_dict",
-    "parse_content",
+    "Capabilities",  # Legacy compatibility
     
-    # chuk_mcp types (direct)
+    # Exception types
+    "ParameterValidationError",
+    "ToolExecutionError",
+    
+    # Direct chuk_mcp types (no conversion needed)
+    "ServerInfo",
+    "ClientInfo", 
     "ServerCapabilities",
     "ClientCapabilities",
-    "ChukServerInfo",
-    "ChukClientInfo",
-    
-    # Capability types
     "ToolsCapability",
     "ResourcesCapability",
     "PromptsCapability",
     "LoggingCapability",
+    "MCPResource",  # chuk_mcp's Resource type
+    
+    # Content types (direct from chuk_mcp)
+    "TextContent",
+    "ImageContent",
+    "AudioContent", 
+    "EmbeddedResource",
+    "Content",
+    "Annotations",
+    
+    # Content helpers (direct from chuk_mcp)
+    "create_text_content",
+    "create_image_content",
+    "create_audio_content",
+    "create_embedded_resource",
+    "content_to_dict",
+    "parse_content",
+    
+    # Error types (direct from chuk_mcp)
+    "MCPError",
+    "ProtocolError",
+    "ValidationError",
+    
+    # Versioning (direct from chuk_mcp)
+    "CURRENT_VERSION",
+    "SUPPORTED_VERSIONS",
+    "ProtocolVersion",
 ]

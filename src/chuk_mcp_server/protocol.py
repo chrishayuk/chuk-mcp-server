@@ -11,9 +11,12 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from .types import (
-    Tool, Resource, ServerInfo, Capabilities, format_content,
-    ChukServerInfo, ServerCapabilities, ToolsCapability, 
-    ResourcesCapability, PromptsCapability
+    # Framework handlers
+    ToolHandler, ResourceHandler, format_content,
+    
+    # Direct chuk_mcp types (no conversion needed)
+    ServerInfo, ServerCapabilities, 
+    ToolsCapability, ResourcesCapability, PromptsCapability
 )
 
 logger = logging.getLogger(__name__)
@@ -70,37 +73,25 @@ class SessionManager:
 class MCPProtocolHandler:
     """Core MCP protocol handler powered by chuk_mcp."""
     
-    def __init__(self, server_info: ServerInfo, capabilities: Capabilities):
+    def __init__(self, server_info: ServerInfo, capabilities: ServerCapabilities):
+        # Use chuk_mcp types directly - no conversion needed
         self.server_info = server_info
         self.capabilities = capabilities
         self.session_manager = SessionManager()
         
-        # Tool and resource registries
-        self.tools: Dict[str, Tool] = {}
-        self.resources: Dict[str, Resource] = {}
-        
-        # Setup chuk_mcp components
-        self._setup_chuk_mcp()
+        # Tool and resource registries (now use handlers)
+        self.tools: Dict[str, ToolHandler] = {}
+        self.resources: Dict[str, ResourceHandler] = {}
         
         logger.info("✅ MCP protocol handler initialized with chuk_mcp")
     
-    def _setup_chuk_mcp(self):
-        """Setup chuk_mcp components."""
-        # Create chuk_mcp server info using clean types
-        self.chuk_server_info = self.server_info.to_chuk_mcp()
-        
-        # Create chuk_mcp capabilities using clean types
-        self.chuk_capabilities = self.capabilities.to_chuk_mcp()
-        
-        logger.debug("chuk_mcp components initialized")
-    
-    def register_tool(self, tool: Tool):
-        """Register a tool."""
+    def register_tool(self, tool: ToolHandler):
+        """Register a tool handler."""
         self.tools[tool.name] = tool
         logger.debug(f"Registered tool: {tool.name}")
     
-    def register_resource(self, resource: Resource):
-        """Register a resource."""
+    def register_resource(self, resource: ResourceHandler):
+        """Register a resource handler."""
         self.resources[resource.uri] = resource
         logger.debug(f"Registered resource: {resource.uri}")
     
@@ -108,9 +99,8 @@ class MCPProtocolHandler:
         """Get list of tools in MCP format."""
         tools_list = []
         
-        for tool in self.tools.values():
-            # Use framework tool's MCP format (which is already correct)
-            tools_list.append(tool.to_mcp_format())
+        for tool_handler in self.tools.values():
+            tools_list.append(tool_handler.to_mcp_format())
         
         return tools_list
     
@@ -118,9 +108,8 @@ class MCPProtocolHandler:
         """Get list of resources in MCP format."""
         resources_list = []
         
-        for resource in self.resources.values():
-            # Use framework resource's MCP format (which is already correct)
-            resources_list.append(resource.to_mcp_format())
+        for resource_handler in self.resources.values():
+            resources_list.append(resource_handler.to_mcp_format())
         
         return resources_list
     
@@ -168,11 +157,11 @@ class MCPProtocolHandler:
         # Create session
         session_id = self.session_manager.create_session(client_info, protocol_version)
         
-        # Build response using chuk_mcp types
+        # Build response using chuk_mcp types directly
         result = {
             "protocolVersion": protocol_version,
-            "serverInfo": self.chuk_server_info.model_dump(),
-            "capabilities": self.chuk_capabilities.model_dump(exclude_none=True)
+            "serverInfo": self.server_info.model_dump(exclude_none=True),
+            "capabilities": self.capabilities.model_dump(exclude_none=True)
         }
         
         response = {
@@ -216,8 +205,8 @@ class MCPProtocolHandler:
             return self._create_error_response(msg_id, -32602, f"Unknown tool: {tool_name}"), None
         
         try:
-            tool = self.tools[tool_name]
-            result = await tool.execute(arguments)
+            tool_handler = self.tools[tool_name]
+            result = await tool_handler.execute(arguments)
             
             # Format response content using chuk_mcp content formatting
             content = format_content(result)
@@ -257,13 +246,13 @@ class MCPProtocolHandler:
             return self._create_error_response(msg_id, -32602, f"Unknown resource: {uri}"), None
         
         try:
-            resource = self.resources[uri]
-            content = await resource.read()
+            resource_handler = self.resources[uri]
+            content = await resource_handler.read()
             
             # Build resource content response
             resource_content = {
                 "uri": uri,
-                "mimeType": resource.mime_type,
+                "mimeType": resource_handler.mime_type,
                 "text": content
             }
             
