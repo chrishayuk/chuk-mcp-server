@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "asyncio>=3.4.3",
-    "chuk-mcp>=0.2",
+    "chuk-mcp>=0.2.3",
     "httptools>=0.6.4",
     "orjson>=3.10.18",
     "pydantic>=2.11.7",

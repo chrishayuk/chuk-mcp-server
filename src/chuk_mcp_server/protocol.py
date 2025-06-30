@@ -10,16 +10,11 @@ import uuid
 import logging
 from typing import Dict, Any, Optional, List
 
-from .types import Tool, Resource, ServerInfo, Capabilities, format_content
-
-# chuk_mcp imports (always available as dependency)
-from chuk_mcp.mcp_client.messages.initialize.mcp_server_info import MCPServerInfo
-from chuk_mcp.mcp_client.messages.initialize.mcp_server_capabilities import (
-    MCPServerCapabilities, ToolsCapability, ResourcesCapability, PromptsCapability
+from .types import (
+    Tool, Resource, ServerInfo, Capabilities, format_content,
+    ChukServerInfo, ServerCapabilities, ToolsCapability, 
+    ResourcesCapability, PromptsCapability
 )
-from chuk_mcp.mcp_client.messages.tools.tool import Tool as ChukTool
-from chuk_mcp.mcp_client.messages.resources.resource import Resource as ChukResource
-from chuk_mcp.mcp_client.messages.resources.resource_content import ResourceContent
 
 logger = logging.getLogger(__name__)
 
@@ -91,29 +86,11 @@ class MCPProtocolHandler:
     
     def _setup_chuk_mcp(self):
         """Setup chuk_mcp components."""
-        # Create chuk_mcp server info
-        self.chuk_server_info = MCPServerInfo(
-            name=self.server_info.name,
-            version=self.server_info.version,
-            title=self.server_info.title or self.server_info.name
-        )
+        # Create chuk_mcp server info using clean types
+        self.chuk_server_info = self.server_info.to_chuk_mcp()
         
-        # Create chuk_mcp capabilities
-        caps_dict = {}
-        
-        if self.capabilities.tools:
-            caps_dict["tools"] = ToolsCapability(listChanged=True)
-        
-        if self.capabilities.resources:
-            caps_dict["resources"] = ResourcesCapability(
-                listChanged=True, 
-                subscribe=False
-            )
-        
-        if self.capabilities.prompts:
-            caps_dict["prompts"] = PromptsCapability(listChanged=True)
-        
-        self.chuk_capabilities = MCPServerCapabilities(**caps_dict)
+        # Create chuk_mcp capabilities using clean types
+        self.chuk_capabilities = self.capabilities.to_chuk_mcp()
         
         logger.debug("chuk_mcp components initialized")
     
@@ -128,33 +105,22 @@ class MCPProtocolHandler:
         logger.debug(f"Registered resource: {resource.uri}")
     
     def get_tools_list(self) -> List[Dict[str, Any]]:
-        """Get list of tools in MCP format using chuk_mcp."""
+        """Get list of tools in MCP format."""
         tools_list = []
         
         for tool in self.tools.values():
-            # Use chuk_mcp Tool class for robust serialization
-            chuk_tool = ChukTool(
-                name=tool.name,
-                description=tool.description,
-                inputSchema=tool.to_mcp_format()["inputSchema"]
-            )
-            tools_list.append(chuk_tool.model_dump())
+            # Use framework tool's MCP format (which is already correct)
+            tools_list.append(tool.to_mcp_format())
         
         return tools_list
     
     def get_resources_list(self) -> List[Dict[str, Any]]:
-        """Get list of resources in MCP format using chuk_mcp."""
+        """Get list of resources in MCP format."""
         resources_list = []
         
         for resource in self.resources.values():
-            # Use chuk_mcp Resource class for robust serialization
-            chuk_resource = ChukResource(
-                uri=resource.uri,
-                name=resource.name,
-                description=resource.description,
-                mimeType=resource.mime_type
-            )
-            resources_list.append(chuk_resource.model_dump())
+            # Use framework resource's MCP format (which is already correct)
+            resources_list.append(resource.to_mcp_format())
         
         return resources_list
     
@@ -197,12 +163,12 @@ class MCPProtocolHandler:
     async def _handle_initialize(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], str]:
         """Handle initialize request using chuk_mcp."""
         client_info = params.get("clientInfo", {})
-        protocol_version = params.get("protocolVersion", "2025-03-26")
+        protocol_version = params.get("protocolVersion", "2025-06-18")
         
         # Create session
         session_id = self.session_manager.create_session(client_info, protocol_version)
         
-        # Build response using chuk_mcp
+        # Build response using chuk_mcp types
         result = {
             "protocolVersion": protocol_version,
             "serverInfo": self.chuk_server_info.model_dump(),
@@ -253,7 +219,7 @@ class MCPProtocolHandler:
             tool = self.tools[tool_name]
             result = await tool.execute(arguments)
             
-            # Format response content
+            # Format response content using chuk_mcp content formatting
             content = format_content(result)
             
             response = {
@@ -284,7 +250,7 @@ class MCPProtocolHandler:
         return response, None
     
     async def _handle_resources_read(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], None]:
-        """Handle resources/read request using chuk_mcp."""
+        """Handle resources/read request."""
         uri = params.get("uri")
         
         if uri not in self.resources:
@@ -294,17 +260,17 @@ class MCPProtocolHandler:
             resource = self.resources[uri]
             content = await resource.read()
             
-            # Use chuk_mcp ResourceContent for robust serialization
-            resource_content = ResourceContent(
-                uri=uri,
-                mimeType=resource.mime_type,
-                text=content
-            )
+            # Build resource content response
+            resource_content = {
+                "uri": uri,
+                "mimeType": resource.mime_type,
+                "text": content
+            }
             
             response = {
                 "jsonrpc": "2.0",
                 "id": msg_id,
-                "result": {"contents": [resource_content.model_dump()]}
+                "result": {"contents": [resource_content]}
             }
             
             logger.info(f"📖 Read resource {uri}")
