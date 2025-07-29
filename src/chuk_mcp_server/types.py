@@ -303,19 +303,109 @@ class ToolHandler:
         return validated_args
     
     def _convert_type(self, value: Any, param: ToolParameter) -> Any:
-        """Convert value to the expected parameter type."""
-        if param.type == "integer" and not isinstance(value, int):
-            return int(value)
-        elif param.type == "number" and not isinstance(value, (int, float)):
-            return float(value)
-        elif param.type == "boolean" and not isinstance(value, bool):
+        """Convert value to the expected parameter type with robust handling."""
+        # If value is already the correct type, return as-is
+        if param.type == "integer":
+            if isinstance(value, int):
+                return value
+            elif isinstance(value, float):
+                # Handle float-to-int conversion (e.g., 5.0 -> 5)
+                if value.is_integer():
+                    return int(value)
+                else:
+                    raise ValueError(f"Cannot convert float {value} to integer without precision loss")
+            elif isinstance(value, str):
+                # Handle string-to-int conversion
+                try:
+                    # First try direct int conversion
+                    return int(value)
+                except ValueError:
+                    try:
+                        # Try float first then int (handles "5.0" strings)
+                        float_val = float(value)
+                        if float_val.is_integer():
+                            return int(float_val)
+                        else:
+                            raise ValueError(f"Cannot convert string '{value}' to integer without precision loss")
+                    except ValueError:
+                        raise ValueError(f"Cannot convert string '{value}' to integer")
+            else:
+                # Try direct int conversion for other types
+                return int(value)
+        
+        elif param.type == "number":
+            if isinstance(value, (int, float)):
+                return float(value)
+            elif isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    raise ValueError(f"Cannot convert string '{value}' to number")
+            else:
+                return float(value)
+        
+        elif param.type == "boolean":
+            if isinstance(value, bool):
+                return value
+            elif isinstance(value, str):
+                # Handle string boolean conversion
+                lower_val = value.lower()
+                if lower_val in ('true', '1', 'yes', 'on', 't', 'y'):
+                    return True
+                elif lower_val in ('false', '0', 'no', 'off', 'f', 'n'):
+                    return False
+                else:
+                    raise ValueError(f"Cannot convert string '{value}' to boolean")
+            elif isinstance(value, (int, float)):
+                # Handle numeric boolean conversion
+                return bool(value)
+            else:
+                return bool(value)
+        
+        elif param.type == "string":
             if isinstance(value, str):
-                return value.lower() in ('true', '1', 'yes', 'on')
-            return bool(value)
-        elif param.type == "string" and not isinstance(value, str):
-            return str(value)
-        elif param.enum and value not in param.enum:
-            raise ValueError(f"Value must be one of {param.enum}")
+                return value
+            else:
+                # Convert other types to string
+                return str(value)
+        
+        elif param.type == "array":
+            if isinstance(value, list):
+                return value
+            elif isinstance(value, (tuple, set)):
+                return list(value)
+            elif isinstance(value, str):
+                # Try to parse JSON array
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return parsed
+                    else:
+                        raise ValueError(f"String '{value}' does not represent an array")
+                except json.JSONDecodeError:
+                    raise ValueError(f"Cannot convert string '{value}' to array")
+            else:
+                raise ValueError(f"Cannot convert {type(value).__name__} to array")
+        
+        elif param.type == "object":
+            if isinstance(value, dict):
+                return value
+            elif isinstance(value, str):
+                # Try to parse JSON object
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, dict):
+                        return parsed
+                    else:
+                        raise ValueError(f"String '{value}' does not represent an object")
+                except json.JSONDecodeError:
+                    raise ValueError(f"Cannot convert string '{value}' to object")
+            else:
+                raise ValueError(f"Cannot convert {type(value).__name__} to object")
+        
+        # Check enum values if specified
+        if param.enum and value not in param.enum:
+            raise ValueError(f"Value '{value}' must be one of {param.enum}")
         
         return value
     
