@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/endpoint_registry.py
 """
 Endpoint Registry - HTTP endpoint registration and management
 """

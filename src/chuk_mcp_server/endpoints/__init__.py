@@ -1,73 +1,46 @@
 #!/usr/bin/env python3
-# chuk_mcp_server/endpoints/__init__.py
+# src/chuk_mcp_server/endpoints/__init__.py
 """
-Endpoints - Modular endpoint handlers
+Endpoints - Clean imports for optimized endpoint handlers
 
-This module provides clean, focused endpoint handlers for different aspects
-of the MCP server functionality:
-
-- MCPEndpoint: Core MCP protocol handling with SSE support
-- HealthEndpoint: Health checks and monitoring
-- InfoEndpoint: Server information and documentation
-
-Each endpoint is self-contained and follows single responsibility principle.
+Simple, focused imports without redundant metadata.
+Each endpoint file contains its own documentation and performance info.
 """
 
+# Class-based endpoints
 from .mcp import MCPEndpoint
 from .health import HealthEndpoint
 from .info import InfoEndpoint
 
-__all__ = [
+# Function-based endpoints (optimized)
+from .ping import handle_request as handle_ping
+from .version import handle_request as handle_version
+
+# Add the ultra-fast health endpoint function
+from .health import handle_health_ultra_fast
+
+# Utilities
+from .utils import (
+    json_response_fast as json_response,
+    error_response_fast as error_response,
+    not_found_response,
+    method_not_allowed_response,
+    internal_error_response
+)
+
+__all__ = [  # FIXED: Double underscores, not asterisks
+    # Endpoints
     "MCPEndpoint",
     "HealthEndpoint", 
-    "InfoEndpoint"
+    "InfoEndpoint",
+    "handle_ping",
+    "handle_version",
+    "handle_health_ultra_fast",
+    
+    # Utilities
+    "json_response",
+    "error_response",
+    "not_found_response", 
+    "method_not_allowed_response",
+    "internal_error_response"
 ]
-
-# Endpoint metadata for introspection
-ENDPOINT_INFO = {
-    "mcp": {
-        "class": MCPEndpoint,
-        "description": "Core MCP protocol endpoint with SSE support",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "features": [
-            "JSON-RPC protocol handling",
-            "SSE streaming for Inspector",
-            "Session management",
-            "CORS support"
-        ]
-    },
-    "health": {
-        "class": HealthEndpoint,
-        "description": "Health check and monitoring endpoint",
-        "methods": ["GET"],
-        "features": [
-            "Server health status",
-            "Capability information",
-            "Session statistics",
-            "Detailed diagnostics"
-        ]
-    },
-    "info": {
-        "class": InfoEndpoint,
-        "description": "Server information and documentation endpoint",
-        "methods": ["GET"],
-        "features": [
-            "Comprehensive server info",
-            "Tool and resource details",
-            "Usage examples",
-            "Markdown documentation"
-        ]
-    }
-}
-
-
-def get_endpoint_info(endpoint_name: str = None):
-    """Get information about available endpoints."""
-    if endpoint_name:
-        return ENDPOINT_INFO.get(endpoint_name)
-    return ENDPOINT_INFO
-
-
-def list_endpoints():
-    """List all available endpoint names."""
-    return list(ENDPOINT_INFO.keys())

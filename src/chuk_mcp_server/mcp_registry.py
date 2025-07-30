@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/mcp_registry.py
 """
 MCP Registry - Registry for MCP protocol components (tools, resources, prompts)
 """

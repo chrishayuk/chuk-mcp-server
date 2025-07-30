@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/types.py
 """
 Types - Direct integration with chuk_mcp types
 

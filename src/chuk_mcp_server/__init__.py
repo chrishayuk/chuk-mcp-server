@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/__init__.py
 """
 Chuk MCP Server - A developer-friendly MCP framework powered by chuk_mcp
 

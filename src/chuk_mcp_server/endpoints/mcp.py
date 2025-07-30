@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# chuk_mcp_server/endpoints/mcp.py
+# src/chuk_mcp_server/endpoints/mcp.py
 """
 MCP Endpoint - Handles core MCP protocol requests with SSE support
 """
@@ -7,14 +7,14 @@ import logging
 import orjson
 from typing import Dict, Any, Optional
 
-# starletter
+# starlette
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
-# chuk_mcp_server
+# chuk_mcp_server - Fix import path
 from ..protocol import MCPProtocolHandler
 
-# logger
+# logger
 logger = logging.getLogger(__name__)
 
 class MCPEndpoint:

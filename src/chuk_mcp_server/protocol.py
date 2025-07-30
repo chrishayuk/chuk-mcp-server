@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/protocol.py
 """
 ChukMCPServer Protocol Handler - Core MCP protocol implementation with chuk_mcp
 """
@@ -112,6 +113,31 @@ class MCPProtocolHandler:
             resources_list.append(resource_handler.to_mcp_format())
         
         return resources_list
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics for monitoring."""
+        import time
+        
+        return {
+            "tools": {
+                "count": len(self.tools),
+                "cache_hit_ratio": 1.0  # Placeholder for now
+            },
+            "resources": {
+                "count": len(self.resources),
+                "cache_hit_ratio": 1.0  # Placeholder for now
+            },
+            "sessions": {
+                "active": len(self.session_manager.sessions),
+                "total": len(self.session_manager.sessions)
+            },
+            "cache": {
+                "tools_cached": True,  # Placeholder
+                "resources_cached": True,  # Placeholder
+                "cache_age": 0  # Placeholder
+            },
+            "status": "operational"
+        }
     
     async def handle_request(self, message: Dict[str, Any], session_id: Optional[str] = None) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Handle an MCP request."""

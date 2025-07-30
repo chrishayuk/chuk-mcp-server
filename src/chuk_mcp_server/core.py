@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/chuk_mcp_server/core.py
 """
 Core - Main ChukMCP Server class with direct chuk_mcp integration
 """
