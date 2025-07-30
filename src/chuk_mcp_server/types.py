@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # src/chuk_mcp_server/types.py
 """
-Types - Direct integration with chuk_mcp types
+Types - Direct integration with chuk_mcp types with orjson performance optimizations
 
-This module uses chuk_mcp types directly, eliminating unnecessary conversion layers
-and providing a cleaner, more maintainable API.
+This module uses chuk_mcp types directly with orjson for maximum JSON performance,
+eliminating unnecessary conversion layers and providing a cleaner, more maintainable API
+with aggressive caching and orjson serialization for world-class performance.
 """
 
 import inspect
-import json
+import orjson  # 🚀 Use orjson instead of json for 2-3x faster JSON operations
 import time
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass
@@ -74,18 +75,46 @@ class TransportType(Enum):
 
 
 # ============================================================================
-# Enhanced Tool Parameter with Modern Typing
+# Pre-computed orjson Schema Fragments for Maximum Performance
+# ============================================================================
+
+# Pre-serialize common JSON schema fragments with orjson for maximum speed
+_SCHEMA_FRAGMENTS = {
+    "string": orjson.dumps({"type": "string"}),
+    "integer": orjson.dumps({"type": "integer"}),
+    "number": orjson.dumps({"type": "number"}),
+    "boolean": orjson.dumps({"type": "boolean"}),
+    "array": orjson.dumps({"type": "array"}),
+    "object": orjson.dumps({"type": "object"}),
+}
+
+# Pre-computed base schemas for common parameter patterns
+_BASE_SCHEMAS = {
+    ("string", True, None): orjson.dumps({"type": "string"}),
+    ("string", False, None): orjson.dumps({"type": "string"}),
+    ("integer", True, None): orjson.dumps({"type": "integer"}),
+    ("integer", False, None): orjson.dumps({"type": "integer"}),
+    ("number", True, None): orjson.dumps({"type": "number"}),
+    ("number", False, None): orjson.dumps({"type": "number"}),
+    ("boolean", True, None): orjson.dumps({"type": "boolean"}),
+    ("boolean", False, None): orjson.dumps({"type": "boolean"}),
+}
+
+
+# ============================================================================
+# Enhanced Tool Parameter with orjson Optimization
 # ============================================================================
 
 @dataclass
 class ToolParameter:
-    """Tool parameter definition with enhanced type support."""
+    """Tool parameter definition with orjson-optimized schema generation."""
     name: str
     type: str
     description: Optional[str] = None
     required: bool = True
     default: Any = None
     enum: Optional[List[Any]] = None
+    _cached_schema: Optional[bytes] = None  # 🚀 Cache orjson-serialized schema
     
     @classmethod
     def from_annotation(cls, name: str, annotation: Any, 
@@ -164,11 +193,19 @@ class ToolParameter:
             description=None,
             required=required,
             default=actual_default,
-            enum=enum_values
+            enum=enum_values,
+            _cached_schema=None  # Will be computed on first access
         )
     
     def to_json_schema(self) -> Dict[str, Any]:
-        """Convert to JSON Schema format."""
+        """Convert to JSON Schema format with orjson optimization."""
+        # Check if we can use a pre-computed base schema
+        cache_key = (self.type, self.required, self.default)
+        if cache_key in _BASE_SCHEMAS and not self.description and not self.enum:
+            # Return pre-computed schema for maximum speed
+            return orjson.loads(_BASE_SCHEMAS[cache_key])
+        
+        # Build custom schema
         schema = {"type": self.type}
         
         if self.description:
@@ -179,10 +216,17 @@ class ToolParameter:
             schema["default"] = self.default
             
         return schema
+    
+    def to_json_schema_bytes(self) -> bytes:
+        """Get orjson-serialized schema bytes for maximum performance."""
+        if self._cached_schema is None:
+            schema = self.to_json_schema()
+            self._cached_schema = orjson.dumps(schema)
+        return self._cached_schema
 
 
 # ============================================================================
-# Enhanced Framework Tool Handler with Better Error Handling
+# Enhanced Framework Tool Handler with orjson + Schema Caching
 # ============================================================================
 
 class ParameterValidationError(ValidationError):
@@ -211,15 +255,17 @@ class ToolExecutionError(MCPError):
 
 @dataclass 
 class ToolHandler:
-    """Framework tool handler with enhanced error handling - wraps chuk_mcp Tool."""
+    """Framework tool handler with orjson optimization and schema caching for world-class performance."""
     mcp_tool: MCPTool  # The actual MCP tool
     handler: Callable
     parameters: List[ToolParameter]
+    _cached_mcp_format: Optional[Dict[str, Any]] = None  # Cache the MCP format dict
+    _cached_mcp_bytes: Optional[bytes] = None  # 🚀 Cache orjson-serialized bytes
     
     @classmethod
     def from_function(cls, func: Callable, name: Optional[str] = None, 
                      description: Optional[str] = None) -> 'ToolHandler':
-        """Create ToolHandler from a function."""
+        """Create ToolHandler from a function with orjson optimization."""
         tool_name = name or func.__name__
         tool_description = description or func.__doc__ or f"Execute {tool_name}"
         
@@ -261,11 +307,29 @@ class ToolHandler:
             inputSchema=input_schema.model_dump(exclude_none=True)
         )
         
-        return cls(
+        # Create instance and pre-cache both dict and orjson formats
+        instance = cls(
             mcp_tool=mcp_tool,
             handler=func,
-            parameters=parameters
+            parameters=parameters,
+            _cached_mcp_format=None,  # Will be computed immediately
+            _cached_mcp_bytes=None   # Will be computed immediately
         )
+        
+        # Pre-compute and cache both formats during creation for maximum performance
+        instance._ensure_cached_formats()
+        
+        return instance
+    
+    def _ensure_cached_formats(self):
+        """Ensure both dict and orjson formats are cached."""
+        if self._cached_mcp_format is None:
+            # Cache the expensive schema generation once
+            self._cached_mcp_format = self.mcp_tool.model_dump(exclude_none=True)
+        
+        if self._cached_mcp_bytes is None:
+            # Pre-serialize with orjson for maximum speed
+            self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
     
     @property
     def name(self) -> str:
@@ -278,8 +342,21 @@ class ToolHandler:
         return self.mcp_tool.description
     
     def to_mcp_format(self) -> Dict[str, Any]:
-        """Convert to MCP tool format."""
-        return self.mcp_tool.model_dump(exclude_none=True)
+        """Convert to MCP tool format using cached version for maximum performance."""
+        if self._cached_mcp_format is None:
+            self._ensure_cached_formats()
+        return self._cached_mcp_format.copy()  # Return copy to prevent mutation
+    
+    def to_mcp_bytes(self) -> bytes:
+        """🚀 Get orjson-serialized MCP format bytes for ultimate performance."""
+        if self._cached_mcp_bytes is None:
+            self._ensure_cached_formats()
+        return self._cached_mcp_bytes
+    
+    def invalidate_cache(self):
+        """Invalidate all cached formats (if schema changes at runtime)."""
+        self._cached_mcp_format = None
+        self._cached_mcp_bytes = None
     
     def _validate_and_convert_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and convert arguments with specific error types."""
@@ -304,7 +381,7 @@ class ToolHandler:
         return validated_args
     
     def _convert_type(self, value: Any, param: ToolParameter) -> Any:
-        """Convert value to the expected parameter type with robust handling."""
+        """Convert value to the expected parameter type with orjson optimization."""
         # If value is already the correct type, return as-is
         if param.type == "integer":
             if isinstance(value, int):
@@ -376,14 +453,14 @@ class ToolHandler:
             elif isinstance(value, (tuple, set)):
                 return list(value)
             elif isinstance(value, str):
-                # Try to parse JSON array
+                # 🚀 Use orjson for 2x faster JSON parsing
                 try:
-                    parsed = json.loads(value)
+                    parsed = orjson.loads(value)
                     if isinstance(parsed, list):
                         return parsed
                     else:
                         raise ValueError(f"String '{value}' does not represent an array")
-                except json.JSONDecodeError:
+                except orjson.JSONDecodeError:
                     raise ValueError(f"Cannot convert string '{value}' to array")
             else:
                 raise ValueError(f"Cannot convert {type(value).__name__} to array")
@@ -392,14 +469,14 @@ class ToolHandler:
             if isinstance(value, dict):
                 return value
             elif isinstance(value, str):
-                # Try to parse JSON object
+                # 🚀 Use orjson for 2x faster JSON parsing
                 try:
-                    parsed = json.loads(value)
+                    parsed = orjson.loads(value)
                     if isinstance(parsed, dict):
                         return parsed
                     else:
                         raise ValueError(f"String '{value}' does not represent an object")
-                except json.JSONDecodeError:
+                except orjson.JSONDecodeError:
                     raise ValueError(f"Cannot convert string '{value}' to object")
             else:
                 raise ValueError(f"Cannot convert {type(value).__name__} to object")
@@ -429,19 +506,26 @@ class ToolHandler:
 
 
 # ============================================================================
-# Enhanced Framework Resource Handler with Caching
+# Enhanced Framework Resource Handler with orjson Optimization
 # ============================================================================
 
 @dataclass
 class ResourceHandler:
-    """Framework resource handler with optional caching - wraps chuk_mcp Resource."""
+    """Framework resource handler with orjson optimization and caching."""
     mcp_resource: MCPResource  # The actual MCP resource
     handler: Callable
     cache_ttl: Optional[int] = None  # Cache TTL in seconds
+    _cached_mcp_format: Optional[Dict[str, Any]] = None  # Cache the MCP format dict
+    _cached_mcp_bytes: Optional[bytes] = None  # 🚀 Cache orjson-serialized bytes
     
     def __post_init__(self):
         self._cached_content: Optional[str] = None
         self._cache_timestamp: Optional[float] = None
+        # Pre-cache both dict and orjson formats for resources
+        if self._cached_mcp_format is None:
+            self._cached_mcp_format = self.mcp_resource.model_dump(exclude_none=True)
+        if self._cached_mcp_bytes is None:
+            self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
     
     @classmethod
     def from_function(cls, uri: str, func: Callable, name: Optional[str] = None, 
@@ -462,7 +546,9 @@ class ResourceHandler:
         return cls(
             mcp_resource=mcp_resource,
             handler=func,
-            cache_ttl=cache_ttl
+            cache_ttl=cache_ttl,
+            _cached_mcp_format=None,  # Will be computed in __post_init__
+            _cached_mcp_bytes=None   # Will be computed in __post_init__
         )
     
     @property
@@ -486,8 +572,18 @@ class ResourceHandler:
         return self.mcp_resource.mimeType
     
     def to_mcp_format(self) -> Dict[str, Any]:
-        """Convert to MCP resource format."""
-        return self.mcp_resource.model_dump(exclude_none=True)
+        """Convert to MCP resource format using cached version."""
+        if self._cached_mcp_format is None:
+            self._cached_mcp_format = self.mcp_resource.model_dump(exclude_none=True)
+        return self._cached_mcp_format.copy()  # Return copy to prevent mutation
+    
+    def to_mcp_bytes(self) -> bytes:
+        """🚀 Get orjson-serialized MCP format bytes for ultimate performance."""
+        if self._cached_mcp_bytes is None:
+            if self._cached_mcp_format is None:
+                self._cached_mcp_format = self.mcp_resource.model_dump(exclude_none=True)
+            self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
+        return self._cached_mcp_bytes
     
     async def read(self) -> str:
         """Read the resource content with optional caching."""
@@ -521,22 +617,23 @@ class ResourceHandler:
             raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}")
     
     def _format_content(self, result: Any) -> str:
-        """Format content based on MIME type."""
+        """Format content based on MIME type with orjson optimization."""
         mime_type = self.mime_type or "text/plain"
         
         if mime_type == "application/json":
             if isinstance(result, (dict, list)):
-                return json.dumps(result, indent=2, ensure_ascii=False)
+                # 🚀 Use orjson for 2-3x faster JSON serialization
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
             else:
-                return json.dumps(result, ensure_ascii=False)
+                return orjson.dumps(result).decode()
         elif mime_type == "text/markdown":
             return str(result)
         elif mime_type == "text/plain":
             return str(result)
         else:
-            # For unknown MIME types, convert to string
+            # For unknown MIME types, convert to string with orjson
             if isinstance(result, (dict, list)):
-                return json.dumps(result, indent=2)
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
             else:
                 return str(result)
     
@@ -544,6 +641,11 @@ class ResourceHandler:
         """Manually invalidate the cached content."""
         self._cached_content = None
         self._cache_timestamp = None
+    
+    def invalidate_mcp_cache(self):
+        """Invalidate the cached MCP formats."""
+        self._cached_mcp_format = None
+        self._cached_mcp_bytes = None
 
 
 # ============================================================================
@@ -578,16 +680,18 @@ def create_server_capabilities(
 
 
 # ============================================================================
-# Content Formatting using chuk_mcp directly
+# Content Formatting using orjson for Maximum Performance
 # ============================================================================
 
 def format_content(content) -> List[Dict[str, Any]]:
-    """Format content using chuk_mcp types directly."""
+    """Format content using chuk_mcp types with orjson optimization."""
     if isinstance(content, str):
         text_content = create_text_content(content)
         return [content_to_dict(text_content)]
     elif isinstance(content, dict):
-        text_content = create_text_content(json.dumps(content, indent=2))
+        # 🚀 Use orjson for 2-3x faster JSON serialization
+        json_str = orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
+        text_content = create_text_content(json_str)
         return [content_to_dict(text_content)]
     elif isinstance(content, (TextContent, ImageContent, AudioContent, EmbeddedResource)):
         return [content_to_dict(content)]
@@ -599,6 +703,35 @@ def format_content(content) -> List[Dict[str, Any]]:
     else:
         text_content = create_text_content(str(content))
         return [content_to_dict(text_content)]
+
+
+# ============================================================================
+# orjson Utility Functions for Maximum Performance
+# ============================================================================
+
+def serialize_tools_list(tools: List[ToolHandler]) -> bytes:
+    """🚀 Ultra-fast tools list serialization with orjson."""
+    tools_data = [tool.to_mcp_format() for tool in tools]
+    return orjson.dumps({"tools": tools_data})
+
+
+def serialize_resources_list(resources: List[ResourceHandler]) -> bytes:
+    """🚀 Ultra-fast resources list serialization with orjson."""
+    resources_data = [resource.to_mcp_format() for resource in resources]
+    return orjson.dumps({"resources": resources_data})
+
+
+def serialize_tools_list_from_bytes(tools: List[ToolHandler]) -> bytes:
+    """🚀 Maximum performance tools list using pre-serialized bytes."""
+    # Combine pre-serialized tool bytes directly
+    tool_bytes = [tool.to_mcp_bytes() for tool in tools]
+    
+    # Build the final structure
+    tools_list = []
+    for tool_byte in tool_bytes:
+        tools_list.append(orjson.loads(tool_byte))
+    
+    return orjson.dumps({"tools": tools_list})
 
 
 # ============================================================================
@@ -616,7 +749,7 @@ Tool = ToolHandler
 
 
 # ============================================================================
-# Clean Exports - Direct chuk_mcp types
+# Clean Exports - Direct chuk_mcp types + orjson utilities
 # ============================================================================
 
 __all__ = [
@@ -626,11 +759,17 @@ __all__ = [
     "Tool",
     "Resource",        # Alias for ResourceHandler
     "ResourceHandler", # Explicit name
+    "ToolHandler",     # Explicit name
     
     # Framework helpers
     "create_server_capabilities",
     "format_content",
     "Capabilities",  # Legacy compatibility
+    
+    # orjson performance utilities
+    "serialize_tools_list",
+    "serialize_resources_list", 
+    "serialize_tools_list_from_bytes",
     
     # Exception types
     "ParameterValidationError",
