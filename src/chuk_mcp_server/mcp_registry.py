@@ -13,7 +13,7 @@ from enum import Enum
 from starlette.requests import Request
 from starlette.responses import Response
 
-from .types import Tool, Resource
+from .types import ToolHandler, ResourceHandler
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class MCPComponentRegistry:
         if tags:
             logger.debug(f"   Tags: {', '.join(tags)}")
     
-    def register_tool(self, name: str, tool: Tool, **kwargs):
+    def register_tool(self, name: str, tool: ToolHandler, **kwargs):
         """Convenience method to register a tool."""
         # Extract metadata from tool if not provided
         if 'metadata' not in kwargs:
@@ -135,7 +135,7 @@ class MCPComponentRegistry:
         
         self.register_component(MCPComponentType.TOOL, name, tool, **kwargs)
     
-    def register_resource(self, name: str, resource: Resource, **kwargs):
+    def register_resource(self, name: str, resource: ResourceHandler, **kwargs):
         """Convenience method to register a resource."""
         # Extract metadata from resource if not provided
         if 'metadata' not in kwargs:
@@ -186,11 +186,11 @@ class MCPComponentRegistry:
         config = self.components.get(component_type, {}).get(name)
         return config.component if config else None
     
-    def get_tool(self, name: str) -> Optional[Tool]:
+    def get_tool(self, name: str) -> Optional[ToolHandler]:
         """Get a tool by name."""
         return self.get_component(MCPComponentType.TOOL, name)
     
-    def get_resource(self, name: str) -> Optional[Resource]:
+    def get_resource(self, name: str) -> Optional[ResourceHandler]:
         """Get a resource by name."""
         return self.get_component(MCPComponentType.RESOURCE, name)
     
@@ -214,11 +214,11 @@ class MCPComponentRegistry:
             }
         return result
     
-    def list_tools(self) -> Dict[str, Tool]:
+    def list_tools(self) -> Dict[str, ToolHandler]:
         """List all registered tools."""
         return self.list_components(MCPComponentType.TOOL)
     
-    def list_resources(self) -> Dict[str, Resource]:
+    def list_resources(self) -> Dict[str, ResourceHandler]:
         """List all registered resources."""
         return self.list_components(MCPComponentType.RESOURCE)
     
@@ -390,12 +390,12 @@ mcp_registry = MCPComponentRegistry()
 # Convenience Functions
 # ============================================================================
 
-def register_tool(name: str, tool: Tool, **kwargs):
+def register_tool(name: str, tool: ToolHandler, **kwargs):
     """Convenience function to register a tool."""
     return mcp_registry.register_tool(name, tool, **kwargs)
 
 
-def register_resource(name: str, resource: Resource, **kwargs):
+def register_resource(name: str, resource: ResourceHandler, **kwargs):
     """Convenience function to register a resource."""
     return mcp_registry.register_resource(name, resource, **kwargs)
 
@@ -405,22 +405,22 @@ def register_prompt(name: str, prompt: Any, **kwargs):
     return mcp_registry.register_prompt(name, prompt, **kwargs)
 
 
-def get_tool(name: str) -> Optional[Tool]:
+def get_tool(name: str) -> Optional[ToolHandler]:
     """Convenience function to get a tool."""
     return mcp_registry.get_tool(name)
 
 
-def get_resource(name: str) -> Optional[Resource]:
+def get_resource(name: str) -> Optional[ResourceHandler]:
     """Convenience function to get a resource."""
     return mcp_registry.get_resource(name)
 
 
-def list_tools() -> Dict[str, Tool]:
+def list_tools() -> Dict[str, ToolHandler]:
     """Convenience function to list all tools."""
     return mcp_registry.list_tools()
 
 
-def list_resources() -> Dict[str, Resource]:
+def list_resources() -> Dict[str, ResourceHandler]:
     """Convenience function to list all resources."""
     return mcp_registry.list_resources()
 

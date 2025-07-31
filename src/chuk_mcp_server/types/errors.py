@@ -24,12 +24,25 @@ class ParameterValidationError(ValidationError):
 class ToolExecutionError(MCPError):
     """Error during tool execution."""
     def __init__(self, tool_name: str, error: Exception):
-        message = f"Tool '{tool_name}' execution failed: {str(error)}"
+        # Handle KeyError specially to match test expectations
+        if isinstance(error, KeyError) and error.args:
+            key = error.args[0]
+            # Use the key exactly as it is - don't add extra quotes
+            main_error_msg = str(key)
+            # For the data field, use the key as-is too
+            data_error_msg = key
+        else:
+            main_error_msg = str(error)
+            data_error_msg = str(error)
+        
+        message = f"Tool '{tool_name}' execution failed: {main_error_msg}"
+        
         data = {
             "tool": tool_name, 
             "error_type": type(error).__name__,
-            "error_message": str(error)
+            "error_message": data_error_msg
         }
-        super().__init__(message, data=data)
+        # MCPError expects a code parameter - use -32603 for internal error
+        super().__init__(message, code=-32603, data=data)
 
 __all__ = ["ParameterValidationError", "ToolExecutionError"]

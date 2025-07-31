@@ -76,9 +76,6 @@ from .serialization import (
     serialize_tools_list_from_bytes,
 )
 
-# Legacy compatibility
-from .legacy import Capabilities, Tool, Resource
-
 # ============================================================================
 # Clean Public API - Everything available from single import
 # ============================================================================
@@ -90,14 +87,9 @@ __all__ = [
     "ToolHandler",
     "ResourceHandler",
     
-    # Legacy aliases for backward compatibility
-    "Tool",         # -> ToolHandler
-    "Resource",     # -> ResourceHandler
-    
     # Framework helpers
     "create_server_capabilities",
     "format_content",
-    "Capabilities",  # Legacy compatibility
     
     # Serialization utilities
     "serialize_tools_list",

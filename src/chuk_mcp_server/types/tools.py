@@ -12,8 +12,7 @@ import orjson
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
-# types
-from .base import MCPTool, MCPToolInputSchema
+from .base import MCPTool, MCPToolInputSchema, ValidationError
 from .parameters import ToolParameter
 from .errors import ParameterValidationError, ToolExecutionError
 
@@ -138,7 +137,7 @@ class ToolHandler:
                     raise ParameterValidationError(param.name, param.type, None)
                 value = param.default
             
-            # Type validation and conversion
+            # Skip validation if value is still None after default assignment
             if value is not None:
                 try:
                     validated_value = self._convert_type(value, param)

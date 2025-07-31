@@ -7,16 +7,13 @@ Core - Main ChukMCP Server class with direct chuk_mcp integration
 import logging
 from typing import Callable, Optional, Dict, Any, List
 
-# Updated imports for direct chuk_mcp integration
+# Updated imports for clean types API
 from .types import (
     # Framework handlers
     ToolHandler, ResourceHandler, 
     
     # Direct chuk_mcp types
     ServerInfo, create_server_capabilities,
-    
-    # Legacy compatibility
-    Capabilities
 )
 from .protocol import MCPProtocolHandler
 from .http_server import create_server
@@ -31,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Main ChukMCPServer Class - Updated with Direct chuk_mcp Integration
+# Main ChukMCPServer Class - Updated with Clean Types API
 # ============================================================================
 
 class ChukMCPServer:
@@ -72,7 +69,7 @@ class ChukMCPServer:
             version: Server version
             title: Optional server title
             description: Optional server description
-            capabilities: Legacy Capabilities object (for backward compatibility)
+            capabilities: ServerCapabilities object (if provided, overrides individual flags)
             tools: Enable tools capability
             resources: Enable resources capability  
             prompts: Enable prompts capability
@@ -89,13 +86,8 @@ class ChukMCPServer:
         
         # Handle capabilities flexibly
         if capabilities is not None:
-            # Legacy Capabilities object or ServerCapabilities passed
-            if hasattr(capabilities, 'model_dump'):
-                # Already a ServerCapabilities object from chuk_mcp
-                self.capabilities = capabilities
-            else:
-                # Legacy Capabilities function result - use it directly
-                self.capabilities = capabilities
+            # ServerCapabilities object passed directly
+            self.capabilities = capabilities
         else:
             # Create from individual flags
             self.capabilities = create_server_capabilities(

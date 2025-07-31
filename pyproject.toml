@@ -5,32 +5,58 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chuk-mcp-server"
 version = "0.1.2"
-description = "Add your description here"
+description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "asyncio>=3.4.3",
     "chuk-mcp>=0.5.1",
     "httptools>=0.6.4",
     "orjson>=3.10.18",
     "pydantic>=2.11.7",
+    "pytest-asyncio>=1.1.0",
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
     "uvloop>=0.21.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "aiohttp>=3.12.13",
+    "requests>=2.32.4",
+]
+
 [tool.setuptools]
-package-dir = { "" = "src" }
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["chuk_mcp_server*"]
 
-[dependency-groups]
-dev = [
-    "aiohttp>=3.12.13",
-    "requests>=2.32.4",
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "asyncio: mark a test as an async test",
+    "slow: mark test as slow",
+    "integration: mark test as integration test",
+]
+addopts = [
+    "--tb=short",
+    "-v",
+    "--disable-warnings",
 ]
 
-[project.entry-points.console_scripts]
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
+
+[project.scripts]
 chuk-mcp-server = "chuk_mcp_server.main:main"

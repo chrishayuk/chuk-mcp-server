@@ -125,7 +125,8 @@ class ResourceHandler:
             return content
             
         except Exception as e:
-            raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}")
+            # Fix: MCPError requires a code parameter
+            raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}", code=-32603)
     
     def _format_content(self, result: Any) -> str:
         """Format content based on MIME type with orjson optimization."""

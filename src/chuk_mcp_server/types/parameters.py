@@ -73,8 +73,11 @@ class ToolParameter:
         param_type = "string"  # default
         enum_values = None
         
+        # First check for direct basic types (most common case)
+        if annotation in type_map:
+            param_type = type_map[annotation]
         # Handle modern typing features
-        if hasattr(typing, 'get_origin') and hasattr(typing, 'get_args'):
+        elif hasattr(typing, 'get_origin') and hasattr(typing, 'get_args'):
             origin = typing.get_origin(annotation)
             args = typing.get_args(annotation)
             
@@ -118,6 +121,7 @@ class ToolParameter:
             else:
                 param_type = type_map.get(origin, "string")
         else:
+            # Handle direct type annotations (int, str, bool, etc.)
             param_type = type_map.get(annotation, "string")
         
         # Check if it has a default value
@@ -207,6 +211,10 @@ def infer_type_from_annotation(annotation: Any) -> str:
         dict: "object",
     }
     
+    # First check for direct basic types (most common case)
+    if annotation in type_map:
+        return type_map[annotation]
+    
     # Handle modern typing features
     if hasattr(typing, 'get_origin') and hasattr(typing, 'get_args'):
         origin = typing.get_origin(annotation)
@@ -229,8 +237,43 @@ def infer_type_from_annotation(annotation: Any) -> str:
         else:
             return type_map.get(origin, "string")
     
-    # Fallback for direct types
+    # Fallback for older typing or direct types
+    elif hasattr(annotation, '__origin__'):
+        origin = annotation.__origin__
+        if origin is Union:
+            args = annotation.__args__
+            if len(args) == 2 and type(None) in args:
+                non_none_type = next(arg for arg in args if arg is not type(None))
+                return type_map.get(non_none_type, "string")
+            else:
+                return "string"
+        elif origin in (list, List):
+            return "array"
+        elif origin in (dict, Dict):
+            return "object"
+        else:
+            return type_map.get(origin, "string")
+    
+    # Handle direct types (int, str, bool, etc.)
     return type_map.get(annotation, "string")
+
+def extract_parameters_from_function(func) -> List[ToolParameter]:
+    """Extract parameters from a function signature."""
+    sig = inspect.signature(func)
+    parameters = []
+    
+    for param_name, param in sig.parameters.items():
+        if param_name == 'self':  # Skip self parameter for methods
+            continue
+            
+        tool_param = ToolParameter.from_annotation(
+            name=param_name,
+            annotation=param.annotation if param.annotation != inspect.Parameter.empty else str,
+            default=param.default
+        )
+        parameters.append(tool_param)
+    
+    return parameters
 
 # ============================================================================
 # Exports
@@ -241,4 +284,5 @@ __all__ = [
     "build_input_schema", 
     "build_input_schema_bytes",
     "infer_type_from_annotation",
+    "extract_parameters_from_function",
 ]

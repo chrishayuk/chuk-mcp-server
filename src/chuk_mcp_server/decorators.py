@@ -5,7 +5,7 @@ Simple decorators for tools and resources
 """
 from typing import Callable, Optional, Any
 from functools import wraps
-from .types import Tool, Resource
+from .types import ToolHandler, ResourceHandler
 
 # ============================================================================
 # Global Registry (for standalone decorators)
@@ -51,7 +51,7 @@ def tool(name: Optional[str] = None, description: Optional[str] = None):
     """
     def decorator(func: Callable) -> Callable:
         # Create tool from function
-        mcp_tool = Tool.from_function(func, name=name, description=description)
+        mcp_tool = ToolHandler.from_function(func, name=name, description=description)
         
         # Register globally
         _global_tools.append(mcp_tool)
@@ -96,7 +96,7 @@ def resource(uri: str, name: Optional[str] = None, description: Optional[str] = 
     """
     def decorator(func: Callable) -> Callable:
         # Create resource from function
-        mcp_resource = Resource.from_function(
+        mcp_resource = ResourceHandler.from_function(
             uri=uri, 
             func=func, 
             name=name, 
@@ -133,11 +133,11 @@ def is_resource(func: Callable) -> bool:
     return hasattr(func, '_mcp_resource')
 
 
-def get_tool_from_function(func: Callable) -> Optional[Tool]:
+def get_tool_from_function(func: Callable) -> Optional[ToolHandler]:
     """Get the tool metadata from a decorated function."""
     return getattr(func, '_mcp_tool', None)
 
 
-def get_resource_from_function(func: Callable) -> Optional[Resource]:
+def get_resource_from_function(func: Callable) -> Optional[ResourceHandler]:
     """Get the resource metadata from a decorated function."""
     return getattr(func, '_mcp_resource', None)
