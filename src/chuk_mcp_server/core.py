@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # src/chuk_mcp_server/core.py
 """
-Core - Main ChukMCP Server class with direct chuk_mcp integration
+Core - Main ChukMCP Server class with integrated zero-config intelligence
 """
 
+import os
+import sys
+import socket
+import psutil
 import logging
 from typing import Callable, Optional, Dict, Any, List
+from pathlib import Path
 
 # Updated imports for clean types API
 from .types import (
@@ -28,29 +33,209 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Main ChukMCPServer Class - Updated with Clean Types API
+# Smart Auto-Detection (Integrated)
+# ============================================================================
+
+class SmartDefaults:
+    """Smart defaults with auto-detection built into core."""
+    
+    @staticmethod
+    def detect_project_name() -> str:
+        """Auto-detect project name from various sources."""
+        # Try current directory name
+        current_dir = Path.cwd().name
+        if current_dir and current_dir not in ["src", "lib", "app"]:
+            return f"{current_dir.replace('_', ' ').replace('-', ' ').title()} MCP Server"
+        
+        # Try package.json if it exists
+        package_json = Path.cwd() / "package.json"
+        if package_json.exists():
+            try:
+                import json
+                with open(package_json) as f:
+                    data = json.load(f)
+                    return f"{data.get('name', 'MCP Server').title()} MCP Server"
+            except (json.JSONDecodeError, KeyError):
+                pass
+        
+        # Try pyproject.toml
+        pyproject = Path.cwd() / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                with open(pyproject) as f:
+                    for line in f:
+                        if line.strip().startswith('name = '):
+                            name = line.split('=')[1].strip().strip('"\'')
+                            return f"{name.replace('_', ' ').replace('-', ' ').title()} MCP Server"
+            except Exception:
+                pass
+        
+        # Fallback
+        return "Smart MCP Server"
+    
+    @staticmethod
+    def detect_environment() -> str:
+        """Detect runtime environment."""
+        # Check environment variables
+        env_var = os.environ.get('NODE_ENV', os.environ.get('ENV', '')).lower()
+        if env_var in ['production', 'prod']:
+            return "production"
+        elif env_var in ['staging', 'stage']:
+            return "staging"
+        elif env_var in ['test', 'testing']:
+            return "testing"
+        
+        # Check for CI/CD environments
+        ci_indicators = ['CI', 'CONTINUOUS_INTEGRATION', 'GITHUB_ACTIONS', 'GITLAB_CI']
+        if any(os.environ.get(var) for var in ci_indicators):
+            return "testing"
+        
+        # Check for serverless
+        if os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+            return "serverless"
+        
+        # Default to development
+        return "development"
+    
+    @staticmethod
+    def detect_optimal_host() -> str:
+        """Detect optimal host binding."""
+        env = SmartDefaults.detect_environment()
+        
+        # In production/containers, bind to all interfaces
+        if env == "production" or SmartDefaults.is_containerized():
+            return "0.0.0.0"
+        
+        # Development: localhost for security
+        return "localhost"
+    
+    @staticmethod
+    def detect_optimal_port() -> int:
+        """Detect optimal port."""
+        # Check environment variable first
+        env_port = os.environ.get('PORT')
+        if env_port:
+            try:
+                return int(env_port)
+            except ValueError:
+                pass
+        
+        # Find available port starting from 8000
+        for port in range(8000, 8100):
+            if SmartDefaults.is_port_available(port):
+                return port
+        
+        # Fallback
+        return 8000
+    
+    @staticmethod
+    def is_port_available(port: int) -> bool:
+        """Check if port is available."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return True
+        except OSError:
+            return False
+    
+    @staticmethod
+    def is_containerized() -> bool:
+        """Detect if running in a container."""
+        indicators = [
+            os.path.exists('/.dockerenv'),
+            os.environ.get('KUBERNETES_SERVICE_HOST') is not None,
+            os.environ.get('CONTAINER') is not None,
+        ]
+        return any(indicators)
+    
+    @staticmethod
+    def get_optimal_workers() -> int:
+        """Calculate optimal worker count."""
+        cpu_cores = psutil.cpu_count(logical=True) or 1
+        return min(cpu_cores, 8) if cpu_cores <= 16 else cpu_cores // 2
+
+
+class SmartInference:
+    """Smart type inference integrated into core."""
+    
+    @staticmethod
+    def infer_tool_category(name: str, description: str) -> str:
+        """Infer tool category from name and description."""
+        name_lower = name.lower()
+        desc_lower = description.lower()
+        
+        # Data processing
+        if any(word in name_lower for word in ['process', 'transform', 'convert', 'parse']):
+            return "data_processing"
+        
+        # File operations
+        if any(word in name_lower for word in ['file', 'read', 'write', 'save', 'load']):
+            return "file_operations"
+        
+        # API/Network
+        if any(word in name_lower for word in ['api', 'http', 'request', 'fetch', 'download']):
+            return "network"
+        
+        # Database
+        if any(word in name_lower for word in ['db', 'database', 'sql', 'query', 'table']):
+            return "database"
+        
+        # Math/Calculation
+        if any(word in name_lower for word in ['calc', 'math', 'compute', 'sum', 'count']):
+            return "mathematics"
+        
+        # System
+        if any(word in name_lower for word in ['system', 'os', 'process', 'service']):
+            return "system"
+        
+        return "general"
+    
+    @staticmethod
+    def infer_mime_type(uri: str, func_name: str) -> str:
+        """Infer MIME type from URI or function name."""
+        uri_lower = uri.lower()
+        func_name_lower = func_name.lower()
+        
+        # JSON indicators
+        if any(indicator in uri_lower + func_name_lower 
+               for indicator in ['json', 'api', 'data', 'config']):
+            return "application/json"
+        
+        # Markdown indicators  
+        if any(indicator in uri_lower + func_name_lower 
+               for indicator in ['md', 'markdown', 'doc', 'readme']):
+            return "text/markdown"
+        
+        # HTML indicators
+        if any(indicator in uri_lower + func_name_lower 
+               for indicator in ['html', 'page', 'template']):
+            return "text/html"
+        
+        # Default to plain text
+        return "text/plain"
+
+
+# ============================================================================
+# Main ChukMCPServer Class with Integrated Zero Config
 # ============================================================================
 
 class ChukMCPServer:
     """
-    ChukMCPServer - A developer-friendly MCP framework with clean architecture.
+    ChukMCPServer - Zero configuration MCP framework with intelligent defaults.
     
     Usage:
-        mcp = ChukMCPServer(name="My Server")
+        # Zero config - everything auto-detected
+        mcp = ChukMCPServer()
         
-        @mcp.tool
+        @mcp.tool  # Auto-infers category, caching, security, etc.
         def hello(name: str) -> str:
             return f"Hello, {name}!"
         
-        @mcp.resource("config://settings")
-        def get_settings() -> dict:
-            return {"app": "my_app"}
-        
-        mcp.run(port=8000)
+        mcp.run()  # Auto-detects host, port, performance settings
     """
     
     def __init__(self, 
-                 name: str = "ChukMCP Server",
+                 name: Optional[str] = None,
                  version: str = "1.0.0",
                  title: Optional[str] = None,
                  description: Optional[str] = None,
@@ -60,23 +245,34 @@ class ChukMCPServer:
                  prompts: bool = False,
                  logging: bool = False,
                  experimental: Optional[Dict[str, Any]] = None,
+                 # Smart defaults (all optional)
+                 host: Optional[str] = None,
+                 port: Optional[int] = None,
+                 debug: Optional[bool] = None,
                  **kwargs):
         """
-        Initialize ChukMCP Server with direct chuk_mcp integration.
+        Initialize ChukMCP Server with integrated zero-config intelligence.
         
         Args:
-            name: Server name
+            name: Server name (auto-detected if None)
             version: Server version
             title: Optional server title
             description: Optional server description
-            capabilities: ServerCapabilities object (if provided, overrides individual flags)
+            capabilities: ServerCapabilities object (auto-configured if None)
             tools: Enable tools capability
             resources: Enable resources capability  
             prompts: Enable prompts capability
             logging: Enable logging capability
             experimental: Experimental capabilities
-            **kwargs: Additional keyword arguments (ignored)
+            host: Host to bind to (auto-detected if None)
+            port: Port to bind to (auto-detected if None)
+            debug: Debug mode (auto-detected if None)
+            **kwargs: Additional keyword arguments
         """
+        # Auto-detect name if not provided
+        if name is None:
+            name = SmartDefaults.detect_project_name()
+        
         # Use chuk_mcp ServerInfo directly
         self.server_info = ServerInfo(
             name=name,
@@ -86,10 +282,8 @@ class ChukMCPServer:
         
         # Handle capabilities flexibly
         if capabilities is not None:
-            # ServerCapabilities object passed directly
             self.capabilities = capabilities
         else:
-            # Create from individual flags
             self.capabilities = create_server_capabilities(
                 tools=tools,
                 resources=resources,
@@ -97,6 +291,11 @@ class ChukMCPServer:
                 logging=logging,
                 experimental=experimental
             )
+        
+        # Store smart defaults for run()
+        self.smart_host = host or SmartDefaults.detect_optimal_host()
+        self.smart_port = port or SmartDefaults.detect_optimal_port()
+        self.smart_debug = debug if debug is not None else (SmartDefaults.detect_environment() == "development")
         
         # Create protocol handler with direct chuk_mcp types
         self.protocol = MCPProtocolHandler(self.server_info, self.capabilities)
@@ -107,17 +306,30 @@ class ChukMCPServer:
         # HTTP server will be created when needed
         self._server = None
         
+        # Print smart configuration info in debug mode
+        if self.smart_debug:
+            self._print_smart_config()
+        
         logger.info(f"Initialized ChukMCP Server: {name} v{version}")
+    
+    def _print_smart_config(self):
+        """Print smart configuration summary."""
+        env = SmartDefaults.detect_environment()
+        print("🧠 ChukMCPServer - Zero Configuration Mode")
+        print("=" * 50)
+        print(f"📊 Environment: {env}")
+        print(f"🌐 Network: {self.smart_host}:{self.smart_port}")
+        print(f"🔧 Workers: {SmartDefaults.get_optimal_workers()}")
+        print(f"🐳 Container: {SmartDefaults.is_containerized()}")
+        print("=" * 50)
     
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
-        # Register global tools (now as ToolHandlers)
+        # Register global tools
         for tool in get_global_tools():
-            # Convert old Tool to new ToolHandler if needed
             if hasattr(tool, 'handler'):
-                tool_handler = tool  # Already a handler
+                tool_handler = tool
             else:
-                # Convert old-style tool to handler
                 tool_handler = ToolHandler.from_function(
                     tool.handler, 
                     name=tool.name, 
@@ -127,13 +339,11 @@ class ChukMCPServer:
             self.protocol.register_tool(tool_handler)
             mcp_registry.register_tool(tool_handler.name, tool_handler)
         
-        # Register global resources (now as ResourceHandlers)
+        # Register global resources
         for resource in get_global_resources():
-            # Convert old Resource to new ResourceHandler if needed
             if hasattr(resource, 'handler'):
-                resource_handler = resource  # Already a handler
+                resource_handler = resource
             else:
-                # Convert old-style resource to handler
                 resource_handler = ResourceHandler.from_function(
                     resource.uri,
                     resource.handler,
@@ -149,88 +359,129 @@ class ChukMCPServer:
         clear_global_registry()
     
     # ============================================================================
-    # MCP Component Registration (Tools & Resources)
+    # Enhanced Tool Registration with Smart Inference
     # ============================================================================
     
     def tool(self, name: Optional[str] = None, description: Optional[str] = None, **kwargs):
         """
-        Decorator to register a function as an MCP tool.
+        Enhanced tool decorator with integrated smart inference.
         
         Usage:
-            @mcp.tool
+            @mcp.tool  # Auto-infers everything
             def hello(name: str) -> str:
                 return f"Hello, {name}!"
             
-            @mcp.tool(name="custom_name", description="Custom description", tags=["math"])
-            def my_func(x: int, y: int = 10) -> int:
-                return x + y
+            @mcp.tool(tags=["custom"])  # Override smart defaults
+            def advanced_tool(data: dict) -> dict:
+                return {"processed": data}
         """
         def decorator(func: Callable) -> Callable:
+            # Smart inference
+            tool_name = name or func.__name__
+            tool_description = description or func.__doc__ or f"Execute {tool_name}"
+            
             # Create tool handler from function
-            tool_handler = ToolHandler.from_function(func, name=name, description=description)
+            tool_handler = ToolHandler.from_function(func, name=tool_name, description=tool_description)
             
             # Register in protocol handler (for MCP functionality)
             self.protocol.register_tool(tool_handler)
             
-            # Register in MCP registry (for introspection and management)
-            mcp_registry.register_tool(tool_handler.name, tool_handler, **kwargs)
+            # Smart metadata for registry
+            smart_metadata = {
+                "category": SmartInference.infer_tool_category(tool_name, tool_description),
+                "auto_inferred": True,
+                "function_name": func.__name__,
+                "parameter_count": len(tool_handler.parameters)
+            }
+            
+            # Smart tags
+            smart_tags = ["tool", smart_metadata["category"]]
+            if "tags" in kwargs:
+                smart_tags.extend(kwargs.pop("tags"))
+            
+            # Register in MCP registry with smart metadata
+            mcp_registry.register_tool(
+                tool_handler.name, 
+                tool_handler, 
+                metadata=smart_metadata,
+                tags=smart_tags,
+                **kwargs
+            )
             
             # Add tool metadata to function
             func._mcp_tool = tool_handler
             
-            logger.debug(f"Registered tool: {tool_handler.name}")
+            logger.debug(f"Registered tool: {tool_handler.name} (category: {smart_metadata['category']})")
             return func
         
         # Handle both @mcp.tool and @mcp.tool() usage
         if callable(name):
-            # @mcp.tool usage (no parentheses)
             func = name
             name = None
             return decorator(func)
         else:
-            # @mcp.tool() or @mcp.tool(name="...") usage
             return decorator
     
     def resource(self, uri: str, name: Optional[str] = None, description: Optional[str] = None, 
-                mime_type: str = "text/plain", **kwargs):
+                mime_type: Optional[str] = None, **kwargs):
         """
-        Decorator to register a function as an MCP resource.
+        Enhanced resource decorator with integrated smart inference.
         
         Usage:
-            @mcp.resource("config://settings")
+            @mcp.resource("config://settings")  # Auto-infers MIME type
             def get_settings() -> dict:
-                return {"app": "my_app", "version": "1.0"}
-            
-            @mcp.resource("file://readme", mime_type="text/markdown", tags=["docs"])
-            def get_readme() -> str:
-                return "# My Application\\n\\nThis is awesome!"
+                return {"app": "my_app"}
         """
         def decorator(func: Callable) -> Callable:
+            # Smart inference
+            resource_name = name or func.__name__.replace('_', ' ').title()
+            resource_description = description or func.__doc__ or f"Resource: {uri}"
+            smart_mime_type = mime_type or SmartInference.infer_mime_type(uri, func.__name__)
+            
             # Create resource handler from function
             resource_handler = ResourceHandler.from_function(
                 uri=uri, 
                 func=func, 
-                name=name, 
-                description=description,
-                mime_type=mime_type
+                name=resource_name, 
+                description=resource_description,
+                mime_type=smart_mime_type
             )
             
             # Register in protocol handler (for MCP functionality)
             self.protocol.register_resource(resource_handler)
             
-            # Register in MCP registry (for introspection and management)
-            mcp_registry.register_resource(resource_handler.uri, resource_handler, **kwargs)
+            # Smart metadata for registry
+            smart_metadata = {
+                "auto_inferred": True,
+                "function_name": func.__name__,
+                "inferred_mime_type": smart_mime_type,
+                "uri_scheme": uri.split("://")[0] if "://" in uri else "unknown"
+            }
+            
+            # Smart tags
+            smart_tags = ["resource", smart_metadata["uri_scheme"]]
+            if "tags" in kwargs:
+                smart_tags.extend(kwargs.pop("tags"))
+            
+            # Register in MCP registry with smart metadata
+            mcp_registry.register_resource(
+                resource_handler.uri, 
+                resource_handler,
+                metadata=smart_metadata,
+                tags=smart_tags,
+                **kwargs
+            )
             
             # Add resource metadata to function
             func._mcp_resource = resource_handler
             
-            logger.debug(f"Registered resource: {resource_handler.uri}")
+            logger.debug(f"Registered resource: {resource_handler.uri} (mime: {smart_mime_type})")
             return func
         
         return decorator
     
     # ============================================================================
-    # HTTP Endpoint Registration (unchanged)
+    # HTTP Endpoint Registration
     # ============================================================================
     
     def endpoint(self, path: str, methods: List[str] = None, **kwargs):
@@ -343,6 +594,14 @@ class ChukMCPServer:
         return {
             "server": self.server_info.model_dump(exclude_none=True),
             "capabilities": self.capabilities.model_dump(exclude_none=True),
+            "smart_config": {
+                "host": self.smart_host,
+                "port": self.smart_port,
+                "debug": self.smart_debug,
+                "environment": SmartDefaults.detect_environment(),
+                "containerized": SmartDefaults.is_containerized(),
+                "workers": SmartDefaults.get_optimal_workers()
+            },
             "mcp_components": {
                 "tools": {
                     "count": len(self.protocol.tools),
@@ -358,10 +617,6 @@ class ChukMCPServer:
                 "count": len(http_endpoint_registry.list_endpoints()),
                 "custom": self.get_endpoints(),
                 "stats": http_endpoint_registry.get_stats()
-            },
-            "registries": {
-                "mcp_registry": mcp_registry.get_info(),
-                "endpoint_registry": http_endpoint_registry.get_info()
             }
         }
     
@@ -371,17 +626,13 @@ class ChukMCPServer:
     
     def clear_tools(self):
         """Clear all registered tools."""
-        # Clear from protocol
         self.protocol.tools.clear()
-        # Clear from registry  
         mcp_registry.clear_type(mcp_registry.MCPComponentType.TOOL)
         logger.info("Cleared all tools")
     
     def clear_resources(self):
         """Clear all registered resources."""
-        # Clear from protocol
         self.protocol.resources.clear()
-        # Clear from registry
         mcp_registry.clear_type(mcp_registry.MCPComponentType.RESOURCE)
         logger.info("Cleared all resources")
     
@@ -398,19 +649,24 @@ class ChukMCPServer:
         logger.info("Cleared all components and endpoints")
     
     # ============================================================================
-    # Server Management (unchanged)
+    # Smart Server Management
     # ============================================================================
     
-    def run(self, host: str = "localhost", port: int = 8000, debug: bool = False):
+    def run(self, host: Optional[str] = None, port: Optional[int] = None, debug: Optional[bool] = None):
         """
-        Run the MCP server.
+        Run the MCP server with smart defaults.
         
         Args:
-            host: Host to bind to
-            port: Port to bind to 
-            debug: Enable debug logging
+            host: Host to bind to (uses smart default if None)
+            port: Port to bind to (uses smart default if None)
+            debug: Enable debug logging (uses smart default if None)
         """
-        if debug:
+        # Use smart defaults if not overridden
+        final_host = host or self.smart_host
+        final_port = port or self.smart_port
+        final_debug = debug if debug is not None else self.smart_debug
+        
+        if final_debug:
             logging.basicConfig(level=logging.DEBUG)
         
         # Create HTTP server
@@ -418,11 +674,11 @@ class ChukMCPServer:
             self._server = create_server(self.protocol)
         
         # Show startup information
-        self._print_startup_info(host, port, debug)
+        self._print_startup_info(final_host, final_port, final_debug)
         
         # Run the server
         try:
-            self._server.run(host=host, port=port, debug=debug)
+            self._server.run(host=final_host, port=final_port, debug=final_debug)
         except KeyboardInterrupt:
             logger.info("\n👋 Server shutting down gracefully...")
         except Exception as e:
@@ -431,67 +687,53 @@ class ChukMCPServer:
     
     def _print_startup_info(self, host: str, port: int, debug: bool):
         """Print comprehensive startup information."""
-        print("🚀 ChukMCP Server")
+        print("🚀 ChukMCPServer")
         print("=" * 50)
         
         # Server information
         info = self.info()
         print(f"Server: {info['server']['name']}")
         print(f"Version: {info['server']['version']}")
-        print(f"Framework: ChukMCPServer with direct chuk_mcp integration")
+        print(f"Framework: ChukMCPServer with Zero Configuration")
+        print()
+        
+        # Smart configuration
+        smart_config = info['smart_config']
+        print("🧠 Smart Configuration:")
+        print(f"   Environment: {smart_config['environment']}")
+        print(f"   Host: {smart_config['host']}:{smart_config['port']}")
+        print(f"   Debug: {smart_config['debug']}")
+        print(f"   Workers: {smart_config['workers']}")
+        print(f"   Container: {smart_config['containerized']}")
         print()
         
         # MCP Components
         mcp_info = info['mcp_components']
         print(f"🔧 MCP Tools: {mcp_info['tools']['count']}")
-        if mcp_info['tools']['names']:
-            for tool_name in mcp_info['tools']['names']:
-                print(f"   - {tool_name}")
+        for tool_name in mcp_info['tools']['names']:
+            print(f"   - {tool_name}")
         print()
         
         print(f"📂 MCP Resources: {mcp_info['resources']['count']}")
-        if mcp_info['resources']['uris']:
-            for resource_uri in mcp_info['resources']['uris']:
-                print(f"   - {resource_uri}")
-        print()
-        
-        # HTTP Endpoints
-        http_info = info['http_endpoints']
-        if http_info['count'] > 0:
-            print(f"🔗 Custom HTTP Endpoints: {http_info['count']}")
-            for endpoint in http_info['custom']:
-                print(f"   - {endpoint['path']} ({', '.join(endpoint['methods'])})")
-            print()
-        
-        # Registry Statistics
-        print("📊 Registry Statistics:")
-        print(f"   MCP Components: {sum(mcp_info['stats']['by_type'].values())}")
-        print(f"   HTTP Endpoints: {http_info['stats']['endpoints']['total']}")
-        print(f"   Tags: {mcp_info['stats']['tags']['total_unique']}")
+        for resource_uri in mcp_info['resources']['uris']:
+            print(f"   - {resource_uri}")
         print()
         
         # Connection information
         print("🌐 Server Information:")
-        print(f"   Host: {host}:{port}")
+        print(f"   URL: http://{host}:{port}")
+        print(f"   MCP Endpoint: http://{host}:{port}/mcp")
         print(f"   Debug: {debug}")
         print()
         
         # Inspector compatibility
-        print("🔍 MCP Inspector Instructions:")
-        print("   1. This server: http://localhost:8000/mcp")
-        print("   2. Use proxy: http://localhost:8011/mcp/inspector") 
-        print("   3. Transport: Streamable HTTP")
-        print("   4. All tools and resources available!")
-        print()
-        
-        # Registry endpoints
-        print("🔍 Registry Endpoints:")
-        print(f"   MCP Registry: http://{host}:{port}/registry/mcp")
-        print(f"   HTTP Registry: http://{host}:{port}/registry/endpoints")
+        print("🔍 MCP Inspector:")
+        print(f"   URL: http://{host}:{port}/mcp")
+        print("   Transport: Streamable HTTP")
         print("=" * 50)
     
     # ============================================================================
-    # Context Manager Support (unchanged)
+    # Context Manager Support
     # ============================================================================
     
     def __enter__(self):
@@ -500,24 +742,18 @@ class ChukMCPServer:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager."""
-        # Cleanup registries if needed
         pass
 
 
 # ============================================================================
-# Factory Functions (updated for new types)
+# Factory Functions
 # ============================================================================
 
-def create_mcp_server(name: str, **kwargs) -> ChukMCPServer:
-    """Factory function to create a ChukMCP Server."""
+def create_mcp_server(name: Optional[str] = None, **kwargs) -> ChukMCPServer:
+    """Factory function to create a ChukMCP Server with zero config."""
     return ChukMCPServer(name=name, **kwargs)
 
 
-def quick_server(name: str = "Quick Server") -> ChukMCPServer:
+def quick_server(name: Optional[str] = None) -> ChukMCPServer:
     """Create a server with minimal configuration for quick prototyping."""
-    return ChukMCPServer(
-        name=name,
-        version="0.1.0",
-        tools=True,
-        resources=True
-    )
+    return ChukMCPServer(name=name or "Quick Server", version="0.1.0")

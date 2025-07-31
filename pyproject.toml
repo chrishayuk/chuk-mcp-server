@@ -12,6 +12,7 @@ dependencies = [
     "chuk-mcp>=0.5.1",
     "httptools>=0.6.4",
     "orjson>=3.10.18",
+    "psutil>=7.0.0",
     "pydantic>=2.11.7",
     "pytest-asyncio>=1.1.0",
     "starlette>=0.47.1",

@@ -7,6 +7,8 @@ Uses raw sockets and pre-built MCP requests.
 
 Target: Measure true MCP protocol performance without client bottlenecks.
 Expected: 10,000-20,000+ RPS for MCP operations on your optimized server.
+
+Updated to work with the actual tools from zero_config_examples.py
 """
 
 import asyncio
@@ -35,10 +37,13 @@ class MCPResult:
 class UltraMinimalMCPTest:
     """Ultra-minimal MCP protocol performance test"""
     
-    def __init__(self, host: str = "localhost", port: int = 8001):
+    def __init__(self, host: str = "localhost", port: int = 8000, duration: float = 5.0, max_concurrency: int = 200, verbose: bool = False):
         self.host = host
         self.port = port
         self.session_id = None
+        self.duration = duration
+        self.max_concurrency = max_concurrency
+        self.verbose = verbose
         
         # Pre-built MCP requests (no encoding overhead)
         self.mcp_initialize = self._build_http_request({
@@ -73,23 +78,40 @@ class UltraMinimalMCPTest:
             "params": {}
         })
         
-        # Async tool call (minimal parameters for performance)
-        self.async_hello_call = self._build_http_request({
+        # Tool calls for actual tools from zero_config_examples.py
+        self.hello_call = self._build_http_request({
             "jsonrpc": "2.0",
             "id": 5,
             "method": "tools/call",
             "params": {
-                "name": "async_hello",
-                "arguments": {"name": "PerfTest", "delay": 0.001}  # Minimal delay
+                "name": "hello",
+                "arguments": {"name": "PerfTest"}
             }
         })
         
-        # Resource read
-        self.resource_read = self._build_http_request({
+        self.calculate_call = self._build_http_request({
             "jsonrpc": "2.0",
             "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "calculate",
+                "arguments": {"expression": "2 + 2"}
+            }
+        })
+        
+        # Resource read for actual resources
+        self.settings_resource_read = self._build_http_request({
+            "jsonrpc": "2.0",
+            "id": 7,
             "method": "resources/read",
-            "params": {"uri": "async://server-metrics"}
+            "params": {"uri": "config://settings"}
+        })
+        
+        self.readme_resource_read = self._build_http_request({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "resources/read",
+            "params": {"uri": "docs://readme"}
         })
     
     def _build_http_request(self, json_data: dict) -> bytes:
@@ -135,11 +157,14 @@ class UltraMinimalMCPTest:
         print("=" * 60)
         print("ZERO client overhead - raw sockets + pre-built MCP requests")
         print("Target: Measure true MCP JSON-RPC performance")
+        print("Testing actual tools from zero_config_examples.py")
         print()
         
         # Check MCP server availability
         if not await self._check_mcp_server():
             print("❌ MCP server not available")
+            print("💡 Make sure your server is running on the correct port")
+            print(f"   Expected: {self.host}:{self.port}")
             return False
         
         # Initialize MCP session
@@ -158,7 +183,7 @@ class UltraMinimalMCPTest:
         # Test 1: MCP Ping (basic JSON-RPC)
         print("🎯 Testing MCP Ping (JSON-RPC)...")
         ping_result = await self._test_mcp_operation(
-            self.mcp_ping, "MCP Ping", concurrency=200, duration=5.0
+            self.mcp_ping, "MCP Ping", concurrency=self.max_concurrency, duration=self.duration
         )
         results.append(ping_result)
         print(f"   {ping_result.rps:>8,.0f} RPS | {ping_result.avg_ms:>6.2f}ms avg | {ping_result.success_rate:>5.1f}% success")
@@ -166,7 +191,7 @@ class UltraMinimalMCPTest:
         # Test 2: MCP Tools List
         print("🔧 Testing MCP Tools List...")
         tools_result = await self._test_mcp_operation(
-            self.mcp_tools_list, "MCP Tools List", concurrency=200, duration=5.0
+            self.mcp_tools_list, "MCP Tools List", concurrency=self.max_concurrency, duration=self.duration
         )
         results.append(tools_result)
         print(f"   {tools_result.rps:>8,.0f} RPS | {tools_result.avg_ms:>6.2f}ms avg | {tools_result.success_rate:>5.1f}% success")
@@ -174,32 +199,48 @@ class UltraMinimalMCPTest:
         # Test 3: MCP Resources List
         print("📂 Testing MCP Resources List...")
         resources_result = await self._test_mcp_operation(
-            self.mcp_resources_list, "MCP Resources List", concurrency=200, duration=5.0
+            self.mcp_resources_list, "MCP Resources List", concurrency=self.max_concurrency, duration=self.duration
         )
         results.append(resources_result)
         print(f"   {resources_result.rps:>8,.0f} RPS | {resources_result.avg_ms:>6.2f}ms avg | {resources_result.success_rate:>5.1f}% success")
         
-        # Test 4: Async Tool Call (minimal delay)
-        print("🌊 Testing Async Tool Call (async_hello)...")
-        async_tool_result = await self._test_mcp_operation(
-            self.async_hello_call, "Async Tool Call", concurrency=100, duration=5.0
+        # Test 4: Hello Tool Call (simple sync tool)
+        print("👋 Testing Hello Tool Call...")
+        hello_result = await self._test_mcp_operation(
+            self.hello_call, "Hello Tool Call", concurrency=min(100, self.max_concurrency), duration=self.duration
         )
-        results.append(async_tool_result)
-        print(f"   {async_tool_result.rps:>8,.0f} RPS | {async_tool_result.avg_ms:>6.2f}ms avg | {async_tool_result.success_rate:>5.1f}% success")
+        results.append(hello_result)
+        print(f"   {hello_result.rps:>8,.0f} RPS | {hello_result.avg_ms:>6.2f}ms avg | {hello_result.success_rate:>5.1f}% success")
         
-        # Test 5: Resource Read
-        print("📖 Testing Resource Read...")
-        resource_result = await self._test_mcp_operation(
-            self.resource_read, "Resource Read", concurrency=100, duration=5.0
+        # Test 5: Calculate Tool Call (simple computation)
+        print("🧮 Testing Calculate Tool Call...")
+        calc_result = await self._test_mcp_operation(
+            self.calculate_call, "Calculate Tool Call", concurrency=min(100, self.max_concurrency), duration=self.duration
         )
-        results.append(resource_result)
-        print(f"   {resource_result.rps:>8,.0f} RPS | {resource_result.avg_ms:>6.2f}ms avg | {resource_result.success_rate:>5.1f}% success")
+        results.append(calc_result)
+        print(f"   {calc_result.rps:>8,.0f} RPS | {calc_result.avg_ms:>6.2f}ms avg | {calc_result.success_rate:>5.1f}% success")
         
-        # Test 6: Concurrency scaling for MCP Ping
+        # Test 6: Settings Resource Read
+        print("⚙️  Testing Settings Resource Read...")
+        settings_result = await self._test_mcp_operation(
+            self.settings_resource_read, "Settings Resource Read", concurrency=min(100, self.max_concurrency), duration=self.duration
+        )
+        results.append(settings_result)
+        print(f"   {settings_result.rps:>8,.0f} RPS | {settings_result.avg_ms:>6.2f}ms avg | {settings_result.success_rate:>5.1f}% success")
+        
+        # Test 7: README Resource Read
+        print("📖 Testing README Resource Read...")
+        readme_result = await self._test_mcp_operation(
+            self.readme_resource_read, "README Resource Read", concurrency=min(100, self.max_concurrency), duration=self.duration
+        )
+        results.append(readme_result)
+        print(f"   {readme_result.rps:>8,.0f} RPS | {readme_result.avg_ms:>6.2f}ms avg | {readme_result.success_rate:>5.1f}% success")
+        
+        # Test 8: Concurrency scaling for MCP Ping
         print("\n⚡ Testing MCP Ping Concurrency Scaling...")
         await self._test_mcp_concurrency_scaling()
         
-        # Test 7: Maximum MCP throughput
+        # Test 9: Maximum MCP throughput
         print("\n🚀 Finding Maximum MCP Throughput...")
         max_mcp_result = await self._find_maximum_mcp_throughput()
         results.append(max_mcp_result)
@@ -231,16 +272,22 @@ class UltraMinimalMCPTest:
             writer.close()
             await writer.wait_closed()
             
-            print(f"📊 MCP endpoint response: {response[:200]}...")
+            print(f"📊 MCP endpoint check: HTTP response received")
             
-            if b"HTTP/1.1 200" in response:
+            if self.verbose and response:
+                print(f"📝 Response preview: {response[:200]}...")
+            
+            if b"HTTP/1.1 200" in response or b"ChukMCPServer" in response:
                 return True
             else:
-                print(f"❌ MCP endpoint returned: {response.decode('utf-8', errors='ignore')[:300]}")
+                print(f"❌ Unexpected MCP endpoint response")
+                if self.verbose:
+                    print(f"   Full response: {response.decode('utf-8', errors='ignore')[:500]}")
                 return False
                 
         except Exception as e:
             print(f"❌ Connection error: {e}")
+            print(f"💡 Check if server is running on {self.host}:{self.port}")
             return False
     
     async def _initialize_mcp_session(self) -> bool:
@@ -255,17 +302,19 @@ class UltraMinimalMCPTest:
             writer.close()
             await writer.wait_closed()
             
-            if b"HTTP/1.1 200" not in response:
+            response_str = response.decode('utf-8', errors='ignore')
+            
+            if "HTTP/1.1 200" not in response_str:
+                print(f"❌ Initialize failed: {response_str[:200]}")
                 return False
             
             # Extract session ID from headers
-            response_str = response.decode('utf-8', errors='ignore')
             for line in response_str.split('\r\n'):
                 if line.lower().startswith('mcp-session-id:'):
                     self.session_id = line.split(':', 1)[1].strip()
                     break
             
-            # Send initialized notification
+            # Send initialized notification if we have a session
             if self.session_id:
                 await self._send_initialized_notification()
             
@@ -313,14 +362,24 @@ class UltraMinimalMCPTest:
             "jsonrpc": "2.0", "id": 4, "method": "resources/list", "params": {}
         })
         
-        self.async_hello_call = self._build_http_request_with_session({
+        self.hello_call = self._build_http_request_with_session({
             "jsonrpc": "2.0", "id": 5, "method": "tools/call",
-            "params": {"name": "async_hello", "arguments": {"name": "PerfTest", "delay": 0.001}}
+            "params": {"name": "hello", "arguments": {"name": "PerfTest"}}
         })
         
-        self.resource_read = self._build_http_request_with_session({
-            "jsonrpc": "2.0", "id": 6, "method": "resources/read",
-            "params": {"uri": "async://server-metrics"}
+        self.calculate_call = self._build_http_request_with_session({
+            "jsonrpc": "2.0", "id": 6, "method": "tools/call",
+            "params": {"name": "calculate", "arguments": {"expression": "2 + 2"}}
+        })
+        
+        self.settings_resource_read = self._build_http_request_with_session({
+            "jsonrpc": "2.0", "id": 7, "method": "resources/read",
+            "params": {"uri": "config://settings"}
+        })
+        
+        self.readme_resource_read = self._build_http_request_with_session({
+            "jsonrpc": "2.0", "id": 8, "method": "resources/read",
+            "params": {"uri": "docs://readme"}
         })
     
     async def _test_mcp_operation(
@@ -495,7 +554,7 @@ class UltraMinimalMCPTest:
         print(f"\n🔍 MCP Performance Analysis:")
         if best_result.rps > 15000:
             print("   🏆 EXCEPTIONAL MCP performance!")
-            print("   🚀 Your async MCP server is world-class")
+            print("   🚀 Your ChukMCPServer is world-class")
         elif best_result.rps > 10000:
             print("   ✅ EXCELLENT MCP performance!")
             print("   💪 Great JSON-RPC handling efficiency")
@@ -509,67 +568,178 @@ class UltraMinimalMCPTest:
             print("   ❌ LOW MCP performance")
             print("   🔍 Significant MCP bottlenecks present")
         
-        # Protocol overhead analysis
-        http_baseline = 49239  # From previous HTTP test
-        mcp_best = best_result.rps
-        protocol_overhead = ((http_baseline - mcp_best) / http_baseline) * 100
+        # ChukMCPServer specific insights
+        tool_results = [r for r in results if 'Tool' in r.name]
+        resource_results = [r for r in results if 'Resource' in r.name]
         
-        print(f"\n📊 Protocol Overhead Analysis:")
-        print(f"   HTTP Baseline: {http_baseline:>8,} RPS (simple GET)")
-        print(f"   MCP Best: {mcp_best:>12,.0f} RPS (JSON-RPC)")
-        print(f"   Protocol Overhead: {protocol_overhead:>6.1f}%")
-        
-        if protocol_overhead < 30:
-            print("   🎯 Excellent protocol efficiency!")
-        elif protocol_overhead < 50:
-            print("   ✅ Good protocol efficiency")
-        else:
-            print("   ⚠️  High protocol overhead - optimization opportunity")
-        
-        # Async-specific insights
-        async_results = [r for r in results if 'async' in r.name.lower() or 'tool' in r.name.lower()]
-        if async_results:
-            print(f"\n🌊 Async Tool Performance:")
-            for result in async_results:
+        if tool_results:
+            avg_tool_rps = sum(r.rps for r in tool_results) / len(tool_results)
+            print(f"\n🔧 Tool Performance:")
+            print(f"   Average Tool RPS: {avg_tool_rps:>8,.0f}")
+            for result in tool_results:
                 print(f"   {result.name}: {result.rps:>8,.0f} RPS")
-            print("   💡 These show your async architecture benefits")
+        
+        if resource_results:
+            avg_resource_rps = sum(r.rps for r in resource_results) / len(resource_results)
+            print(f"\n📂 Resource Performance:")
+            print(f"   Average Resource RPS: {avg_resource_rps:>8,.0f}")
+            for result in resource_results:
+                print(f"   {result.name}: {result.rps:>8,.0f} RPS")
+        
+        print("\n🧠 ChukMCPServer Zero Config Performance:")
+        print("   ✨ These are your actual zero-config tools & resources!")
+        print("   🚀 Performance achieved with ZERO configuration")
+        print("   🧠 Smart inference and auto-optimization working")
         
         print("\n" + "=" * 60)
 
 
-async def main():
-    """Main entry point"""
-    host = "localhost"
-    port = 8001
+def parse_arguments():
+    """Parse command line arguments for host, port, and other options"""
+    import argparse
     
-    if len(sys.argv) > 1:
-        if ":" in sys.argv[1]:
-            url = sys.argv[1].replace("http://", "").replace("https://", "")
-            if ":" in url:
-                host, port_str = url.split(":", 1)
-                port = int(port_str.split("/")[0])
+    parser = argparse.ArgumentParser(
+        description="Ultra-Minimal MCP Protocol Performance Test",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python ultra_minimal_mcp_performance_test.py                    # Default: localhost:8000
+  python ultra_minimal_mcp_performance_test.py 8001              # Custom port
+  python ultra_minimal_mcp_performance_test.py localhost:8001    # Custom host:port
+  python ultra_minimal_mcp_performance_test.py 192.168.1.100:8000 # Remote server
+  python ultra_minimal_mcp_performance_test.py --host 0.0.0.0 --port 8080
+  python ultra_minimal_mcp_performance_test.py --duration 10 --concurrency 500
+        """
+    )
+    
+    # Positional argument for quick host:port specification
+    parser.add_argument(
+        'target', 
+        nargs='?', 
+        help='Target in format [host][:port] or just port (e.g., "localhost:8001", "8001", "192.168.1.100:8000")'
+    )
+    
+    # Explicit host and port options
+    parser.add_argument(
+        '--host',
+        default='localhost',
+        help='Server hostname or IP address (default: localhost)'
+    )
+    
+    parser.add_argument(
+        '--port', '-p',
+        type=int,
+        default=8000,
+        help='Server port number (default: 8000)'
+    )
+    
+    # Test configuration options
+    parser.add_argument(
+        '--duration', '-d',
+        type=float,
+        default=5.0,
+        help='Test duration in seconds for each operation (default: 5.0)'
+    )
+    
+    parser.add_argument(
+        '--concurrency', '-c',
+        type=int,
+        default=200,
+        help='Maximum concurrency level to test (default: 200)'
+    )
+    
+    parser.add_argument(
+        '--quick', '-q',
+        action='store_true',
+        help='Run quick tests with reduced duration and concurrency'
+    )
+    
+    parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Enable verbose output with detailed connection info'
+    )
+    
+    args = parser.parse_args()
+    
+    # Parse target if provided
+    if args.target:
+        target = args.target
+        
+        # Handle different target formats
+        if target.isdigit():
+            # Just a port number
+            args.port = int(target)
+        elif ':' in target:
+            # host:port format
+            if target.startswith('http://'):
+                target = target[7:]
+            elif target.startswith('https://'):
+                target = target[8:]
+            
+            if '/' in target:
+                target = target.split('/')[0]
+            
+            host_part, port_part = target.rsplit(':', 1)
+            args.host = host_part
+            args.port = int(port_part)
         else:
-            port = int(sys.argv[1])
+            # Just a hostname
+            args.host = target
+    
+    # Quick mode adjustments
+    if args.quick:
+        args.duration = min(args.duration, 2.0)
+        args.concurrency = min(args.concurrency, 50)
+    
+    return args
+
+
+async def main():
+    """Main entry point with argument parsing"""
+    args = parse_arguments()
     
     print("⚡ ChukMCPServer Ultra-Minimal MCP Protocol Test")
-    print(f"🎯 Target: {host}:{port}")
+    print(f"🎯 Target: {args.host}:{args.port}")
     print("📝 Zero client overhead - MCP JSON-RPC performance")
-    print("🏆 Goal: Measure true async MCP server performance")
+    print("🏆 Goal: Measure true ChukMCPServer performance")
+    print("🧠 Testing actual zero-config tools and resources")
+    
+    if args.quick:
+        print("⚡ Quick mode: Reduced duration and concurrency")
+    
+    if args.verbose:
+        print(f"📊 Test Configuration:")
+        print(f"   Duration: {args.duration}s per test")
+        print(f"   Max Concurrency: {args.concurrency}")
+        print(f"   Target: {args.host}:{args.port}")
+    
     print()
     
     # Optimize for maximum performance
     gc.collect()
     gc.disable()  # Disable GC during testing
     
-    test = UltraMinimalMCPTest(host, port)
+    test = UltraMinimalMCPTest(
+        host=args.host, 
+        port=args.port, 
+        duration=args.duration, 
+        max_concurrency=args.concurrency,
+        verbose=args.verbose
+    )
     
     try:
         success = await test.run_mcp_performance_tests()
         
         if success:
             print("🎉 Ultra-minimal MCP performance testing completed!")
+            print("🧠 Your zero-configuration server delivered the results above!")
         else:
             print("❌ MCP performance testing failed. Check server status.")
+            print(f"💡 Make sure your zero_config_examples.py server is running on {args.host}:{args.port}")
+            print(f"💡 Try: uv run examples/zero_config_examples.py")
+            if args.port != 8000:
+                print(f"💡 Or run server with custom port to match your test target")
             sys.exit(1)
     
     finally:

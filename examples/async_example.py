@@ -887,7 +887,7 @@ def main():
     try:
         mcp.run(
             host="localhost", 
-            port=8001,  # Different port for async server
+            port=8000,  # Different port for async server
             debug=False
         )
     except KeyboardInterrupt:
