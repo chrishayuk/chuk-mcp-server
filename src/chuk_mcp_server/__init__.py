@@ -1,53 +1,67 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/__init__.py
+# src/chuk_mcp_server/__init__.py (Enhanced with Modular Cloud Support)
 """
-ChukMCPServer - Zero Configuration MCP Framework
+ChukMCPServer - Zero Configuration MCP Framework with Modular Cloud Support
 
-The world's smartest MCP framework with zero configuration built right in.
+The world's smartest MCP framework with zero configuration and automatic cloud detection.
 
-ZERO CONFIG USAGE:
-    from chuk_mcp_server import ChukMCPServer, tool, resource, run
+ULTIMATE ZERO CONFIG (Works everywhere):
+    from chuk_mcp_server import tool, resource, run
     
-    # Option 1: Global decorators (ultimate simplicity)
     @tool
     def hello(name: str) -> str:
         return f"Hello, {name}!"
     
     @resource("config://settings")
     def get_settings() -> dict:
-        return {"app": "my_app", "version": "1.0"}
+        return {"app": "my_app", "magic": True}
     
     if __name__ == "__main__":
-        run()  # Auto-detects everything!
+        run()  # Auto-detects EVERYTHING!
 
-    # Option 2: Server instance (traditional but smart)
-    mcp = ChukMCPServer()  # Auto-detects name, host, port, etc.
-    
-    @mcp.tool  # Auto-infers category, metadata, etc.
-    def process_data(data: str) -> dict:
-        return {"processed": data}
-    
-    mcp.run()  # Uses smart defaults
+CLOUD EXAMPLES:
 
-ADVANCED USAGE (Full Control):
-    from chuk_mcp_server import ChukMCPServer
+Google Cloud Functions:
+    # main.py
+    from chuk_mcp_server import ChukMCPServer, tool
     
-    mcp = ChukMCPServer(
-        name="My Server", 
-        version="1.0.0",
-        host="0.0.0.0",
-        port=8000,
-        debug=False
-    )
+    mcp = ChukMCPServer()  # Auto-detects GCF!
     
-    @mcp.tool(tags=["custom"])
-    def hello(name: str) -> str:
-        return f"Hello, {name}!"
+    @mcp.tool
+    def hello_gcf(name: str) -> str:
+        return f"Hello from GCF, {name}!"
     
-    mcp.run()
+    # Handler auto-created as 'mcp_gcf_handler'
+    # Deploy: gcloud functions deploy my-server --entry-point mcp_gcf_handler
+
+AWS Lambda:
+    # lambda_function.py  
+    from chuk_mcp_server import ChukMCPServer, tool
+    
+    mcp = ChukMCPServer()  # Auto-detects Lambda!
+    
+    @mcp.tool
+    def hello_lambda(name: str) -> str:
+        return f"Hello from Lambda, {name}!"
+    
+    # Handler auto-created as 'lambda_handler'
+
+Azure Functions:
+    # function_app.py
+    from chuk_mcp_server import ChukMCPServer, tool
+    
+    mcp = ChukMCPServer()  # Auto-detects Azure!
+    
+    @mcp.tool  
+    def hello_azure(name: str) -> str:
+        return f"Hello from Azure, {name}!"
+    
+    # Handler auto-created as 'main'
+
+All platforms work with ZERO configuration! 🚀
 """
 
-# Import the core server with integrated zero-config
+# Import core functionality
 from typing import Optional
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
@@ -63,123 +77,312 @@ from .types import (
     create_server_capabilities,
 )
 
-# Create backward compatibility for Capabilities
+# Import cloud functionality
+from .cloud import detect_cloud_provider, is_cloud_environment
+from .cloud.adapters import get_active_cloud_adapter, is_cloud_adapted
+
+# Create backward compatibility
 def Capabilities(**kwargs):
     """Legacy capabilities function for backward compatibility."""
     return create_server_capabilities(**kwargs)
 
-__version__ = "2.0.0"  # Zero-config integrated version
+__version__ = "2.1.0"  # Enhanced cloud support version
 
 # ============================================================================
-# Global Magic Decorators (Fixed Implementation)
+# Global Magic with Cloud Support
 # ============================================================================
 
-# Global server instance for magic decorators
 _global_server: Optional[ChukMCPServer] = None
 
 def get_or_create_global_server() -> ChukMCPServer:
-    """Get or create the global server instance."""
+    """Get or create the global server instance with cloud detection."""
     global _global_server
     if _global_server is None:
-        _global_server = ChukMCPServer()  # Uses all smart defaults
+        _global_server = ChukMCPServer()  # Auto-detects cloud environment
     return _global_server
 
 def run(**kwargs):
-    """Run the global smart server."""
+    """Run the global smart server with cloud detection."""
     server = get_or_create_global_server()
     server.run(**kwargs)
 
 # ============================================================================
-# Exports - Clean API
+# Cloud Magic Functions
+# ============================================================================
+
+def get_cloud_handler():
+    """Magic function to get cloud-specific handler."""
+    server = get_or_create_global_server()
+    handler = server.get_cloud_handler()
+    
+    if handler is None:
+        cloud_provider = detect_cloud_provider()
+        if cloud_provider:
+            raise RuntimeError(
+                f"Detected {cloud_provider.display_name} but no handler available. "
+                f"Install with: pip install 'chuk-mcp-server[{cloud_provider.name}]'"
+            )
+        else:
+            raise RuntimeError("Not in a cloud environment or no cloud provider detected.")
+    
+    return handler
+
+def get_gcf_handler():
+    """Get Google Cloud Functions handler."""
+    server = get_or_create_global_server()
+    adapter = server.get_cloud_adapter()
+    
+    if adapter and hasattr(adapter, 'get_handler'):
+        from .cloud.providers.gcp import GCPProvider
+        cloud_provider = detect_cloud_provider()
+        if cloud_provider and isinstance(cloud_provider, GCPProvider):
+            return adapter.get_handler()
+    
+    raise RuntimeError(
+        "Not in Google Cloud Functions environment or functions-framework not installed. "
+        "Install with: pip install 'chuk-mcp-server[gcf]'"
+    )
+
+def get_lambda_handler():
+    """Get AWS Lambda handler."""
+    server = get_or_create_global_server()
+    adapter = server.get_cloud_adapter()
+    
+    if adapter and hasattr(adapter, 'get_handler'):
+        from .cloud.providers.aws import AWSProvider
+        cloud_provider = detect_cloud_provider()
+        if cloud_provider and isinstance(cloud_provider, AWSProvider):
+            return adapter.get_handler()
+    
+    raise RuntimeError("Not in AWS Lambda environment.")
+
+def get_azure_handler():
+    """Get Azure Functions handler."""
+    server = get_or_create_global_server()
+    adapter = server.get_cloud_adapter()
+    
+    if adapter and hasattr(adapter, 'get_handler'):
+        from .cloud.providers.azure import AzureProvider
+        cloud_provider = detect_cloud_provider()
+        if cloud_provider and isinstance(cloud_provider, AzureProvider):
+            return adapter.get_handler()
+    
+    raise RuntimeError("Not in Azure Functions environment.")
+
+def is_cloud() -> bool:
+    """Check if running in any cloud environment."""
+    return is_cloud_environment()
+
+def is_gcf() -> bool:
+    """Check if running in Google Cloud Functions."""
+    cloud_provider = detect_cloud_provider()
+    return cloud_provider and cloud_provider.name == "gcp"
+
+def is_lambda() -> bool:
+    """Check if running in AWS Lambda."""
+    cloud_provider = detect_cloud_provider()
+    return cloud_provider and cloud_provider.name == "aws"
+
+def is_azure() -> bool:
+    """Check if running in Azure Functions."""
+    cloud_provider = detect_cloud_provider()
+    return cloud_provider and cloud_provider.name == "azure"
+
+def get_deployment_info() -> dict:
+    """Get deployment information for current environment."""
+    server = get_or_create_global_server()
+    return server.get_cloud_deployment_info()
+
+# ============================================================================
+# Auto-Cloud Handler Export
+# ============================================================================
+
+def _auto_export_cloud_handlers():
+    """Automatically export cloud handlers based on environment detection."""
+    import sys
+    current_module = sys.modules[__name__]
+    
+    try:
+        cloud_provider = detect_cloud_provider()
+        if not cloud_provider:
+            return
+        
+        # Get the global server and its cloud adapter
+        server = get_or_create_global_server()
+        adapter = server.get_cloud_adapter()
+        
+        if not adapter:
+            return
+        
+        handler = adapter.get_handler()
+        if not handler:
+            return
+        
+        # Export handler with standard names for each platform
+        if cloud_provider.name == "gcp":
+            # GCF expects 'mcp_gcf_handler' or custom entry point
+            setattr(current_module, 'mcp_gcf_handler', handler)
+            
+        elif cloud_provider.name == "aws":
+            # Lambda expects 'lambda_handler' by default
+            setattr(current_module, 'lambda_handler', handler)
+            setattr(current_module, 'handler', handler)  # Alternative name
+            
+        elif cloud_provider.name == "azure":
+            # Azure Functions expects 'main' by default
+            setattr(current_module, 'main', handler)
+            setattr(current_module, 'azure_handler', handler)  # Alternative name
+            
+        elif cloud_provider.name in ["vercel", "netlify", "cloudflare"]:
+            # Edge functions often expect 'handler' or 'main'
+            setattr(current_module, 'handler', handler)
+            setattr(current_module, 'main', handler)
+            
+        # Always export generic names
+        setattr(current_module, 'cloud_handler', handler)
+        setattr(current_module, 'mcp_handler', handler)
+        
+    except Exception:
+        # Silently ignore errors during auto-export
+        pass
+
+# Auto-export handlers when module is imported
+_auto_export_cloud_handlers()
+
+# ============================================================================
+# Enhanced Exports
 # ============================================================================
 
 __all__ = [
     # 🧠 PRIMARY INTERFACE (Zero Config)
-    "ChukMCPServer",      # Smart server with zero config built-in
+    "ChukMCPServer",
     
-    # 🪄 MAGIC DECORATORS (Global convenience)
-    "tool",               # Global tool decorator
-    "resource",           # Global resource decorator  
-    "run",                # Global run function
+    # 🪄 MAGIC DECORATORS
+    "tool",
+    "resource", 
+    "run",
     
     # 🏭 FACTORY FUNCTIONS
-    "create_mcp_server",  # Factory function
-    "quick_server",       # Quick prototyping server
+    "create_mcp_server",
+    "quick_server",
     
-    # 📚 TYPES & UTILITIES (Advanced)
-    "Tool",               # ToolHandler alias
-    "Resource",           # ResourceHandler alias
-    "ToolParameter",      # Parameter type system
-    "ServerInfo",         # Server information type
-    "Capabilities",       # Legacy capabilities function
+    # ☁️ CLOUD MAGIC
+    "get_cloud_handler",    # Generic cloud handler
+    "get_gcf_handler",      # Google Cloud Functions
+    "get_lambda_handler",   # AWS Lambda
+    "get_azure_handler",    # Azure Functions
+    
+    # 🔍 CLOUD DETECTION
+    "is_cloud",             # Any cloud environment
+    "is_gcf",               # Google Cloud Functions
+    "is_lambda",            # AWS Lambda
+    "is_azure",             # Azure Functions
+    "get_deployment_info",  # Deployment information
+    
+    # 📚 TYPES & UTILITIES
+    "Tool",
+    "Resource",
+    "ToolParameter",
+    "ServerInfo",
+    "Capabilities",
 ]
 
 # ============================================================================
-# Smart Examples Documentation
+# Enhanced Examples Documentation
 # ============================================================================
 
-def show_examples():
-    """Show zero configuration examples."""
+def show_cloud_examples():
+    """Show cloud-specific zero configuration examples."""
     examples = """
-🧠 ChukMCPServer - Zero Configuration Examples
+☁️ ChukMCPServer - Cloud Zero Configuration Examples
 
-1️⃣ ULTIMATE ZERO CONFIG (Magic Decorators):
+1️⃣ GOOGLE CLOUD FUNCTIONS:
    
-   from chuk_mcp_server import tool, resource, run
+   # main.py
+   from chuk_mcp_server import ChukMCPServer, tool
+   
+   mcp = ChukMCPServer()  # 🧠 Auto-detects GCF!
+   
+   @mcp.tool
+   def hello_gcf(name: str) -> str:
+       return f"Hello from GCF, {name}!"
+   
+   # ✨ Handler auto-created as 'mcp_gcf_handler'
+   # Deploy: gcloud functions deploy my-server --entry-point mcp_gcf_handler
+
+2️⃣ AWS LAMBDA:
+
+   # lambda_function.py
+   from chuk_mcp_server import ChukMCPServer, tool
+   
+   mcp = ChukMCPServer()  # 🧠 Auto-detects Lambda!
+   
+   @mcp.tool
+   def hello_lambda(name: str) -> str:
+       return f"Hello from Lambda, {name}!"
+   
+   # ✨ Handler auto-created as 'lambda_handler'
+   # Deploy: AWS CLI or SAM
+
+3️⃣ AZURE FUNCTIONS:
+
+   # function_app.py
+   from chuk_mcp_server import ChukMCPServer, tool
+   
+   mcp = ChukMCPServer()  # 🧠 Auto-detects Azure!
+   
+   @mcp.tool
+   def hello_azure(name: str) -> str:
+       return f"Hello from Azure, {name}!"
+   
+   # ✨ Handler auto-created as 'main'
+   # Deploy: Azure CLI or VS Code
+
+4️⃣ VERCEL EDGE:
+
+   # api/mcp.py
+   from chuk_mcp_server import tool, get_cloud_handler
    
    @tool
-   def hello(name: str) -> str:
-       '''Auto-inferred: category=general, tags=["tool", "general"]'''
-       return f"Hello, {name}!"
+   def hello_edge(name: str) -> str:
+       return f"Hello from Vercel Edge, {name}!"
    
-   @resource("config://app")  
-   def get_config() -> dict:
-       '''Auto-inferred: mime_type=application/json, tags=["resource", "config"]'''
-       return {"app": "zero-config", "magic": True}
+   # ✨ Handler auto-exported
+   handler = get_cloud_handler()
+
+5️⃣ MULTI-CLOUD (Works everywhere):
+
+   # server.py
+   from chuk_mcp_server import ChukMCPServer, tool, is_cloud
+   
+   mcp = ChukMCPServer()  # 🧠 Auto-detects ANY cloud!
+   
+   @mcp.tool
+   def universal_tool(data: str) -> dict:
+       cloud_info = "cloud" if is_cloud() else "local"
+       return {"data": data, "environment": cloud_info}
    
    if __name__ == "__main__":
-       run()  # 🧠 Everything auto-detected!
+       if is_cloud():
+           print("🌟 Cloud environment detected - handler auto-created!")
+       else:
+           mcp.run()  # Local development
 
-2️⃣ SMART SERVER (Traditional but Intelligent):
-
-   from chuk_mcp_server import ChukMCPServer
-   
-   mcp = ChukMCPServer()  # 🧠 Name, host, port all auto-detected
-   
-   @mcp.tool  # 🧠 Category, metadata all auto-inferred
-   def calculate(expression: str) -> float:
-       '''Mathematics category auto-detected'''
-       return eval(expression)
-   
-   mcp.run()  # 🧠 Smart defaults: localhost:8000 in dev, 0.0.0.0:PORT in prod
-
-3️⃣ SMART INFERENCE EXAMPLES:
-
-   @tool
-   def process_file(path: str) -> dict:
-       '''🧠 Auto-detected: category="file_operations", tags=["tool", "file_operations"]'''
-       
-   @tool  
-   def fetch_api(url: str) -> dict:
-       '''🧠 Auto-detected: category="network", tags=["tool", "network"]'''
-       
-   @tool
-   def math_calc(x: int, y: int) -> int:
-       '''🧠 Auto-detected: category="mathematics", tags=["tool", "mathematics"]'''
-
-4️⃣ ENVIRONMENT AUTO-DETECTION:
-
-   🏠 Development: localhost:8000, debug=True, smart logging
-   🏭 Production: 0.0.0.0:PORT, debug=False, JSON logging  
-   ☁️  AWS Lambda: serverless optimizations
-   🐳 Docker: container optimizations
-   
-Ready to try zero config? All examples work out of the box! 🚀
+🚀 ALL PLATFORMS SUPPORTED WITH ZERO CONFIG:
+   ✅ Google Cloud Functions (Gen 1 & 2)
+   ✅ AWS Lambda (x86 & ARM64)
+   ✅ Azure Functions (Python)
+   ✅ Vercel Edge Functions
+   ✅ Netlify Edge Functions  
+   ✅ Cloudflare Workers
+   ✅ Local Development
+   ✅ Docker Containers
+   ✅ Kubernetes
 """
     print(examples)
 
-# Show examples in interactive environments
+# Show enhanced examples in interactive environments
 import sys
 if hasattr(sys, 'ps1'):  # Interactive Python
-    print("🧠 ChukMCPServer v2.0.0 - Zero Configuration Built-In")
-    print("Type show_examples() to see usage examples!")
+    print("🌟 ChukMCPServer v2.1.0 - Enhanced Cloud Support")
+    print("Type show_cloud_examples() to see cloud deployment examples!")
