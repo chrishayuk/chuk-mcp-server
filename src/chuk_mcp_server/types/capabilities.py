@@ -16,6 +16,28 @@ from .base import (
     LoggingCapability
 )
 
+class _FilteredServerCapabilities(ServerCapabilities):
+    """ServerCapabilities subclass with filtered model_dump method"""
+    
+    def __init__(self, *args, _filter_kwargs=None, _experimental=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._filter_kwargs = _filter_kwargs or {}
+        self._experimental = _experimental
+    
+    def model_dump(self, **dump_kwargs):
+        """Filter out unwanted fields from model_dump"""
+        result = super().model_dump(**dump_kwargs)
+        # Remove None fields and unwanted default fields
+        filtered = {}
+        for key, value in result.items():
+            # Only include fields we explicitly set
+            if key in self._filter_kwargs:
+                filtered[key] = value
+            elif key == "experimental" and self._experimental is not None:
+                filtered[key] = value
+        return filtered
+
+
 def create_server_capabilities(
     tools: bool = True,
     resources: bool = True,
@@ -50,32 +72,28 @@ def create_server_capabilities(
             # Try to include experimental features
             try:
                 kwargs["experimental"] = experimental
-                caps = ServerCapabilities(**kwargs)
+                caps = _FilteredServerCapabilities(
+                    _filter_kwargs=kwargs, 
+                    _experimental=experimental,
+                    **kwargs
+                )
             except Exception:
                 # Create without experimental first, then set it manually
-                caps = ServerCapabilities(**{k: v for k, v in kwargs.items() if k != "experimental"})
+                caps = _FilteredServerCapabilities(
+                    _filter_kwargs={k: v for k, v in kwargs.items() if k != "experimental"},
+                    _experimental=experimental,
+                    **{k: v for k, v in kwargs.items() if k != "experimental"}
+                )
                 object.__setattr__(caps, 'experimental', experimental)
                 return caps
     
-    # Create the capabilities object
-    caps = ServerCapabilities(**kwargs)
+    # Create the capabilities object with our subclass
+    caps = _FilteredServerCapabilities(
+        _filter_kwargs=kwargs,
+        _experimental=experimental,
+        **kwargs
+    )
     
-    # Override model_dump to filter out unwanted fields
-    original_model_dump = caps.model_dump
-    
-    def filtered_model_dump(**dump_kwargs):
-        result = original_model_dump(**dump_kwargs)
-        # Remove None fields and unwanted default fields
-        filtered = {}
-        for key, value in result.items():
-            # Only include fields we explicitly set
-            if key in kwargs:
-                filtered[key] = value
-            elif key == "experimental" and experimental is not None:
-                filtered[key] = value
-        return filtered
-    
-    caps.model_dump = filtered_model_dump
     return caps
 
 __all__ = ["create_server_capabilities"]
