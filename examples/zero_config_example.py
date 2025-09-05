@@ -87,11 +87,11 @@ async def process_data_async(data: list, operation: str = "sum") -> dict:
     await asyncio.sleep(0.001)  # Simulated async I/O
 
     if operation == "sum":
-        result = sum(data) if all(isinstance(x, (int, float)) for x in data) else 0
+        result = sum(data) if all(isinstance(x, int | float) for x in data) else 0
     elif operation == "count":
         result = len(data)
     elif operation == "average":
-        result = sum(data) / len(data) if data and all(isinstance(x, (int, float)) for x in data) else 0
+        result = sum(data) / len(data) if data and all(isinstance(x, int | float) for x in data) else 0
     else:
         result = f"Unknown operation: {operation}"
 
@@ -175,7 +175,7 @@ This server was created with **ZERO** configuration and optimized for maximum as
 
 ## Features
 - ✨ Auto-detected project name
-- 🧠 Smart type inference  
+- 🧠 Smart type inference
 - ⚡ Performance optimization (38,000+ RPS!)
 - 🌐 Intelligent networking
 - 📊 Environment detection
@@ -184,7 +184,7 @@ This server was created with **ZERO** configuration and optimized for maximum as
 
 ## Performance Results (Async Optimized)
 - MCP Ping: 38,000+ RPS
-- Async Tool Calls: 33,000+ RPS  
+- Async Tool Calls: 33,000+ RPS
 - Async Resource Reads: 35,000+ RPS
 - Perfect concurrency scaling
 

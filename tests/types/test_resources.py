@@ -139,7 +139,7 @@ def test_resource_handler_caching():
 
     # Test cache invalidation
     handler.invalidate_mcp_cache()
-    format3 = handler.to_mcp_format()
+    handler.to_mcp_format()
     bytes3 = handler.to_mcp_bytes()
 
     # Should be new objects after invalidation

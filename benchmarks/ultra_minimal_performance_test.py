@@ -183,7 +183,7 @@ class UltraMinimalPerfTest:
 
         # Calculate metrics
         total_requests = successes + failures
-        actual_duration = max(times) if times else duration
+        max(times) if times else duration
         rps = total_requests / duration if duration > 0 else 0
         success_rate = (successes / total_requests * 100) if total_requests > 0 else 0
 
@@ -290,7 +290,6 @@ class UltraMinimalPerfTest:
         print("   Searching for maximum throughput...")
 
         best_rps = 0
-        best_concurrency = 100
         best_result = None
 
         # Test different concurrency levels
@@ -306,7 +305,6 @@ class UltraMinimalPerfTest:
             # Track best performance with good success rate
             if result.success_rate >= 95 and result.rps > best_rps:
                 best_rps = result.rps
-                best_concurrency = concurrency
                 best_result = result
 
             # Stop if success rate drops too much

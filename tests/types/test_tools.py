@@ -51,8 +51,8 @@ def test_tool_handler_from_function_complex_params():
         name: str,
         count: int = 10,
         enabled: bool = True,
-        items: list[str] = None,
-        config: dict[str, str | int] = None,
+        items: list[str] = None,  # noqa: ARG001
+        config: dict[str, str | int] = None,  # noqa: ARG001
     ) -> dict:
         return {"name": name, "count": count, "enabled": enabled}
 
@@ -161,7 +161,7 @@ def test_tool_handler_caching():
 
     # Test cache invalidation
     handler.invalidate_cache()
-    format3 = handler.to_mcp_format()
+    handler.to_mcp_format()
     bytes3 = handler.to_mcp_bytes()
 
     # Should be new objects after invalidation

@@ -192,7 +192,7 @@ async def test_streamable_server(base_url: str = "http://localhost:8000"):
         start_time = time.time()
         success_count = 0
 
-        for i in range(10):
+        for _i in range(10):
             try:
                 async with session.post(mcp_url, json=ping_message, headers=headers) as resp:
                     if resp.status == 200:

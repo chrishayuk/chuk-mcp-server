@@ -131,13 +131,13 @@ async def async_hello(name: str, delay: Union[str, int, float] = 0.1) -> str:
     """Async hello with configurable delay"""
     try:
         delay_float = ensure_float(delay)
-        
+
         # Ensure reasonable bounds
         if delay_float < 0:
             delay_float = 0.0
         elif delay_float > 10.0:
             delay_float = 10.0
-            
+
         await asyncio.sleep(delay_float)
         return f"Hello, {name}! (async processed after {delay_float}s)"
     except Exception as e:
@@ -157,12 +157,12 @@ async def concurrent_api_calls(endpoints: List[str]) -> Dict[str, Any]:
                 'data': f'data_from_{endpoint}',
                 'timestamp': datetime.now().isoformat()
             }
-        
+
         start_time = time.time()
         # Execute all API calls concurrently
         results = await asyncio.gather(*[simulate_api_call(ep) for ep in endpoints])
         total_time = time.time() - start_time
-        
+
         return {
             'operation': 'concurrent_api_calls',
             'total_endpoints': len(endpoints),
@@ -192,18 +192,18 @@ async def stream_processing(item_count: Union[str, int] = 5, process_delay: Unio
     try:
         item_count_int = ensure_int(item_count)
         process_delay_float = ensure_float(process_delay)
-        
+
         # Ensure reasonable bounds
         if item_count_int <= 0:
             item_count_int = 1
         elif item_count_int > 100:
             item_count_int = 100
-            
+
         if process_delay_float < 0:
             process_delay_float = 0.001
         elif process_delay_float > 5.0:
             process_delay_float = 5.0
-        
+
         async def data_stream(count: int):
             """Async generator for streaming data"""
             for i in range(count):
@@ -214,15 +214,15 @@ async def stream_processing(item_count: Union[str, int] = 5, process_delay: Unio
                     'value': random.randint(1, 100),
                     'source': f'stream_item_{i}'
                 }
-        
+
         processed_items = []
         start_time = time.time()
-        
+
         # Process streaming data
         async for data_item in data_stream(item_count_int):
             # Simulate processing each item
             await asyncio.sleep(process_delay_float)
-            
+
             processed_item = {
                 **data_item,
                 'processed': True,
@@ -230,9 +230,9 @@ async def stream_processing(item_count: Union[str, int] = 5, process_delay: Unio
                 'processing_time_ms': process_delay_float * 1000
             }
             processed_items.append(processed_item)
-        
+
         total_time = time.time() - start_time
-        
+
         return {
             'operation': 'stream_processing',
             'stream_complete': True,
@@ -259,18 +259,18 @@ async def batch_processing(items: List[str], batch_size: Union[str, int] = 3) ->
     """Process data in concurrent batches"""
     try:
         batch_size_int = ensure_int(batch_size)
-        
+
         # Ensure reasonable bounds
         if batch_size_int <= 0:
             batch_size_int = 1
         elif batch_size_int > len(items):
             batch_size_int = len(items)
-        
+
         async def process_single_item(item: str, batch_id: int):
             # Simulate item processing
             processing_time = 0.02 + random.random() * 0.03
             await asyncio.sleep(processing_time)
-            
+
             return {
                 'item': item,
                 'batch_id': batch_id,
@@ -279,29 +279,29 @@ async def batch_processing(items: List[str], batch_size: Union[str, int] = 3) ->
                 'result': f'processed_{item}',
                 'status': 'success'
             }
-        
+
         all_results = []
         start_time = time.time()
         batch_count = 0
-        
+
         # Process items in batches
         for i in range(0, len(items), batch_size_int):
             batch = items[i:i + batch_size_int]
             batch_count += 1
-            
+
             # Process entire batch concurrently
             batch_results = await asyncio.gather(*[
                 process_single_item(item, batch_count) for item in batch
             ])
-            
+
             all_results.extend(batch_results)
-            
+
             # Small delay between batches
             if i + batch_size_int < len(items):
                 await asyncio.sleep(0.01)
-        
+
         total_time = time.time() - start_time
-        
+
         return {
             'operation': 'batch_processing',
             'batch_complete': True,
@@ -330,25 +330,25 @@ async def real_time_monitoring(duration: Union[str, int] = 3, interval: Union[st
     try:
         duration_int = ensure_int(duration)
         interval_float = ensure_float(interval)
-        
+
         # Ensure reasonable bounds
         if duration_int <= 0:
             duration_int = 1
         elif duration_int > 60:
             duration_int = 60
-            
+
         if interval_float <= 0:
             interval_float = 0.1
         elif interval_float > 10.0:
             interval_float = 10.0
-        
+
         monitoring_data = []
         start_time = time.time()
         end_time = start_time + duration_int
-        
+
         while time.time() < end_time:
             await asyncio.sleep(interval_float)
-            
+
             # Simulate collecting various metrics
             current_time = time.time()
             data_point = {
@@ -364,9 +364,9 @@ async def real_time_monitoring(duration: Union[str, int] = 3, interval: Union[st
                 'status': 'healthy' if random.random() > 0.1 else 'warning'
             }
             monitoring_data.append(data_point)
-        
+
         total_time = time.time() - start_time
-        
+
         # Calculate averages
         if monitoring_data:
             avg_cpu = round(sum(d['metrics']['cpu_usage_percent'] for d in monitoring_data) / len(monitoring_data), 1)
@@ -374,7 +374,7 @@ async def real_time_monitoring(duration: Union[str, int] = 3, interval: Union[st
             avg_rps = round(sum(d['metrics']['requests_per_second'] for d in monitoring_data) / len(monitoring_data), 1)
         else:
             avg_cpu = avg_memory = avg_rps = 0
-        
+
         return {
             'operation': 'real_time_monitoring',
             'monitoring_complete': True,
@@ -405,7 +405,7 @@ async def get_live_dashboard() -> Dict[str, Any]:
     """Get live dashboard data"""
     try:
         await asyncio.sleep(0.02)  # Simulate async data collection
-        
+
         return {
             'dashboard_type': 'live_metrics',
             'timestamp': datetime.now().isoformat(),
@@ -436,12 +436,12 @@ async def get_performance_report() -> str:
     """Get async performance report"""
     try:
         await asyncio.sleep(0.05)  # Simulate report generation
-        
+
         return f"""# Async Native Performance Report
 
-**Generated**: {datetime.now().isoformat()}  
-**Server**: Standalone Async Native ChukMCPServer  
-**Framework**: ChukMCPServer with chuk_mcp  
+**Generated**: {datetime.now().isoformat()}
+**Server**: Standalone Async Native ChukMCPServer
+**Framework**: ChukMCPServer with chuk_mcp
 
 ## 🚀 Async Capabilities Demonstrated
 
@@ -450,7 +450,7 @@ async def get_performance_report() -> str:
 - Significant time savings through concurrency
 - Non-blocking I/O operations
 
-### Stream Processing  
+### Stream Processing
 - Async generators for data streaming
 - Memory-efficient processing
 - Real-time data handling
@@ -505,7 +505,7 @@ if __name__ == "__main__":
         print("⏳ Waiting for server to be ready...")
 
         async with httpx.AsyncClient() as client:
-            for attempt in range(max_wait):
+            for _attempt in range(max_wait):
                 try:
                     response = await client.get(f"{self.server_url}/health", timeout=2.0)
                     if response.status_code == 200:

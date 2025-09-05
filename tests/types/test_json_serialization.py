@@ -65,7 +65,7 @@ def test_capabilities_no_function_in_dump():
         elif isinstance(obj, dict):
             for key, value in obj.items():
                 check_no_functions(value, f"{path}.{key}")
-        elif isinstance(obj, (list, tuple)):
+        elif isinstance(obj, list | tuple):
             for i, item in enumerate(obj):
                 check_no_functions(item, f"{path}[{i}]")
 

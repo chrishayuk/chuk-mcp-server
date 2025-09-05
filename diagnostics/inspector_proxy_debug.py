@@ -8,6 +8,7 @@ capturing and logging EVERY detail of the communication for debugging.
 
 import argparse
 import asyncio
+import contextlib
 import time
 
 import aiohttp
@@ -129,10 +130,8 @@ async def proxy_request(request: Request) -> Response:
         # Add session ID to headers if we have one and this isn't the initialize request
         body_json = None
         if body:
-            try:
+            with contextlib.suppress(Exception):
                 body_json = orjson.loads(body)
-            except Exception:
-                pass
 
         is_initialize = body_json and body_json.get("method") == "initialize"
 

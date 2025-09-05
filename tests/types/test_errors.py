@@ -189,7 +189,7 @@ def test_error_immutability():
     from chuk_mcp_server.types.errors import ParameterValidationError
 
     error = ParameterValidationError("param", "string", 123)
-    original_data = error.data.copy()
+    error.data.copy()
 
     # Try to modify data (this should not affect the original)
     error.data["parameter"] = "modified"

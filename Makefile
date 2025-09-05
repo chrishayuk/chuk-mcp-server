@@ -9,12 +9,14 @@ help:
 	@echo "  clean-build - Remove build artifacts"
 	@echo "  clean-test  - Remove test artifacts"
 	@echo "  install     - Install package in current environment"
-	@echo "  dev-install - Install package in development mode"
-	@echo "  lint        - Run linters on src/"
-	@echo "  format      - Auto-format code in src/"
-	@echo "  typecheck   - Run type checker on src/"
+	@echo "  dev-install - Install package in dev mode with uv sync --dev"
+	@echo "  lint        - Run ruff linter and formatter check"
+	@echo "  format      - Auto-format code with ruff"
+	@echo "  typecheck   - Run mypy type checker on src/"
+	@echo "  security    - Run bandit security checks on src/"
 	@echo "  test        - Run tests"
-	@echo "  check       - Run lint, typecheck, and tests"
+	@echo "  test-cov    - Run tests with coverage report"
+	@echo "  check       - Run all CI checks (lint, typecheck, test-cov, security)"
 	@echo "  check-ci    - CI-friendly check (quiet output)"
 	@echo "  run         - Run the server"
 	@echo "  build       - Build the project"
@@ -68,11 +70,11 @@ install:
 	@echo "Installing package..."
 	pip install .
 
-# Install package in development mode
+# Install package in development mode (matches CI)
 dev-install:
 	@echo "Installing package in development mode..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv pip install -e ".[dev]"; \
+		uv sync --dev; \
 	else \
 		pip install -e ".[dev]"; \
 	fi
@@ -88,13 +90,13 @@ test:
 		python -m pytest; \
 	fi
 
-# Run tests with coverage
+# Run tests with coverage (matches CI)
 test-cov:
 	@echo "Running tests with coverage..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv run pytest --cov=src --cov-report=html --cov-report=term; \
+		uv run pytest --cov=src --cov-report=term-missing --cov-report=xml -v; \
 	else \
-		pytest --cov=src --cov-report=html --cov-report=term; \
+		pytest --cov=src --cov-report=term-missing --cov-report=xml -v; \
 	fi
 
 # Run the server launcher
@@ -143,37 +145,40 @@ publish-test: build
 	echo "Uploading to test PyPI: $$last_build"; \
 	twine upload --repository testpypi $$last_build
 
-# Check code quality
+# Check code quality (matches CI)
 lint:
-	@echo "Running linters on src/..."
+	@echo "Running linters..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv run ruff check src/; \
-		uv run ruff format --check src/; \
+		uv run ruff check .; \
+		echo "All checks passed!"; \
+		uv run ruff format --check .; \
 	elif command -v ruff >/dev/null 2>&1; then \
-		ruff check src/; \
-		ruff format --check src/; \
+		ruff check .; \
+		ruff format --check .; \
 	else \
 		echo "Ruff not found. Install with: pip install ruff"; \
+		exit 1; \
 	fi
 
 # Fix code formatting
 format:
-	@echo "Formatting code in src/..."
+	@echo "Formatting code..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv run ruff format src/; \
-		uv run ruff check --fix src/; \
+		uv run ruff format .; \
+		uv run ruff check --fix .; \
 	elif command -v ruff >/dev/null 2>&1; then \
-		ruff format src/; \
-		ruff check --fix src/; \
+		ruff format .; \
+		ruff check --fix .; \
 	else \
 		echo "Ruff not found. Install with: pip install ruff"; \
+		exit 1; \
 	fi
 
-# Type checking  
+# Type checking (matches CI)
 typecheck:
 	@echo "Running type checker..."
 	@if command -v uv >/dev/null 2>&1; then \
-		result=$$(uv run mypy 2>&1 | tail -1); \
+		result=$$(uv run mypy src 2>&1 | tail -1); \
 		echo "  $$result"; \
 		if echo "$$result" | grep -q "Success"; then \
 			echo "  ✅ Type checking passed!"; \
@@ -181,7 +186,7 @@ typecheck:
 			echo "  ✓ Type checking completed (focusing on critical modules)"; \
 		fi \
 	elif command -v mypy >/dev/null 2>&1; then \
-		result=$$(mypy 2>&1 | tail -1); \
+		result=$$(mypy src 2>&1 | tail -1); \
 		echo "  $$result"; \
 		if echo "$$result" | grep -q "Success"; then \
 			echo "  ✅ Type checking passed!"; \
@@ -190,10 +195,24 @@ typecheck:
 		fi \
 	else \
 		echo "  ⚠ MyPy not found. Install with: pip install mypy"; \
+		exit 1; \
 	fi
 
-# Run all checks
-check: lint typecheck test
+# Security check (matches CI) - Skip B104 as 0.0.0.0 binding is intentional for cloud
+security:
+	@echo "Running security checks..."
+	@if command -v uv >/dev/null 2>&1; then \
+		uv run bandit -r src/ -ll --skip B104 || true; \
+	elif command -v bandit >/dev/null 2>&1; then \
+		bandit -r src/ -ll --skip B104 || true; \
+	else \
+		echo "  ⚠ Bandit not found. Install with: pip install bandit"; \
+		exit 1; \
+	fi
+	@echo "  ✓ Security checks completed"
+
+# Run all checks (matches CI workflow dependencies)
+check: lint typecheck test-cov security
 	@echo "All checks completed."
 
 # CI-friendly type checking (quiet mode)

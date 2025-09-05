@@ -259,7 +259,7 @@ This is a demonstration of ChukMCPServer's clean and simple API powered by chuk_
 
 - **Type-safe tools** with automatic schema generation
 - **Rich resources** with multiple MIME types
-- **Inspector compatibility** with perfect SSE streaming  
+- **Inspector compatibility** with perfect SSE streaming
 - **Robust error handling** with chuk_mcp integration
 - **Session management** for stateful interactions
 - **Modular design** for easy maintenance
@@ -295,7 +295,7 @@ This is a demonstration of ChukMCPServer's clean and simple API powered by chuk_
 // Say hello
 {"name": "hello", "arguments": {"name": "World"}}
 
-// Add numbers  
+// Add numbers
 {"name": "add", "arguments": {"x": 5, "y": 3}}
 
 // Calculate expression

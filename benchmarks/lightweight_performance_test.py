@@ -622,7 +622,7 @@ class LightweightPerfTest:
         # Process results
         times = [r[0] for r in results]
         successes = sum(1 for r in results if r[1])
-        failures = burst_size - successes
+        burst_size - successes
 
         rps = burst_size / actual_duration if actual_duration > 0 else 0
         success_rate = successes / burst_size * 100

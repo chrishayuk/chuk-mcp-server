@@ -250,7 +250,7 @@ def demo_realistic_scenarios():
 
     config = SmartConfig()
     current_env = config.get_environment()
-    current_containerized = config.is_containerized()
+    config.is_containerized()
 
     scenarios = [
         ("🏠 If running in development", "development", False),

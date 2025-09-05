@@ -714,7 +714,7 @@ class ChukMCPPerformanceTest:
         print("\n📈 Overall Statistics:")
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Overall Success Rate: {overall_success_rate:.1f}%")
-        print(f"   Endpoints Tested: {len(set(r.endpoint for r in self.results))}")
+        print(f"   Endpoints Tested: {len({r.endpoint for r in self.results})}")
         print(f"   MCP Session: {'✅ Active' if self.session_id else '❌ Not Available'}")
 
         # Performance grade

@@ -132,17 +132,17 @@ class DigitalOceanProvider(CloudProvider):
     @property
     def name(self) -> str:
         return "digitalocean"
-    
-    @property  
+
+    @property
     def display_name(self) -> str:
         return "DigitalOcean Functions"
-    
+
     def detect(self) -> bool:
         return bool(os.environ.get('DO_FUNCTION_NAME'))
-    
+
     def get_environment_type(self) -> str:
         return "serverless"
-    
+
     def get_config_overrides(self) -> Dict[str, Any]:
         return {
             "host": "0.0.0.0",
@@ -196,10 +196,10 @@ if provider:
 @mcp.tool
 async def environment_info() -> dict:
     from chuk_mcp_server.config import CloudDetector
-    
+
     cloud_detector = CloudDetector()
     provider = cloud_detector.detect()
-    
+
     return {
         "platform": provider.display_name if provider else "Local",
         "service": provider.get_service_type() if provider else "development",

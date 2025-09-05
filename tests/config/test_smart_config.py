@@ -145,13 +145,15 @@ class TestSmartConfig:
         """Test performance mode detection considers environment."""
         config = SmartConfig()
 
-        with patch.object(config.environment_detector, "detect", return_value="serverless"):
-            with patch.object(
+        with (
+            patch.object(config.environment_detector, "detect", return_value="serverless"),
+            patch.object(
                 config.system_detector, "detect_performance_mode", return_value="serverless_optimized"
-            ) as mock_detect:
-                result = config.get_performance_mode()
-                assert result == "serverless_optimized"
-                mock_detect.assert_called_once_with("serverless")
+            ) as mock_detect,
+        ):
+            result = config.get_performance_mode()
+            assert result == "serverless_optimized"
+            mock_detect.assert_called_once_with("serverless")
 
     def test_get_all_defaults_comprehensive(self):
         """Test comprehensive configuration detection."""

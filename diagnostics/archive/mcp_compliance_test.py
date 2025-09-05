@@ -606,7 +606,7 @@ class MCPComplianceValidator:
         # Prepare tool call based on schema
         tool_args = {}
         input_schema = test_tool.get("inputSchema", {})
-        properties = input_schema.get("properties", {})
+        input_schema.get("properties", {})
 
         # Try to provide simple test arguments
         if test_tool["name"] == "add":
@@ -804,7 +804,7 @@ class MCPComplianceValidator:
                     return False, f"Ping failed: {data['error']}"
 
                 # Ping should return empty result
-                result = data.get("result", {})
+                data.get("result", {})
 
                 return True, "Ping successful"
 

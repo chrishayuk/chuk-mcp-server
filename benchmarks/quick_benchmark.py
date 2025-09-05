@@ -125,13 +125,13 @@ class QuickBenchmark:
             start = time.time()
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    response = await client.get(health_url)
+                    await client.get(health_url)
                     times.append(time.time() - start)
             except Exception:
                 # Fallback to main endpoint
                 try:
                     async with httpx.AsyncClient(timeout=5.0) as client:
-                        response = await client.get(self.server_url)
+                        await client.get(self.server_url)
                         times.append(time.time() - start)
                 except Exception:
                     times.append(time.time() - start)
@@ -338,7 +338,7 @@ class QuickBenchmark:
             # Try to extract from schema if available
             schema = tool.get("inputSchema", {})
             properties = schema.get("properties", {})
-            required = schema.get("required", [])
+            schema.get("required", [])
 
             args = {}
             for prop_name, prop_info in properties.items():
@@ -373,10 +373,7 @@ class QuickBenchmark:
         min_time = min(filtered_times)
         max_time = max(filtered_times)
 
-        if total_time:
-            rps = len(filtered_times) / total_time
-        else:
-            rps = 1 / avg_time if avg_time > 0 else 0
+        rps = len(filtered_times) / total_time if total_time else 1 / avg_time if avg_time > 0 else 0
 
         return {
             "name": name,
@@ -399,7 +396,7 @@ class QuickBenchmark:
         print(f"{'Test':<25} {'Avg(ms)':<8} {'Min(ms)':<8} {'Max(ms)':<8} {'RPS':<6} {'Count':<5}")
         print("-" * 60)
 
-        for test_name, result in results.items():
+        for _test_name, result in results.items():
             if isinstance(result, dict) and "avg_ms" in result:
                 name = result["name"][:24]
                 print(

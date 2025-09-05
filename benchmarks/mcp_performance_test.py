@@ -218,7 +218,7 @@ class MCPPerformanceTest:
 
             # Send warm-up requests
             tasks = []
-            for i in range(self.test_config["warm_up_requests"]):
+            for _i in range(self.test_config["warm_up_requests"]):
                 task = client.post(self.mcp_url, json=warm_up_message, headers=headers)
                 tasks.append(task)
 
@@ -298,7 +298,7 @@ class MCPPerformanceTest:
         success_count = 0
 
         async with httpx.AsyncClient(limits=self.limits, timeout=15.0) as client:
-            for i in range(10):
+            for _i in range(10):
                 start_time = time.time()
                 try:
                     if await self._perform_mcp_initialize(client):
@@ -759,7 +759,7 @@ class MCPPerformanceTest:
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Success Rate: {overall_success_rate:.1f}%")
         print(f"   Protocol Errors: {total_mcp_errors:,}")
-        print(f"   Operations Tested: {len(set(r.operation for r in self.results))}")
+        print(f"   Operations Tested: {len({r.operation for r in self.results})}")
         print(f"   Tools Available: {len(self.available_tools)}")
         print(f"   Resources Available: {len(self.available_resources)}")
 

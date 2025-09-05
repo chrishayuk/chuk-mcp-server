@@ -91,7 +91,7 @@ def creative_writing(genre: str, theme: str, word_count: int = 500) -> str:
 
 **Story Requirements**:
 1. Develop compelling characters with clear motivations
-2. Include vivid descriptions that engage the senses  
+2. Include vivid descriptions that engage the senses
 3. Build tension or conflict appropriate to the {genre} genre
 4. Incorporate the theme of "{theme}" meaningfully into the narrative
 5. Aim for a satisfying resolution or meaningful ending
@@ -217,7 +217,7 @@ def email_composer(recipient: str, subject: str, tone: str = "professional", pur
 
 [Body paragraphs - main content based on purpose: {purpose}]
 - Key point 1
-- Key point 2  
+- Key point 2
 - Key point 3
 
 [Closing paragraph - call to action or next steps]

@@ -146,7 +146,7 @@ def ensure_int(value: str | int | float) -> int:
 
 def ensure_float(value: str | int | float) -> float:
     """Ensure a value is converted to float safely"""
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     elif isinstance(value, str):
         try:
@@ -196,7 +196,7 @@ async def concurrent_web_requests(urls: list[str], timeout: str | float = 5.0) -
         timeout: Request timeout in seconds
     """
     try:
-        timeout_float = ensure_float(timeout)
+        ensure_float(timeout)
 
         async def simulate_web_request(url: str):
             # Simulate realistic web request timing
@@ -760,8 +760,8 @@ async def get_async_performance_report() -> str:
 
     return f"""# Async Production Performance Report (Resource Optimized)
 
-**Generated**: {current_time} (Unix timestamp)  
-**Server**: ChukMCPServer Async Production (Resource Optimized)  
+**Generated**: {current_time} (Unix timestamp)
+**Server**: ChukMCPServer Async Production (Resource Optimized)
 
 ## 🚀 Resource Performance Optimizations
 

@@ -100,8 +100,23 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "B905",  # `zip()` without an explicit `strict=` parameter
+    "ARG001",  # Unused function argument (common in tests and benchmarks)
+    "ARG002",  # Unused method argument (common in mock tests)
+    "B017",  # Don't assert blind exception (acceptable in tests)
+    "E402",  # Module level import not at top (needed for some examples)
+    "E722",  # Bare except (sometimes needed in diagnostics)
+    "B904",  # Raise without from in except (acceptable in examples)
+    "B007",  # Unused loop variable (common in benchmarks)
+    "SIM102",  # Nested if statements (readability preference)
+    "SIM117",  # Multiple with statements (readability preference)
 ]
 fixable = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["UP045", "UP007", "UP038"]  # Allow old-style type annotations in tests
+"examples/**/*.py" = ["W291", "W293", "F401", "F841"]  # Allow whitespace and unused imports in examples
+"benchmarks/**/*.py" = ["C401", "F841", "SIM108"]  # Allow certain patterns in benchmarks
+"diagnostics/**/*.py" = ["ALL"]  # Very lenient for diagnostics
 
 [tool.ruff.format]
 quote-style = "double"
@@ -181,3 +196,7 @@ directory = "htmlcov"
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[tool.bandit]
+exclude_dirs = ["tests", "examples", "benchmarks", "diagnostics"]
+skips = ["B104"]  # Skip hardcoded_bind_all_interfaces - intentional for cloud deployments
