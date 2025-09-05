@@ -24,20 +24,53 @@ MANIFEST
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Linting
+.ruff_cache/
 
 # IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+*.bak
 
 # OS
 .DS_Store
 Thumbs.db
+.AppleDouble
+.LSOverride
 
 # Environment
 .env
+.env.local
+.env.*.local
 .venv
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+
+# UV package manager
+uv.lock
+.uv/
+
+# Pre-commit
+.pre-commit-config.yaml.lock

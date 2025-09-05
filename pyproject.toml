@@ -24,8 +24,15 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
     "aiohttp>=3.12.13",
     "requests>=2.32.4",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+    "pre-commit>=3.6.0",
+    "types-requests>=2.31.0",
+    "types-setuptools>=69.0.0",
+    "bandit>=1.7.8",
 ]
 
 [tool.setuptools]
@@ -61,3 +68,107 @@ dev = [
 
 [project.scripts]
 chuk-mcp-server = "chuk_mcp_server.main:main"
+
+# Ruff configuration
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "ARG",  # flake8-unused-arguments
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "B905",  # `zip()` without an explicit `strict=` parameter
+]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+[tool.ruff.lint.isort]
+known-first-party = ["chuk_mcp_server"]
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.11"
+# Reduced strictness for practical type checking
+strict = false
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_any_unimported = false
+ignore_missing_imports = true
+follow_imports = "silent"
+show_error_codes = true
+no_implicit_optional = false
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_no_return = true
+check_untyped_defs = true
+strict_equality = false
+# Only check our types module strictly
+files = ["src/chuk_mcp_server/types"]
+exclude = [
+    "tests/",
+    "benchmarks/",
+    "diagnostics/",
+    "examples/",
+]
+
+# Per-module overrides for cleaner output
+[[tool.mypy.overrides]]
+module = "chuk_mcp_server.types.*"
+strict = true
+warn_return_any = true
+disallow_untyped_defs = true
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/benchmarks/*",
+    "*/diagnostics/*",
+    "*/examples/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"

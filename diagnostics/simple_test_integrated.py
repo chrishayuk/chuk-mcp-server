@@ -9,24 +9,24 @@ print("🧠 Testing Integrated Zero Config...")
 # Test 1: Global magic decorators
 from chuk_mcp_server import tool, resource, run
 
+
 @tool
 def hello(name: str = "World") -> str:
     """Say hello to someone."""
     return f"Hello, {name}!"
 
-@tool  
+
+@tool
 def add(x: int, y: int) -> int:
     """Add two numbers."""
     return x + y
 
+
 @resource("config://test")
 def get_test_config() -> dict:
     """Test configuration."""
-    return {
-        "test": True,
-        "zero_config": True,
-        "integrated": True
-    }
+    return {"test": True, "zero_config": True, "integrated": True}
+
 
 print("✅ Global magic decorators work!")
 
@@ -37,26 +37,25 @@ print("🧠 Testing Smart Server...")
 
 mcp = ChukMCPServer()  # Everything auto-detected!
 
+
 @mcp.tool
 def multiply(a: int, b: int) -> int:
     """Multiply two numbers."""
     return a * b
 
+
 @mcp.resource("info://server")
 def server_info() -> dict:
     """Server information."""
-    return {
-        "name": "Auto-detected Smart Server",
-        "zero_config": True,
-        "integrated": True
-    }
+    return {"name": "Auto-detected Smart Server", "zero_config": True, "integrated": True}
+
 
 print("✅ Smart server works!")
 
 # Test 3: Show smart configuration
 print("\n🧠 Smart Configuration Detected:")
 info = mcp.info()
-smart_config = info['smart_config']
+smart_config = info["smart_config"]
 print(f"   Host: {smart_config['host']}")
 print(f"   Port: {smart_config['port']}")
 print(f"   Environment: {smart_config['environment']}")
