@@ -34,6 +34,11 @@ def get_global_prompts() -> list[PromptHandler]:
     return _global_prompts.copy()
 
 
+def get_global_registry() -> dict[str, list[Any]]:
+    """Get the entire global registry."""
+    return {"tools": _global_tools.copy(), "resources": _global_resources.copy(), "prompts": _global_prompts.copy()}
+
+
 def clear_global_registry() -> None:
     """Clear global registry (useful for testing)."""
     global _global_tools, _global_resources, _global_prompts

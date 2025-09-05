@@ -198,3 +198,10 @@ class AWSProvider(CloudProvider):
             return "lambda_standard"
         else:  # < 1GB
             return "lambda_minimal"
+
+
+# Manual registration function (called by providers/__init__.py)
+def register_aws_provider(registry: Any) -> None:
+    """Register AWS provider with the registry."""
+    aws_provider = AWSProvider()
+    registry.register_provider(aws_provider)
