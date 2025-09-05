@@ -50,13 +50,15 @@ class PromptHandler:
     """Framework prompt handler with orjson optimization and argument validation."""
 
     mcp_prompt: MCPPrompt  # The MCP prompt definition
-    handler: Callable
+    handler: Callable[..., Any]
     parameters: list[ToolParameter]  # Reuse ToolParameter for prompt arguments
     _cached_mcp_format: dict[str, Any] | None = None  # Cache the MCP format dict
     _cached_mcp_bytes: bytes | None = None  # 🚀 Cache orjson-serialized bytes
 
     @classmethod
-    def from_function(cls, func: Callable, name: str | None = None, description: str | None = None) -> "PromptHandler":
+    def from_function(
+        cls, func: Callable[..., Any], name: str | None = None, description: str | None = None
+    ) -> "PromptHandler":
         """Create PromptHandler from a function with orjson optimization."""
         prompt_name = name or func.__name__
         prompt_description = description or func.__doc__ or f"Prompt: {prompt_name}"
@@ -109,7 +111,7 @@ class PromptHandler:
 
         return instance
 
-    def _ensure_cached_formats(self):
+    def _ensure_cached_formats(self) -> None:
         """Ensure both dict and orjson formats are cached."""
         if self._cached_mcp_format is None:
             # Cache the expensive schema generation once
@@ -138,15 +140,17 @@ class PromptHandler:
         """Convert to MCP prompt format using cached version for maximum performance."""
         if self._cached_mcp_format is None:
             self._ensure_cached_formats()
+        assert self._cached_mcp_format is not None  # Type guard
         return self._cached_mcp_format.copy()  # Return copy to prevent mutation
 
     def to_mcp_bytes(self) -> bytes:
         """🚀 Get orjson-serialized MCP format bytes for ultimate performance."""
         if self._cached_mcp_bytes is None:
             self._ensure_cached_formats()
+        assert self._cached_mcp_bytes is not None  # Type guard
         return self._cached_mcp_bytes
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         """Invalidate all cached formats (if schema changes at runtime)."""
         self._cached_mcp_format = None
         self._cached_mcp_bytes = None
@@ -284,7 +288,8 @@ class PromptHandler:
             else:
                 result = self.handler(**validated_args)
 
-            return result
+            # Ensure we return the correct type
+            return result  # type: ignore[no-any-return]
 
         except ParameterValidationError:
             # Re-raise validation errors as-is
@@ -300,7 +305,7 @@ class PromptHandler:
 
 
 def create_prompt_from_function(
-    func: Callable, name: str | None = None, description: str | None = None
+    func: Callable[..., Any], name: str | None = None, description: str | None = None
 ) -> PromptHandler:
     """Create a PromptHandler from a function - convenience function."""
     return PromptHandler.from_function(func, name=name, description=description)

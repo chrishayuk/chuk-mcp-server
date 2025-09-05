@@ -145,8 +145,8 @@ warn_unused_ignores = false
 warn_no_return = true
 check_untyped_defs = true
 strict_equality = false
-# Only check our types module strictly
-files = ["src/chuk_mcp_server/types"]
+# Check all source files but with relaxed settings
+files = ["src/chuk_mcp_server"]
 exclude = [
     "tests/",
     "benchmarks/",
@@ -160,6 +160,24 @@ module = "chuk_mcp_server.types.*"
 strict = true
 warn_return_any = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "chuk_mcp_server.cloud.*",
+    "chuk_mcp_server.config.*",
+    "chuk_mcp_server.core",
+    "chuk_mcp_server.protocol",
+    "chuk_mcp_server.mcp_registry",
+    "chuk_mcp_server.endpoint_registry",
+    "chuk_mcp_server.http_server",
+    "chuk_mcp_server.endpoints.*",
+    "chuk_mcp_server.__init__"
+]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+check_untyped_defs = false
+warn_return_any = false
+no_implicit_optional = false
 
 # Coverage configuration
 [tool.coverage.run]
