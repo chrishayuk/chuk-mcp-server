@@ -13,12 +13,14 @@ from .base import ConfigDetector
 class NetworkDetector(ConfigDetector):
     """Detects optimal network configuration (host and port)."""
 
+    # Security Note: 0.0.0.0 binding is required for cloud platforms to accept
+    # traffic from platform load balancers. This is secure in containerized environments.
     PLATFORM_HOSTS = {
-        "VERCEL": "0.0.0.0",
-        "RAILWAY_ENVIRONMENT": "0.0.0.0",
-        "RENDER": "0.0.0.0",
-        "FLY_APP_NAME": "0.0.0.0",
-        "HEROKU_APP_NAME": "0.0.0.0",
+        "VERCEL": "0.0.0.0",  # nosec B104 - Required for Vercel platform routing
+        "RAILWAY_ENVIRONMENT": "0.0.0.0",  # nosec B104 - Required for Railway platform routing
+        "RENDER": "0.0.0.0",  # nosec B104 - Required for Render platform routing
+        "FLY_APP_NAME": "0.0.0.0",  # nosec B104 - Required for Fly.io platform routing
+        "HEROKU_APP_NAME": "0.0.0.0",  # nosec B104 - Required for Heroku platform routing
     }
 
     PLATFORM_PORTS = {
@@ -42,7 +44,7 @@ class NetworkDetector(ConfigDetector):
 
         # Environment-based detection
         if environment in ["production", "serverless"] or is_containerized:
-            return "0.0.0.0"
+            return "0.0.0.0"  # nosec B104 - Required for containerized/serverless deployments
 
         # Development and testing: localhost for security
         return "localhost"
