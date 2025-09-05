@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.1.7"
+version = "0.2.2"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,7 +14,6 @@ dependencies = [
     "orjson>=3.10.18",
     "psutil>=7.0.0",
     "pydantic>=2.11.7",
-    "pytest-asyncio>=1.1.0",
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
     "uvloop>=0.21.0",
