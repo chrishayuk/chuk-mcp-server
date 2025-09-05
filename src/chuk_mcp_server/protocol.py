@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 
 from .types import (
     # Framework handlers
-    ToolHandler, ResourceHandler, format_content,
+    ToolHandler, ResourceHandler, PromptHandler, format_content,
     
     # Direct chuk_mcp types (no conversion needed)
     ServerInfo, ServerCapabilities, 
@@ -80,9 +80,10 @@ class MCPProtocolHandler:
         self.capabilities = capabilities
         self.session_manager = SessionManager()
         
-        # Tool and resource registries (now use handlers)
+        # Tool, resource, and prompt registries (now use handlers)
         self.tools: Dict[str, ToolHandler] = {}
         self.resources: Dict[str, ResourceHandler] = {}
+        self.prompts: Dict[str, PromptHandler] = {}
         
         logger.info("✅ MCP protocol handler initialized with chuk_mcp")
     
@@ -95,6 +96,11 @@ class MCPProtocolHandler:
         """Register a resource handler."""
         self.resources[resource.uri] = resource
         logger.debug(f"Registered resource: {resource.uri}")
+    
+    def register_prompt(self, prompt: PromptHandler):
+        """Register a prompt handler."""
+        self.prompts[prompt.name] = prompt
+        logger.debug(f"Registered prompt: {prompt.name}")
     
     def get_tools_list(self) -> List[Dict[str, Any]]:
         """Get list of tools in MCP format."""
@@ -114,6 +120,15 @@ class MCPProtocolHandler:
         
         return resources_list
     
+    def get_prompts_list(self) -> List[Dict[str, Any]]:
+        """Get list of prompts in MCP format."""
+        prompts_list = []
+        
+        for prompt_handler in self.prompts.values():
+            prompts_list.append(prompt_handler.to_mcp_format())
+        
+        return prompts_list
+    
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get performance statistics for monitoring."""
         import time
@@ -125,6 +140,10 @@ class MCPProtocolHandler:
             },
             "resources": {
                 "count": len(self.resources),
+                "cache_hit_ratio": 1.0  # Placeholder for now
+            },
+            "prompts": {
+                "count": len(self.prompts),
                 "cache_hit_ratio": 1.0  # Placeholder for now
             },
             "sessions": {
@@ -168,6 +187,10 @@ class MCPProtocolHandler:
                 return await self._handle_resources_list(msg_id)
             elif method == "resources/read":
                 return await self._handle_resources_read(params, msg_id)
+            elif method == "prompts/list":
+                return await self._handle_prompts_list(msg_id)
+            elif method == "prompts/get":
+                return await self._handle_prompts_get(params, msg_id)
             else:
                 return self._create_error_response(msg_id, -32601, f"Method not found: {method}"), None
         
@@ -294,6 +317,59 @@ class MCPProtocolHandler:
         except Exception as e:
             logger.error(f"Resource read error for {uri}: {e}")
             return self._create_error_response(msg_id, -32603, f"Resource read error: {str(e)}"), None
+    
+    async def _handle_prompts_list(self, msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle prompts/list request."""
+        prompts_list = self.get_prompts_list()
+        result = {"prompts": prompts_list}
+        
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result
+        }
+        
+        logger.info(f"💬 Returning {len(prompts_list)} prompts")
+        return response, None
+    
+    async def _handle_prompts_get(self, params: Dict[str, Any], msg_id: Any) -> tuple[Dict[str, Any], None]:
+        """Handle prompts/get request."""
+        prompt_name = params.get("name")
+        arguments = params.get("arguments", {})
+        
+        if prompt_name not in self.prompts:
+            return self._create_error_response(msg_id, -32602, f"Unknown prompt: {prompt_name}"), None
+        
+        try:
+            prompt_handler = self.prompts[prompt_name]
+            result = await prompt_handler.get_prompt(arguments)
+            
+            # Format response content
+            if isinstance(result, str):
+                # If result is a string, wrap it as MCP content
+                content = format_content(result)
+            elif isinstance(result, dict):
+                # If result is a dict, it should contain the prompt messages
+                content = [result] if not isinstance(result.get('messages'), list) else result.get('messages', [])
+            else:
+                # Convert other types to string content
+                content = format_content(str(result))
+            
+            response = {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "description": prompt_handler.description or f"Prompt: {prompt_name}",
+                    "messages": content if isinstance(content, list) else [{"role": "user", "content": {"type": "text", "text": str(result)}}]
+                }
+            }
+            
+            logger.info(f"💬 Generated prompt {prompt_name}")
+            return response, None
+            
+        except Exception as e:
+            logger.error(f"Prompt generation error for {prompt_name}: {e}")
+            return self._create_error_response(msg_id, -32603, f"Prompt generation error: {str(e)}"), None
     
     def _create_error_response(self, msg_id: Any, code: int, message: str) -> Dict[str, Any]:
         """Create error response."""

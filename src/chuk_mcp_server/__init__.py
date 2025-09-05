@@ -66,12 +66,14 @@ from typing import Optional
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
-from .decorators import tool, resource
+from .decorators import tool, resource, prompt
 
 # Import types for advanced usage
 from .types import (
     ToolHandler as Tool,
     ResourceHandler as Resource,
+    PromptHandler as Prompt,
+    MCPPrompt,
     ToolParameter,
     ServerInfo,
     create_server_capabilities,
@@ -260,6 +262,7 @@ __all__ = [
     # 🪄 MAGIC DECORATORS
     "tool",
     "resource", 
+    "prompt",
     "run",
     
     # 🏭 FACTORY FUNCTIONS
@@ -282,6 +285,8 @@ __all__ = [
     # 📚 TYPES & UTILITIES
     "Tool",
     "Resource",
+    "Prompt",
+    "MCPPrompt",
     "ToolParameter",
     "ServerInfo",
     "Capabilities",

@@ -53,9 +53,10 @@ from .base import (
 # Parameter types and schema generation
 from .parameters import ToolParameter
 
-# Tool and resource handlers
+# Tool, resource, and prompt handlers
 from .tools import ToolHandler
 from .resources import ResourceHandler
+from .prompts import PromptHandler, MCPPrompt
 
 # Capabilities helpers
 from .capabilities import create_server_capabilities
@@ -86,6 +87,8 @@ __all__ = [
     "ToolParameter",
     "ToolHandler",
     "ResourceHandler",
+    "PromptHandler",
+    "MCPPrompt",
     
     # Framework helpers
     "create_server_capabilities",
