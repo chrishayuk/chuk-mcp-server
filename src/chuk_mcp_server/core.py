@@ -12,6 +12,7 @@ from typing import Any
 from .config import SmartConfig
 from .decorators import (
     clear_global_registry,
+    get_global_prompts,
     get_global_resources,
     get_global_tools,
 )
@@ -22,6 +23,7 @@ from .protocol import MCPProtocolHandler
 
 # Updated imports for clean types API
 from .types import (
+    PromptHandler,
     ResourceHandler,
     # Direct chuk_mcp types
     ServerInfo,
@@ -180,6 +182,18 @@ class ChukMCPServer:
             self.protocol.register_resource(resource_handler)
             mcp_registry.register_resource(resource_handler.uri, resource_handler)
 
+        # Register global prompts
+        for prompt in get_global_prompts():
+            if hasattr(prompt, "handler"):
+                prompt_handler = prompt
+            else:
+                prompt_handler = PromptHandler.from_function(
+                    prompt.handler, name=prompt.name, description=prompt.description
+                )
+
+            self.protocol.register_prompt(prompt_handler)
+            mcp_registry.register_prompt(prompt_handler.name, prompt_handler)
+
         # Clear global registry to avoid duplicate registrations
         clear_global_registry()
 
@@ -288,6 +302,56 @@ class ChukMCPServer:
 
         return decorator
 
+    def prompt(self, name: str | None = None, description: str | None = None, **kwargs):
+        """
+        Prompt decorator with simple registration.
+
+        Usage:
+            @mcp.prompt
+            def code_review(code: str, language: str = "python") -> str:
+                return f"Please review this {language} code:\\n\\n{code}"
+
+            @mcp.prompt(name="custom_prompt", description="Custom prompt template")
+            def my_prompt(topic: str, style: str = "formal") -> str:
+                return f"Write about {topic} in a {style} style"
+        """
+
+        def decorator(func: Callable) -> Callable:
+            # Simple prompt creation
+            prompt_name = name or func.__name__
+            prompt_description = description or func.__doc__ or f"Prompt: {prompt_name}"
+
+            # Create prompt handler from function
+            prompt_handler = PromptHandler.from_function(func, name=prompt_name, description=prompt_description)
+
+            # Register in protocol handler (for MCP functionality)
+            self.protocol.register_prompt(prompt_handler)
+
+            # Simple metadata for registry
+            metadata = {"function_name": func.__name__, "parameter_count": len(prompt_handler.parameters)}
+
+            # Simple tags
+            tags = ["prompt"]
+            if "tags" in kwargs:
+                tags.extend(kwargs.pop("tags"))
+
+            # Register in MCP registry
+            mcp_registry.register_prompt(prompt_handler.name, prompt_handler, metadata=metadata, tags=tags, **kwargs)
+
+            # Add prompt metadata to function
+            func._mcp_prompt = prompt_handler
+
+            logger.debug(f"Registered prompt: {prompt_handler.name}")
+            return func
+
+        # Handle both @mcp.prompt and @mcp.prompt() usage
+        if callable(name):
+            func = name
+            name = None
+            return decorator(func)
+        else:
+            return decorator
+
     # ============================================================================
     # HTTP Endpoint Registration
     # ============================================================================
@@ -325,6 +389,12 @@ class ChukMCPServer:
         mcp_registry.register_resource(resource_handler.uri, resource_handler, **kwargs)
         logger.debug(f"Added resource: {resource_handler.uri}")
 
+    def add_prompt(self, prompt_handler: PromptHandler, **kwargs):
+        """Manually add an MCP prompt handler."""
+        self.protocol.register_prompt(prompt_handler)
+        mcp_registry.register_prompt(prompt_handler.name, prompt_handler, **kwargs)
+        logger.debug(f"Added prompt: {prompt_handler.name}")
+
     def add_endpoint(self, path: str, handler: Callable, methods: list[str] = None, **kwargs):
         """Manually add a custom HTTP endpoint."""
         http_endpoint_registry.register_endpoint(path, handler, methods=methods, **kwargs)
@@ -354,6 +424,14 @@ class ChukMCPServer:
         self.add_resource(resource_handler, **kwargs)
         return resource_handler
 
+    def register_function_as_prompt(
+        self, func: Callable, name: str | None = None, description: str | None = None, **kwargs
+    ):
+        """Register an existing function as an MCP prompt."""
+        prompt_handler = PromptHandler.from_function(func, name=name, description=description)
+        self.add_prompt(prompt_handler, **kwargs)
+        return prompt_handler
+
     # ============================================================================
     # Component Search and Discovery
     # ============================================================================
@@ -367,6 +445,11 @@ class ChukMCPServer:
         """Search resources by tag."""
         configs = mcp_registry.search_by_tag(tag)
         return [config.component for config in configs if config.component_type.value == "resource"]
+
+    def search_prompts_by_tag(self, tag: str) -> list[PromptHandler]:
+        """Search prompts by tag."""
+        configs = mcp_registry.search_by_tag(tag)
+        return [config.component for config in configs if config.component_type.value == "prompt"]
 
     def search_components_by_tags(self, tags: list[str], match_all: bool = False):
         """Search components by multiple tags."""
@@ -383,6 +466,10 @@ class ChukMCPServer:
     def get_resources(self) -> list[ResourceHandler]:
         """Get all registered MCP resource handlers."""
         return list(self.protocol.resources.values())
+
+    def get_prompts(self) -> list[PromptHandler]:
+        """Get all registered MCP prompt handlers."""
+        return list(self.protocol.prompts.values())
 
     def get_endpoints(self) -> list[dict[str, Any]]:
         """Get all registered custom HTTP endpoints."""
@@ -414,6 +501,7 @@ class ChukMCPServer:
             "mcp_components": {
                 "tools": {"count": len(self.protocol.tools), "names": list(self.protocol.tools.keys())},
                 "resources": {"count": len(self.protocol.resources), "uris": list(self.protocol.resources.keys())},
+                "prompts": {"count": len(self.protocol.prompts), "names": list(self.protocol.prompts.keys())},
                 "stats": mcp_registry.get_stats(),
             },
             "http_endpoints": {
@@ -439,6 +527,12 @@ class ChukMCPServer:
         mcp_registry.clear_type(mcp_registry.MCPComponentType.RESOURCE)
         logger.info("Cleared all resources")
 
+    def clear_prompts(self):
+        """Clear all registered prompts."""
+        self.protocol.prompts.clear()
+        mcp_registry.clear_type(mcp_registry.MCPComponentType.PROMPT)
+        logger.info("Cleared all prompts")
+
     def clear_endpoints(self):
         """Clear all custom HTTP endpoints."""
         http_endpoint_registry.clear_endpoints()
@@ -448,6 +542,7 @@ class ChukMCPServer:
         """Clear all registered components and endpoints."""
         self.clear_tools()
         self.clear_resources()
+        self.clear_prompts()
         self.clear_endpoints()
         logger.info("Cleared all components and endpoints")
 
@@ -521,6 +616,11 @@ class ChukMCPServer:
         print(f"📂 MCP Resources: {mcp_info['resources']['count']}")
         for resource_uri in mcp_info["resources"]["uris"]:
             print(f"   - {resource_uri}")
+        print()
+
+        print(f"💬 MCP Prompts: {mcp_info['prompts']['count']}")
+        for prompt_name in mcp_info["prompts"]["names"]:
+            print(f"   - {prompt_name}")
         print()
 
         # Connection information

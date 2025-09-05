@@ -68,14 +68,18 @@ from .cloud import detect_cloud_provider, is_cloud_environment
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
-from .decorators import resource, tool
+from .decorators import prompt, resource, tool
 from .types import (
-    ResourceHandler as Resource,
-)
-from .types import (
+    MCPPrompt,
     ServerInfo,
     ToolParameter,
     create_server_capabilities,
+)
+from .types import (
+    PromptHandler as Prompt,
+)
+from .types import (
+    ResourceHandler as Resource,
 )
 
 # Import types for advanced usage
@@ -282,6 +286,7 @@ __all__ = [
     # 🪄 MAGIC DECORATORS
     "tool",
     "resource",
+    "prompt",
     "run",
     # 🏭 FACTORY FUNCTIONS
     "create_mcp_server",
@@ -300,6 +305,8 @@ __all__ = [
     # 📚 TYPES & UTILITIES
     "Tool",
     "Resource",
+    "Prompt",
+    "MCPPrompt",
     "ToolParameter",
     "ServerInfo",
     "Capabilities",

@@ -59,6 +59,7 @@ from .errors import (
 
 # Parameter types and schema generation
 from .parameters import ToolParameter
+from .prompts import MCPPrompt, PromptHandler
 from .resources import ResourceHandler
 
 # Serialization utilities
@@ -68,7 +69,7 @@ from .serialization import (
     serialize_tools_list_from_bytes,
 )
 
-# Tool and resource handlers
+# Tool, resource, and prompt handlers
 from .tools import ToolHandler
 
 # ============================================================================
@@ -81,6 +82,8 @@ __all__ = [
     "ToolParameter",
     "ToolHandler",
     "ResourceHandler",
+    "PromptHandler",
+    "MCPPrompt",
     # Framework helpers
     "create_server_capabilities",
     "format_content",
