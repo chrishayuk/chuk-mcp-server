@@ -1,0 +1,2 @@
+# This file indicates that this package supports type hints.
+# It allows type checkers to use the type annotations in this package.

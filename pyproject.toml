@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.2.3"
+version = "0.3.1"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,10 +36,15 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["chuk_mcp_server*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+chuk_mcp_server = ["py.typed", "*.json", "*.yaml", "*.yml", "*.txt", "*.md"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -76,7 +81,7 @@ dev = [
 ]
 
 [project.scripts]
-chuk-mcp-server = "chuk_mcp_server.main:main"
+chuk-mcp-server = "chuk_mcp_server.cli:main"
 
 # Ruff configuration
 [tool.ruff]

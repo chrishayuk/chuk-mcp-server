@@ -189,6 +189,7 @@ class TestSmartConfig:
                                                 "log_level",
                                                 "performance_mode",
                                                 "containerized",
+                                                "transport_mode",
                                             }
                                             assert set(result.keys()) == expected_keys
 
