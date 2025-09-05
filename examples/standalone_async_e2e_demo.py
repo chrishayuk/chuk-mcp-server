@@ -18,13 +18,13 @@ import httpx
 
 class StandaloneAsyncDemo:
     """Self-contained async native demo showcasing advanced capabilities"""
-    
+
     def __init__(self):
         self.server_process: Optional[subprocess.Popen] = None
         self.server_url = "http://localhost:8001"
         self.mcp_url = f"{self.server_url}/mcp"
         self.temp_file = "standalone_async_server.py"
-    
+
     async def run_demo(self):
         """Run the complete standalone demo"""
         print("🚀 Standalone Async Native ChukMCPServer Demo")
@@ -32,48 +32,49 @@ class StandaloneAsyncDemo:
         print("This demo creates and tests a full async native server")
         print("with advanced concurrent, streaming, and monitoring capabilities")
         print("=" * 60)
-        
+
         try:
             # Create the server file
             self._create_server_file()
-            
+
             # Start the server
             await self._start_server()
-            
+
             # Wait for server to be ready
             await self._wait_for_server()
-            
+
             # Discover capabilities
             await self._discover_capabilities()
-            
+
             # Test basic tools
             await self._test_basic_tools()
-            
+
             # Test async features
             await self._test_async_features()
-            
+
             # Test resources
             await self._test_resources()
-            
+
             # Performance test
             await self._performance_test()
-            
+
             # Final comparison
             self._show_comparison()
-            
+
         except KeyboardInterrupt:
             print("\n⚠️ Demo interrupted")
         except Exception as e:
             print(f"\n❌ Demo failed: {e}")
             import traceback
+
             traceback.print_exc()
         finally:
             await self._cleanup()
-    
+
     def _create_server_file(self):
         """Create the async native server file"""
         print("📝 Creating async native server...")
-        
+
         server_code = '''#!/usr/bin/env python3
 """Standalone Async Native ChukMCPServer with advanced capabilities"""
 import asyncio
@@ -483,29 +484,26 @@ if __name__ == "__main__":
     print("🌟 Starting Standalone Async Native ChukMCPServer...")
     mcp.run(host="localhost", port=8001, debug=False)
 '''
-        
+
         with open(self.temp_file, "w") as f:
             f.write(server_code)
-        
+
         print("   ✅ Server file created")
-    
+
     async def _start_server(self):
         """Start the async native server"""
         print("🚀 Starting async native server on port 8001...")
-        
+
         self.server_process = subprocess.Popen(
-            [sys.executable, self.temp_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            [sys.executable, self.temp_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        
+
         print("   Server starting...")
-    
+
     async def _wait_for_server(self, max_wait: int = 15):
         """Wait for server to be ready"""
         print("⏳ Waiting for server to be ready...")
-        
+
         async with httpx.AsyncClient() as client:
             for attempt in range(max_wait):
                 try:
@@ -515,113 +513,116 @@ if __name__ == "__main__":
                         return
                 except Exception:
                     await asyncio.sleep(1)
-            
+
             raise Exception("Server failed to start")
-    
+
     async def _discover_capabilities(self):
         """Discover server capabilities"""
         print("\n🔍 Discovering Server Capabilities...")
-        
+
         async with httpx.AsyncClient() as client:
             # Initialize session
             session_id = await self._init_session(client)
             headers = self._get_headers(session_id)
-            
+
             # Get tools
-            tools_response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/list",
-                "params": {}
-            }, headers=headers)
-            
+            tools_response = await client.post(
+                f"{self.mcp_url}",
+                json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+                headers=headers,
+            )
+
             tools = []
             if tools_response.status_code == 200:
                 data = tools_response.json()
-                if 'result' in data and 'tools' in data['result']:
-                    tools = data['result']['tools']
-            
+                if "result" in data and "tools" in data["result"]:
+                    tools = data["result"]["tools"]
+
             # Get resources
-            resources_response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 3,
-                "method": "resources/list",
-                "params": {}
-            }, headers=headers)
-            
+            resources_response = await client.post(
+                f"{self.mcp_url}",
+                json={"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}},
+                headers=headers,
+            )
+
             resources = []
             if resources_response.status_code == 200:
                 data = resources_response.json()
-                if 'result' in data and 'resources' in data['result']:
-                    resources = data['result']['resources']
-            
+                if "result" in data and "resources" in data["result"]:
+                    resources = data["result"]["resources"]
+
             print(f"   📋 Tools found: {len(tools)}")
             for tool in tools:
                 print(f"      - {tool['name']}: {tool.get('description', 'No description')[:50]}...")
-            
+
             print(f"   📄 Resources found: {len(resources)}")
             for resource in resources:
                 print(f"      - {resource['uri']}: {resource.get('name', 'No name')}")
-    
+
     async def _test_basic_tools(self):
         """Test basic async tools"""
         print("\n🔧 Testing Basic Async Tools...")
-        
+
         async with httpx.AsyncClient() as client:
             session_id = await self._init_session(client)
             headers = self._get_headers(session_id)
-            
+
             # Test async_hello
             print("   Testing async_hello...")
             start_time = time.time()
-            
-            response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 4,
-                "method": "tools/call",
-                "params": {
-                    "name": "async_hello",
-                    "arguments": {"name": "Demo User", "delay": 0.1}
-                }
-            }, headers=headers)
-            
+
+            response = await client.post(
+                f"{self.mcp_url}",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {"name": "async_hello", "arguments": {"name": "Demo User", "delay": 0.1}},
+                },
+                headers=headers,
+            )
+
             elapsed = time.time() - start_time
-            
+
             if response.status_code == 200:
                 result = response.json()
                 content = self._extract_content(result)
                 print(f"      ✅ Success in {elapsed:.3f}s: {content}")
             else:
                 print(f"      ❌ Failed: {response.status_code}")
-    
+
     async def _test_async_features(self):
         """Test advanced async features"""
         print("\n⚡ Testing Advanced Async Features...")
-        
+
         async with httpx.AsyncClient() as client:
             session_id = await self._init_session(client)
             headers = self._get_headers(session_id)
-            
+
             # Test concurrent API calls
             print("   🌐 Testing concurrent_api_calls...")
             start_time = time.time()
-            
-            response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 5,
-                "method": "tools/call",
-                "params": {
-                    "name": "concurrent_api_calls",
-                    "arguments": {"endpoints": ["users", "orders", "inventory", "analytics", "reports"]}
-                }
-            }, headers=headers)
-            
+
+            response = await client.post(
+                f"{self.mcp_url}",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "concurrent_api_calls",
+                        "arguments": {"endpoints": ["users", "orders", "inventory", "analytics", "reports"]},
+                    },
+                },
+                headers=headers,
+            )
+
             elapsed = time.time() - start_time
-            
+
             if response.status_code == 200:
                 result = response.json()
                 content = self._extract_content(result)
-                if 'error' in content:
+                if "error" in content:
                     print(f"      ❌ Error: {content['error']}")
                 else:
                     print(f"      ✅ Success in {elapsed:.3f}s")
@@ -631,27 +632,28 @@ if __name__ == "__main__":
                     print(f"         Time saved: {content.get('performance', {}).get('time_saved_by_concurrency', 0)}s")
             else:
                 print(f"      ❌ Failed: {response.status_code}")
-            
+
             # Test stream processing
             print("   🌊 Testing stream_processing...")
             start_time = time.time()
-            
-            response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 6,
-                "method": "tools/call",
-                "params": {
-                    "name": "stream_processing",
-                    "arguments": {"item_count": 5, "process_delay": 0.05}
-                }
-            }, headers=headers)
-            
+
+            response = await client.post(
+                f"{self.mcp_url}",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "tools/call",
+                    "params": {"name": "stream_processing", "arguments": {"item_count": 5, "process_delay": 0.05}},
+                },
+                headers=headers,
+            )
+
             elapsed = time.time() - start_time
-            
+
             if response.status_code == 200:
                 result = response.json()
                 content = self._extract_content(result)
-                if 'error' in content:
+                if "error" in content:
                     print(f"      ❌ Error: {content['error']}")
                 else:
                     print(f"      ✅ Success in {elapsed:.3f}s")
@@ -660,27 +662,31 @@ if __name__ == "__main__":
                     print(f"         Items/sec: {content.get('streaming_efficiency', {}).get('items_per_second', 0)}")
             else:
                 print(f"      ❌ Failed: {response.status_code}")
-            
+
             # Test batch processing
             print("   📦 Testing batch_processing...")
             start_time = time.time()
-            
-            response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 7,
-                "method": "tools/call",
-                "params": {
-                    "name": "batch_processing",
-                    "arguments": {"items": ["item1", "item2", "item3", "item4", "item5", "item6"], "batch_size": 3}
-                }
-            }, headers=headers)
-            
+
+            response = await client.post(
+                f"{self.mcp_url}",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "batch_processing",
+                        "arguments": {"items": ["item1", "item2", "item3", "item4", "item5", "item6"], "batch_size": 3},
+                    },
+                },
+                headers=headers,
+            )
+
             elapsed = time.time() - start_time
-            
+
             if response.status_code == 200:
                 result = response.json()
                 content = self._extract_content(result)
-                if 'error' in content:
+                if "error" in content:
                     print(f"      ❌ Error: {content['error']}")
                 else:
                     print(f"      ✅ Success in {elapsed:.3f}s")
@@ -689,27 +695,28 @@ if __name__ == "__main__":
                     print(f"         Items/sec: {content.get('efficiency', {}).get('items_per_second', 0)}")
             else:
                 print(f"      ❌ Failed: {response.status_code}")
-            
+
             # Test real-time monitoring
             print("   📊 Testing real_time_monitoring...")
             start_time = time.time()
-            
-            response = await client.post(f"{self.mcp_url}", json={
-                "jsonrpc": "2.0",
-                "id": 8,
-                "method": "tools/call",
-                "params": {
-                    "name": "real_time_monitoring",
-                    "arguments": {"duration": 2, "interval": 0.4}
-                }
-            }, headers=headers)
-            
+
+            response = await client.post(
+                f"{self.mcp_url}",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 8,
+                    "method": "tools/call",
+                    "params": {"name": "real_time_monitoring", "arguments": {"duration": 2, "interval": 0.4}},
+                },
+                headers=headers,
+            )
+
             elapsed = time.time() - start_time
-            
+
             if response.status_code == 200:
                 result = response.json()
                 content = self._extract_content(result)
-                if 'error' in content:
+                if "error" in content:
                     print(f"      ❌ Error: {content['error']}")
                 else:
                     print(f"      ✅ Success in {elapsed:.3f}s")
@@ -718,37 +725,36 @@ if __name__ == "__main__":
                     print(f"         Avg Memory: {content.get('summary', {}).get('avg_memory_percent', 0)}%")
             else:
                 print(f"      ❌ Failed: {response.status_code}")
-    
+
     async def _test_resources(self):
         """Test async resources"""
         print("\n📄 Testing Async Resources...")
-        
+
         async with httpx.AsyncClient() as client:
             session_id = await self._init_session(client)
             headers = self._get_headers(session_id)
-            
+
             resources = ["async://live-dashboard", "async://performance-report"]
-            
+
             for uri in resources:
                 print(f"   Reading {uri}...")
                 start_time = time.time()
-                
-                response = await client.post(f"{self.mcp_url}", json={
-                    "jsonrpc": "2.0",
-                    "id": 9,
-                    "method": "resources/read",
-                    "params": {"uri": uri}
-                }, headers=headers)
-                
+
+                response = await client.post(
+                    f"{self.mcp_url}",
+                    json={"jsonrpc": "2.0", "id": 9, "method": "resources/read", "params": {"uri": uri}},
+                    headers=headers,
+                )
+
                 elapsed = time.time() - start_time
-                
+
                 if response.status_code == 200:
                     result = response.json()
-                    if 'result' in result and 'contents' in result['result']:
-                        contents = result['result']['contents']
+                    if "result" in result and "contents" in result["result"]:
+                        contents = result["result"]["contents"]
                         if contents:
                             content_size = len(str(contents[0]))
-                            mime_type = contents[0].get('mimeType', 'unknown')
+                            mime_type = contents[0].get("mimeType", "unknown")
                             print(f"      ✅ Success in {elapsed:.3f}s - {content_size} chars ({mime_type})")
                         else:
                             print(f"      ✅ Success in {elapsed:.3f}s - Empty content")
@@ -756,61 +762,62 @@ if __name__ == "__main__":
                         print(f"      ❌ Unexpected response format")
                 else:
                     print(f"      ❌ Failed: {response.status_code}")
-    
+
     async def _performance_test(self):
         """Quick performance test"""
         print("\n🚀 Performance Test...")
-        
+
         async with httpx.AsyncClient() as client:
             session_id = await self._init_session(client)
             headers = self._get_headers(session_id)
-            
+
             # Test rapid calls
             print("   Testing rapid sequential calls...")
             iterations = 10
             times = []
-            
+
             for i in range(iterations):
                 start_time = time.time()
-                
-                response = await client.post(f"{self.mcp_url}", json={
-                    "jsonrpc": "2.0",
-                    "id": 10 + i,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "async_hello",
-                        "arguments": {"name": f"User{i}", "delay": 0.01}
-                    }
-                }, headers=headers)
-                
+
+                response = await client.post(
+                    f"{self.mcp_url}",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 10 + i,
+                        "method": "tools/call",
+                        "params": {"name": "async_hello", "arguments": {"name": f"User{i}", "delay": 0.01}},
+                    },
+                    headers=headers,
+                )
+
                 elapsed = time.time() - start_time
                 times.append(elapsed)
-                
+
                 if response.status_code != 200:
                     print(f"      Request {i} failed")
-            
+
             if times:
                 avg_time = sum(times) / len(times)
                 min_time = min(times)
                 max_time = max(times)
                 rps = 1 / avg_time if avg_time > 0 else 0
-                
+
                 print(f"   📊 Performance Results:")
                 print(f"      Iterations: {iterations}")
-                print(f"      Avg time: {avg_time*1000:.1f}ms")
-                print(f"      Min time: {min_time*1000:.1f}ms")
-                print(f"      Max time: {max_time*1000:.1f}ms")
+                print(f"      Avg time: {avg_time * 1000:.1f}ms")
+                print(f"      Min time: {min_time * 1000:.1f}ms")
+                print(f"      Max time: {max_time * 1000:.1f}ms")
                 print(f"      RPS: {rps:.1f}")
-                
+
                 if avg_time < 0.05:
                     rating = "🚀 Excellent"
                 elif avg_time < 0.1:
                     rating = "✅ Good"
                 else:
                     rating = "⚡ Fair"
-                
+
                 print(f"      Rating: {rating}")
-    
+
     def _show_comparison(self):
         """Show comparison with traditional server"""
         print("\n📊 Async Native vs Traditional Comparison")
@@ -838,61 +845,64 @@ if __name__ == "__main__":
         print("🏆 Both demonstrate excellent ChukMCPServer capabilities!")
         print("   The async server showcases advanced concurrent programming patterns")
         print("=" * 60)
-    
+
     async def _init_session(self, client: httpx.AsyncClient) -> str:
         """Initialize MCP session and return session ID"""
-        init_response = await client.post(f"{self.mcp_url}", json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {"name": "standalone-demo", "version": "1.0.0"}
-            }
-        })
-        
-        session_id = init_response.headers.get('Mcp-Session-Id')
-        
+        init_response = await client.post(
+            f"{self.mcp_url}",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "standalone-demo", "version": "1.0.0"},
+                },
+            },
+        )
+
+        session_id = init_response.headers.get("Mcp-Session-Id")
+
         # Send initialized notification
         headers = {"Content-Type": "application/json"}
         if session_id:
-            headers['Mcp-Session-Id'] = session_id
-        
-        await client.post(f"{self.mcp_url}", json={
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        }, headers=headers)
-        
+            headers["Mcp-Session-Id"] = session_id
+
+        await client.post(
+            f"{self.mcp_url}",
+            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            headers=headers,
+        )
+
         return session_id
-    
+
     def _get_headers(self, session_id: str) -> dict:
         """Get headers with session ID"""
         headers = {"Content-Type": "application/json"}
         if session_id:
-            headers['Mcp-Session-Id'] = session_id
+            headers["Mcp-Session-Id"] = session_id
         return headers
-    
+
     def _extract_content(self, result: dict) -> any:
         """Extract content from MCP result"""
-        if 'result' in result and 'content' in result['result']:
-            content = result['result']['content']
+        if "result" in result and "content" in result["result"]:
+            content = result["result"]["content"]
             if isinstance(content, list) and len(content) > 0:
                 content_item = content[0]
-                if isinstance(content_item, dict) and 'text' in content_item:
+                if isinstance(content_item, dict) and "text" in content_item:
                     try:
-                        return json.loads(content_item['text'])
+                        return json.loads(content_item["text"])
                     except json.JSONDecodeError:
-                        return content_item['text']
+                        return content_item["text"]
                 return content_item
             return content
         return result
-    
+
     async def _cleanup(self):
         """Cleanup resources"""
         print("\n🧹 Cleaning up...")
-        
+
         if self.server_process:
             try:
                 self.server_process.terminate()
@@ -903,7 +913,7 @@ if __name__ == "__main__":
                 print("   🔪 Server force killed")
             except Exception as e:
                 print(f"   ⚠️ Error stopping server: {e}")
-        
+
         # Clean up temp file
         if os.path.exists(self.temp_file):
             os.remove(self.temp_file)

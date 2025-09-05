@@ -7,15 +7,14 @@ This module provides content formatting functions using chuk_mcp types
 with orjson optimization for maximum performance.
 """
 
+from typing import Any
+
 import orjson
-from typing import List, Dict, Any
 
-from .base import (
-    TextContent, ImageContent, AudioContent, EmbeddedResource,
-    create_text_content, content_to_dict
-)
+from .base import AudioContent, EmbeddedResource, ImageContent, TextContent, content_to_dict, create_text_content
 
-def format_content(content) -> List[Dict[str, Any]]:
+
+def format_content(content: Any) -> list[dict[str, Any]]:
     """Format content using chuk_mcp types with orjson optimization."""
     if isinstance(content, str):
         text_content = create_text_content(content)
@@ -25,7 +24,7 @@ def format_content(content) -> List[Dict[str, Any]]:
         json_str = orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
         text_content = create_text_content(json_str)
         return [content_to_dict(text_content)]
-    elif isinstance(content, (TextContent, ImageContent, AudioContent, EmbeddedResource)):
+    elif isinstance(content, TextContent | ImageContent | AudioContent | EmbeddedResource):
         return [content_to_dict(content)]
     elif isinstance(content, list):
         result = []
@@ -36,14 +35,16 @@ def format_content(content) -> List[Dict[str, Any]]:
         text_content = create_text_content(str(content))
         return [content_to_dict(text_content)]
 
+
 def format_content_as_text(content: Any) -> str:
     """Format any content as plain text."""
     if isinstance(content, str):
         return content
-    elif isinstance(content, (dict, list)):
+    elif isinstance(content, dict | list):
         return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
     else:
         return str(content)
+
 
 def format_content_as_json(content: Any) -> str:
     """Format any content as JSON string with orjson."""
@@ -57,5 +58,6 @@ def format_content_as_json(content: Any) -> str:
             return orjson.dumps(content).decode()
     else:
         return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
+
 
 __all__ = ["format_content", "format_content_as_text", "format_content_as_json"]

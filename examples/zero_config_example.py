@@ -16,12 +16,13 @@ import asyncio
 import time
 import json
 
+
 # ✨ CLEAN: No server creation, no configuration needed!
 @tool
 async def hello(name: str = "World") -> str:
     """
     Say hello to someone (async).
-    
+
     🧠 Auto-inferred: category=general, tags=["tool", "general"]
     ⚡ Async for maximum concurrency
     """
@@ -29,11 +30,12 @@ async def hello(name: str = "World") -> str:
     await asyncio.sleep(0.001)  # 1ms simulated async operation
     return f"Hello, {name}! (async response)"
 
-@tool  
+
+@tool
 async def calculate(expression: str) -> str:
     """
     Calculate mathematical expressions (async).
-    
+
     🧠 Auto-inferred: category=mathematics, tags=["tool", "mathematics"]
     ⚡ Async for non-blocking computation
     """
@@ -45,16 +47,18 @@ async def calculate(expression: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
+
 @tool
 async def fetch_data(url: str = "https://httpbin.org/json") -> dict:
     """
     Fetch data from a URL (truly async).
-    
+
     🧠 Auto-inferred: category=network, tags=["tool", "network"]
     🌐 Real async HTTP client for maximum performance
     """
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(url)
             data = response.json()
@@ -63,28 +67,25 @@ async def fetch_data(url: str = "https://httpbin.org/json") -> dict:
                 "status": response.status_code,
                 "data": data,
                 "async": True,
-                "performance_optimized": True
+                "performance_optimized": True,
             }
     except Exception as e:
-        return {
-            "url": url,
-            "error": str(e),
-            "async": True
-        }
+        return {"url": url, "error": str(e), "async": True}
+
 
 @tool
 async def process_data_async(data: list, operation: str = "sum") -> dict:
     """
     Process data asynchronously with different operations.
-    
+
     🧠 Auto-inferred: category=data_processing, tags=["tool", "data_processing"]
     ⚡ Async processing for large datasets
     """
     start_time = time.time()
-    
+
     # Simulate async data processing
     await asyncio.sleep(0.001)  # Simulated async I/O
-    
+
     if operation == "sum":
         result = sum(data) if all(isinstance(x, (int, float)) for x in data) else 0
     elif operation == "count":
@@ -93,54 +94,53 @@ async def process_data_async(data: list, operation: str = "sum") -> dict:
         result = sum(data) / len(data) if data and all(isinstance(x, (int, float)) for x in data) else 0
     else:
         result = f"Unknown operation: {operation}"
-    
+
     processing_time = time.time() - start_time
-    
+
     return {
         "operation": operation,
         "input_size": len(data),
         "result": result,
         "processing_time_ms": round(processing_time * 1000, 2),
-        "async": True
+        "async": True,
     }
+
 
 @tool
 async def database_query_async(table: str = "users", limit: int = 10) -> dict:
     """
     Simulate async database query.
-    
+
     🧠 Auto-inferred: category=database, tags=["tool", "database"]
     🗄️ Async database operations for scalability
     """
     # Simulate async database connection and query
     await asyncio.sleep(0.002)  # 2ms simulated DB query time
-    
+
     # Generate mock data
-    data = [
-        {"id": i, "table": table, "name": f"user_{i}", "active": i % 2 == 0}
-        for i in range(1, limit + 1)
-    ]
-    
+    data = [{"id": i, "table": table, "name": f"user_{i}", "active": i % 2 == 0} for i in range(1, limit + 1)]
+
     return {
         "table": table,
         "limit": limit,
         "rows": data,
         "query_time_ms": 2,
         "async": True,
-        "performance_optimized": True
+        "performance_optimized": True,
     }
+
 
 @resource("config://settings")
 async def get_settings() -> dict:
     """
     Server configuration (async resource).
-    
+
     🧠 Auto-inferred: mime_type=application/json, tags=["resource", "config"]
     ⚡ Async resource loading for non-blocking access
     """
     # Simulate async config loading (maybe from distributed config service)
     await asyncio.sleep(0.0005)  # 0.5ms simulated async config load
-    
+
     return {
         "app": "Zero Config Demo",
         "version": "1.0.0",
@@ -150,24 +150,25 @@ async def get_settings() -> dict:
         "max_rps": "38,000+",
         "features": [
             "async_tools",
-            "async_resources", 
+            "async_resources",
             "zero_configuration",
             "auto_inference",
-            "performance_optimization"
-        ]
+            "performance_optimization",
+        ],
     }
 
-@resource("docs://readme")  
+
+@resource("docs://readme")
 async def get_readme() -> str:
     """
     Project documentation (async resource).
-    
+
     🧠 Auto-inferred: mime_type=text/markdown, tags=["resource", "docs"]
     📚 Async documentation loading
     """
     # Simulate async documentation loading
     await asyncio.sleep(0.001)  # 1ms simulated async doc load
-    
+
     return """# Zero Configuration MCP Server - Async & Performance Optimized
 
 This server was created with **ZERO** configuration and optimized for maximum async performance!
@@ -203,17 +204,18 @@ This server was created with **ZERO** configuration and optimized for maximum as
 All tools are async-optimized for maximum performance and concurrency!
 """
 
+
 @resource("metrics://performance")
 async def get_performance_metrics() -> dict:
     """
     Real-time performance metrics (async resource).
-    
+
     🧠 Auto-inferred: mime_type=application/json, tags=["resource", "metrics"]
     📊 Async performance monitoring
     """
     # Simulate async metrics collection
     await asyncio.sleep(0.001)  # 1ms simulated metrics gathering
-    
+
     return {
         "timestamp": time.time(),
         "performance": {
@@ -222,45 +224,46 @@ async def get_performance_metrics() -> dict:
             "resource_reads_rps": "35,000+",
             "avg_latency_ms": 3.0,
             "max_concurrency": 1000,
-            "success_rate": "100%"
+            "success_rate": "100%",
         },
         "async_benefits": {
             "non_blocking": True,
             "concurrent_execution": True,
             "scalable_architecture": True,
-            "optimal_resource_usage": True
+            "optimal_resource_usage": True,
         },
         "optimization": {
             "logging_level": "WARNING",
             "debug_mode": False,
             "async_tools": True,
-            "zero_config_overhead": True
+            "zero_config_overhead": True,
         },
         "async": True,
-        "real_time": True
+        "real_time": True,
     }
+
 
 if __name__ == "__main__":
     # ✨ ASYNC PERFORMANCE MODE: Maximum async performance
     import os
     import logging
-    
+
     print("🌊 ChukMCPServer - Async Zero Config Performance Mode")
     print("=" * 70)
     print("⚡ Async tools & resources for maximum concurrency")
     print("🎯 Target: 38,000+ RPS with perfect async scaling")
     print("🌊 Non-blocking operations for ultimate performance")
     print()
-    
+
     print("🚀 Async Features Enabled:")
     print("   🌊 Async tools: Non-blocking execution")
     print("   📂 Async resources: Concurrent loading")
     print("   🔄 Async I/O: Database, network, file operations")
     print("   ⚡ Performance: Zero blocking, maximum throughput")
     print()
-    
+
     # Set optimal logging level (WARNING = minimal overhead)
     logging.basicConfig(level=logging.WARNING)
-    
+
     # Run with async performance optimizations
     run(debug=False)  # Explicitly disable debug mode for maximum async performance
