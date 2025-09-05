@@ -7,7 +7,6 @@ Demo of the clean architecture where:
 - Clean separation of concerns
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -75,7 +74,7 @@ def demonstrate_clean_separation():
 
         cloud_summary = summary["cloud_summary"]
         if cloud_summary["detected"]:
-            print(f"\n   ☁️  Cloud Integration:")
+            print("\n   ☁️  Cloud Integration:")
             print(f"      Provider: {cloud_summary['display_name']}")
             print(f"      Service: {cloud_summary['service_type']}")
             print(f"      Environment: {cloud_summary['environment_type']}")
@@ -161,7 +160,7 @@ class DigitalOceanProvider(CloudProvider):
     print("   3️⃣ Import in cloud/providers/__init__.py")
     print("   4️⃣ Done! Zero configuration works everywhere")
 
-    print(f"\n💻 Example Code:")
+    print("\n💻 Example Code:")
     print(example_code)
 
 

@@ -1,10 +1,10 @@
 # quick_benchmark.py - Fast, simple MCP server benchmark using httpx
 import asyncio
-import httpx
-import json
-import time
 import statistics
-from typing import Dict, List, Optional, Any
+import time
+from typing import Any
+
+import httpx
 
 
 class QuickBenchmark:
@@ -13,9 +13,9 @@ class QuickBenchmark:
     def __init__(self, server_url: str, server_name: str = "MCP Server"):
         self.server_url = server_url
         self.server_name = server_name
-        self.session_id: Optional[str] = None
-        self.tools: List[Dict] = []
-        self.resources: List[Dict] = []
+        self.session_id: str | None = None
+        self.tools: list[dict] = []
+        self.resources: list[dict] = []
 
     async def run_benchmark(self):
         """Run quick benchmark suite"""
@@ -83,7 +83,7 @@ class QuickBenchmark:
         except Exception as e:
             print(f"❌ Session setup failed: {e}")
 
-    async def _discover_capabilities(self, client: httpx.AsyncClient, headers: Dict):
+    async def _discover_capabilities(self, client: httpx.AsyncClient, headers: dict):
         """Discover available tools and resources"""
         try:
             # Get tools
@@ -164,7 +164,7 @@ class QuickBenchmark:
                     if response.status_code == 200:
                         response.json()  # Parse response
                     times.append(time.time() - start)
-            except Exception as e:
+            except Exception:
                 times.append(time.time() - start)
 
         return self._calc_stats("Initialization", times)
@@ -278,7 +278,7 @@ class QuickBenchmark:
                     if response.status_code == 200:
                         response.json()  # Parse response
                     times.append(time.time() - start)
-            except Exception as e:
+            except Exception:
                 times.append(time.time() - start)
 
         total_time = time.time() - total_start
@@ -299,7 +299,7 @@ class QuickBenchmark:
                     if response.status_code == 200:
                         response.json()  # Parse response
                     times.append(time.time() - start)
-            except Exception as e:
+            except Exception:
                 times.append(time.time() - start)
 
         return self._calc_stats(name, times)
@@ -311,7 +311,7 @@ class QuickBenchmark:
             headers["Mcp-Session-Id"] = self.session_id
         return headers
 
-    def _get_tool_arguments(self, tool: Dict) -> Dict[str, Any]:
+    def _get_tool_arguments(self, tool: dict) -> dict[str, Any]:
         """Smart argument detection for tool testing"""
         tool_name = tool["name"].lower()
 
@@ -359,7 +359,7 @@ class QuickBenchmark:
 
             return args
 
-    def _calc_stats(self, name: str, times: List[float], total_time: float = None):
+    def _calc_stats(self, name: str, times: list[float], total_time: float = None):
         """Calculate statistics from timing data"""
         if not times:
             return {"name": name, "avg_ms": 0, "min_ms": 0, "max_ms": 0, "rps": 0, "count": 0}
@@ -387,7 +387,7 @@ class QuickBenchmark:
             "count": len(filtered_times),
         }
 
-    def _print_results(self, results: Dict):
+    def _print_results(self, results: dict):
         """Print benchmark results"""
         print("\n" + "=" * 60)
         print("📊 QUICK BENCHMARK RESULTS")

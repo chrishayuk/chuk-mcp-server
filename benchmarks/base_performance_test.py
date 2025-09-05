@@ -7,13 +7,13 @@ Tests both HTTP endpoints and MCP protocol performance using httpx.
 """
 
 import asyncio
-import httpx
-import json
-import time
 import statistics
 import sys
-from typing import Dict, List, Any, Optional
+import time
 from dataclasses import dataclass
+from typing import Any
+
+import httpx
 
 
 @dataclass
@@ -32,7 +32,7 @@ class PerformanceResult:
     max_response_ms: float
     p95_response_ms: float
     success_rate: float
-    error_details: Dict[str, int]
+    error_details: dict[str, int]
 
 
 class ChukMCPPerformanceTest:
@@ -41,8 +41,8 @@ class ChukMCPPerformanceTest:
     def __init__(self, base_url: str = "http://localhost:8001"):
         self.base_url = base_url.rstrip("/")
         self.mcp_url = f"{self.base_url}/mcp"
-        self.results: List[PerformanceResult] = []
-        self.session_id: Optional[str] = None
+        self.results: list[PerformanceResult] = []
+        self.session_id: str | None = None
 
     async def run_full_test_suite(self):
         """Run comprehensive performance test suite"""
@@ -189,7 +189,7 @@ class ChukMCPPerformanceTest:
                 else:
                     print(f"      ⚠️  Below target ({expected:,} RPS)")
             else:
-                print(f"   ❌ Endpoint not available or failed")
+                print("   ❌ Endpoint not available or failed")
 
     async def _test_mcp_operations(self):
         """Test MCP protocol operations"""
@@ -409,7 +409,7 @@ class ChukMCPPerformanceTest:
                 print("❌ No requests processed")
 
     async def _test_single_endpoint(
-        self, endpoint: Dict[str, Any], concurrency: int, duration: float
+        self, endpoint: dict[str, Any], concurrency: int, duration: float
     ) -> PerformanceResult:
         """Test a single HTTP endpoint with given concurrency"""
 
@@ -535,7 +535,7 @@ class ChukMCPPerformanceTest:
                 error_details=all_error_details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return PerformanceResult(
                 endpoint=f"{endpoint['method']} {endpoint['path']}",
                 concurrency=concurrency,
@@ -553,7 +553,7 @@ class ChukMCPPerformanceTest:
             )
 
     async def _test_mcp_operation(
-        self, operation: Dict[str, Any], concurrency: int, duration: float
+        self, operation: dict[str, Any], concurrency: int, duration: float
     ) -> PerformanceResult:
         """Test a single MCP operation with given concurrency"""
 
@@ -671,7 +671,7 @@ class ChukMCPPerformanceTest:
                 error_details=all_error_details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return PerformanceResult(
                 endpoint=f"MCP {operation['name']}",
                 concurrency=concurrency,
@@ -702,7 +702,7 @@ class ChukMCPPerformanceTest:
         best_rps = max(self.results, key=lambda r: r.rps)
         best_latency = min(self.results, key=lambda r: r.avg_response_ms)
 
-        print(f"🚀 Peak Performance:")
+        print("🚀 Peak Performance:")
         print(f"   Best RPS: {best_rps.rps:,.1f} ({best_rps.endpoint})")
         print(f"   Best Latency: {best_latency.avg_response_ms:.2f}ms ({best_latency.endpoint})")
 
@@ -711,7 +711,7 @@ class ChukMCPPerformanceTest:
         total_successful = sum(r.successful_requests for r in self.results)
         overall_success_rate = (total_successful / total_requests * 100) if total_requests > 0 else 0
 
-        print(f"\n📈 Overall Statistics:")
+        print("\n📈 Overall Statistics:")
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Overall Success Rate: {overall_success_rate:.1f}%")
         print(f"   Endpoints Tested: {len(set(r.endpoint for r in self.results))}")
@@ -732,7 +732,7 @@ class ChukMCPPerformanceTest:
         print(f"\n🏆 Performance Grade: {grade}")
 
         # Detailed results table
-        print(f"\n📋 Detailed Results:")
+        print("\n📋 Detailed Results:")
         print(f"{'Endpoint':<25} {'RPS':<10} {'Avg(ms)':<10} {'Success%':<10}")
         print("-" * 60)
         for result in self.results:
@@ -742,7 +742,7 @@ class ChukMCPPerformanceTest:
             )
 
         # Recommendations
-        print(f"\n💡 Recommendations:")
+        print("\n💡 Recommendations:")
         if best_rps.rps > 5000:
             print("   ✅ Good baseline performance detected")
             print("   🚀 Ready for optimization phase")
@@ -771,8 +771,8 @@ async def main():
         base_url = sys.argv[1]
 
     print("🧪 ChukMCPServer - Base Performance Testing")
-    print(f"📝 This test works with actual ChukMCPServer endpoints")
-    print(f"🎯 Target: Establish baseline and identify optimization opportunities")
+    print("📝 This test works with actual ChukMCPServer endpoints")
+    print("🎯 Target: Establish baseline and identify optimization opportunities")
     print()
 
     test = ChukMCPPerformanceTest(base_url)

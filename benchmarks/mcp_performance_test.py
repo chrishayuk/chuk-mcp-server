@@ -15,13 +15,13 @@ Test Categories:
 """
 
 import asyncio
-import httpx
-import json
-import time
 import statistics
 import sys
-from typing import Dict, List, Any, Optional
+import time
 from dataclasses import dataclass
+from typing import Any
+
+import httpx
 
 
 @dataclass
@@ -41,9 +41,9 @@ class MCPPerformanceResult:
     p95_response_ms: float
     p99_response_ms: float
     success_rate: float
-    mcp_errors: Dict[str, int]
+    mcp_errors: dict[str, int]
     throughput_mb_per_sec: float
-    session_info: Dict[str, Any]
+    session_info: dict[str, Any]
 
 
 class MCPPerformanceTest:
@@ -52,11 +52,11 @@ class MCPPerformanceTest:
     def __init__(self, mcp_url: str = "http://localhost:8000/mcp"):
         self.mcp_url = mcp_url
         self.base_url = mcp_url.replace("/mcp", "")
-        self.session_id: Optional[str] = None
-        self.server_info: Dict[str, Any] = {}
-        self.available_tools: List[Dict[str, Any]] = []
-        self.available_resources: List[Dict[str, Any]] = []
-        self.results: List[MCPPerformanceResult] = []
+        self.session_id: str | None = None
+        self.server_info: dict[str, Any] = {}
+        self.available_tools: list[dict[str, Any]] = []
+        self.available_resources: list[dict[str, Any]] = []
+        self.results: list[MCPPerformanceResult] = []
 
         # HTTP client configuration optimized for performance testing
         self.limits = httpx.Limits(max_keepalive_connections=200, max_connections=1000, keepalive_expiry=30.0)
@@ -120,7 +120,7 @@ class MCPPerformanceTest:
                 # Discover MCP capabilities
                 await self._discover_mcp_capabilities(client)
 
-                print(f"   ✅ MCP protocol available")
+                print("   ✅ MCP protocol available")
                 print(
                     f"   📋 Server: {self.server_info.get('name', 'unknown')} v{self.server_info.get('version', 'unknown')}"
                 )
@@ -229,14 +229,14 @@ class MCPPerformanceTest:
             except Exception as e:
                 print(f"   ⚠️  Warm-up issues: {e}")
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get standard MCP request headers"""
         headers = {"Content-Type": "application/json"}
         if self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
         return headers
 
-    def _get_smart_tool_arguments(self, tool: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_smart_tool_arguments(self, tool: dict[str, Any]) -> dict[str, Any]:
         """Get appropriate arguments for different tool types"""
         tool_name = tool["name"].lower()
 
@@ -265,7 +265,7 @@ class MCPPerformanceTest:
             # Fallback to schema-based argument generation
             return self._generate_args_from_schema(tool)
 
-    def _generate_args_from_schema(self, tool: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_args_from_schema(self, tool: dict[str, Any]) -> dict[str, Any]:
         """Generate arguments from tool schema for unknown tools"""
         schema = tool.get("inputSchema", {})
         properties = schema.get("properties", {})
@@ -364,7 +364,7 @@ class MCPPerformanceTest:
             resource = self.available_resources[0]
             operations.append(
                 {
-                    "name": f"Resource Read",
+                    "name": "Resource Read",
                     "message": {
                         "jsonrpc": "2.0",
                         "id": 5,
@@ -537,7 +537,7 @@ class MCPPerformanceTest:
             else:
                 high = mid - 50
 
-        print(f"\n🏆 Maximum Sustainable MCP Throughput:")
+        print("\n🏆 Maximum Sustainable MCP Throughput:")
         print(f"   Concurrency: {best_concurrency:,} connections")
         print(f"   Throughput: {best_rps:,.1f} RPS")
 
@@ -572,7 +572,7 @@ class MCPPerformanceTest:
             print(f"{status} {total_errors} errors handled properly")
 
     async def _test_single_mcp_operation(
-        self, operation: Dict[str, Any], concurrency: int, duration: float
+        self, operation: dict[str, Any], concurrency: int, duration: float
     ) -> MCPPerformanceResult:
         """Test a single MCP operation with specified concurrency and duration"""
 
@@ -709,7 +709,7 @@ class MCPPerformanceTest:
                 session_info={"session_id": self.session_id, "server_info": self.server_info},
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return MCPPerformanceResult(
                 operation=operation["name"],
                 concurrency=concurrency,
@@ -744,7 +744,7 @@ class MCPPerformanceTest:
         best_latency = min(self.results, key=lambda r: r.avg_response_ms)
         best_throughput = max(self.results, key=lambda r: r.throughput_mb_per_sec)
 
-        print(f"🚀 Peak MCP Performance:")
+        print("🚀 Peak MCP Performance:")
         print(f"   Best RPS: {best_rps.rps:,.1f} ({best_rps.operation})")
         print(f"   Best Latency: {best_latency.avg_response_ms:.2f}ms ({best_latency.operation})")
         print(f"   Best Throughput: {best_throughput.throughput_mb_per_sec:.1f} MB/s")
@@ -755,7 +755,7 @@ class MCPPerformanceTest:
         total_mcp_errors = sum(sum(r.mcp_errors.values()) for r in self.results)
         overall_success_rate = (total_successful / total_requests * 100) if total_requests > 0 else 0
 
-        print(f"\n📈 Overall MCP Statistics:")
+        print("\n📈 Overall MCP Statistics:")
         print(f"   Total Requests: {total_requests:,}")
         print(f"   Success Rate: {overall_success_rate:.1f}%")
         print(f"   Protocol Errors: {total_mcp_errors:,}")
@@ -783,13 +783,13 @@ class MCPPerformanceTest:
             avg_latency = statistics.mean([r.avg_response_ms for r in latency_results])
             p95_latency = statistics.mean([r.p95_response_ms for r in latency_results])
 
-            print(f"\n⚡ Latency Analysis:")
+            print("\n⚡ Latency Analysis:")
             print(f"   Average Latency: {avg_latency:.2f}ms")
             print(f"   P95 Latency: {p95_latency:.2f}ms")
             print(f"   Best Latency: {best_latency.avg_response_ms:.2f}ms")
 
         # Recommendations
-        print(f"\n💡 Performance Recommendations:")
+        print("\n💡 Performance Recommendations:")
         if best_rps.rps > 10000:
             print("   ✅ Excellent MCP performance! Production ready.")
             print("   🚀 Consider implementing caching for even better performance.")

@@ -7,9 +7,10 @@ with both regular and streaming capabilities.
 """
 
 import asyncio
-import aiohttp
 import json
 import time
+
+import aiohttp
 
 
 async def test_streamable_server(base_url: str = "http://localhost:8000"):
@@ -157,7 +158,7 @@ async def test_streamable_server(base_url: str = "http://localhost:8000"):
                 if resp.status == 200:
                     content_type = resp.headers.get("Content-Type", "")
                     if "text/event-stream" in content_type:
-                        print(f"   ✅ Streaming response received")
+                        print("   ✅ Streaming response received")
                         print(f"   📡 Content-Type: {content_type}")
 
                         # Read a few streaming events

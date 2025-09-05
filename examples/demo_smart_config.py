@@ -8,23 +8,22 @@ actual system configuration and showing how all detectors work together.
 """
 
 import os
-import json
-import time
 import socket
-from pathlib import Path
 
 # Add source path for demo
 import sys
+import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from chuk_mcp_server.config import (
-    SmartConfig,
-    ProjectDetector,
+    ContainerDetector,
     EnvironmentDetector,
     NetworkDetector,
+    ProjectDetector,
+    SmartConfig,
     SystemDetector,
-    ContainerDetector,
 )
 
 

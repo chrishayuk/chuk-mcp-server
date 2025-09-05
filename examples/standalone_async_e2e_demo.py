@@ -7,12 +7,12 @@ advanced concurrent, streaming, and monitoring capabilities.
 """
 
 import asyncio
+import json
+import os
 import subprocess
 import sys
 import time
-import os
-import json
-from typing import Optional
+
 import httpx
 
 
@@ -20,7 +20,7 @@ class StandaloneAsyncDemo:
     """Self-contained async native demo showcasing advanced capabilities"""
 
     def __init__(self):
-        self.server_process: Optional[subprocess.Popen] = None
+        self.server_process: subprocess.Popen | None = None
         self.server_url = "http://localhost:8001"
         self.mcp_url = f"{self.server_url}/mcp"
         self.temp_file = "standalone_async_server.py"
@@ -759,7 +759,7 @@ if __name__ == "__main__":
                         else:
                             print(f"      ✅ Success in {elapsed:.3f}s - Empty content")
                     else:
-                        print(f"      ❌ Unexpected response format")
+                        print("      ❌ Unexpected response format")
                 else:
                     print(f"      ❌ Failed: {response.status_code}")
 
@@ -802,7 +802,7 @@ if __name__ == "__main__":
                 max_time = max(times)
                 rps = 1 / avg_time if avg_time > 0 else 0
 
-                print(f"   📊 Performance Results:")
+                print("   📊 Performance Results:")
                 print(f"      Iterations: {iterations}")
                 print(f"      Avg time: {avg_time * 1000:.1f}ms")
                 print(f"      Min time: {min_time * 1000:.1f}ms")

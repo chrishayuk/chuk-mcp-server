@@ -11,10 +11,10 @@ Demonstrates true async capabilities for maximum concurrency and throughput.
 # Example 1: The Ultimate Zero Config - Async & Performance Optimized
 # ============================================================================
 
-from chuk_mcp_server import tool, resource, run
 import asyncio
 import time
-import json
+
+from chuk_mcp_server import resource, run, tool
 
 
 # ✨ CLEAN: No server creation, no configuration needed!
@@ -245,7 +245,6 @@ async def get_performance_metrics() -> dict:
 
 if __name__ == "__main__":
     # ✨ ASYNC PERFORMANCE MODE: Maximum async performance
-    import os
     import logging
 
     print("🌊 ChukMCPServer - Async Zero Config Performance Mode")

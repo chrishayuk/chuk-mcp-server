@@ -6,18 +6,18 @@ This acts as a proxy between MCP Inspector and your real MCP server,
 capturing and logging EVERY detail of the communication for debugging.
 """
 
+import argparse
 import asyncio
+import time
+
 import aiohttp
+import orjson
 from starlette.applications import Starlette
-from starlette.routing import Route
-from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-import orjson
-import time
-import argparse
-
+from starlette.requests import Request
+from starlette.responses import Response, StreamingResponse
+from starlette.routing import Route
 
 # Target server configuration
 TARGET_SERVER = "http://localhost:8000"  # Your real MCP server base URL
@@ -35,7 +35,7 @@ async def proxy_request(request: Request) -> Response:
         print("=" * 120)
         print(f"🔍 INSPECTOR → PROXY REQUEST #{int(time.time() * 1000) % 100000}")
         print("=" * 120)
-        print(f"📋 Request Details:")
+        print("📋 Request Details:")
         print(f"  Method: {request.method}")
         print(f"  URL: {request.url}")
         print(f"  Path: {request.url.path}")
@@ -59,7 +59,7 @@ async def proxy_request(request: Request) -> Response:
 
         # Log body from Inspector with detailed analysis
         body = await request.body()
-        print(f"\n📄 Inspector Body Analysis:")
+        print("\n📄 Inspector Body Analysis:")
         print(f"  Size: {len(body)} bytes")
         print(f"  Type: {type(body)}")
         print(f"  Raw bytes (first 100): {body[:100]}")
@@ -67,13 +67,13 @@ async def proxy_request(request: Request) -> Response:
         if body:
             try:
                 parsed = orjson.loads(body)
-                print(f"  ✅ Valid JSON")
+                print("  ✅ Valid JSON")
                 print(f"  JSON Keys: {list(parsed.keys()) if isinstance(parsed, dict) else 'Not a dict'}")
                 print(f"  Pretty JSON:\n{orjson.dumps(parsed, option=orjson.OPT_INDENT_2).decode()}")
 
                 # Analyze specific fields
                 if isinstance(parsed, dict):
-                    print(f"  🔍 Field Analysis:")
+                    print("  🔍 Field Analysis:")
                     for key, value in parsed.items():
                         print(f"    {key}: {type(value).__name__} = {str(value)[:100]}")
 
@@ -102,18 +102,18 @@ async def proxy_request(request: Request) -> Response:
 
         # Map Inspector paths to server paths
         server_path = map_inspector_path_to_server(request.url.path)
-        print(f"\n🗺️  Path Mapping:")
+        print("\n🗺️  Path Mapping:")
         print(f"  Original: {request.url.path}")
         print(f"  Mapped: {server_path}")
 
         # Session ID analysis
         current_session = SESSION_ID
-        print(f"\n🔑 Session Analysis:")
+        print("\n🔑 Session Analysis:")
         print(f"  Current Global Session ID: {current_session}")
         print(f"  Session in Request Headers: {request.headers.get('mcp-session-id', 'None')}")
 
         # Forward request to real MCP server
-        print(f"\n🚀 PROXY → SERVER REQUEST")
+        print("\n🚀 PROXY → SERVER REQUEST")
         print("-" * 60)
 
         # Construct target URL
@@ -121,7 +121,7 @@ async def proxy_request(request: Request) -> Response:
         if request.url.query:
             target_url += f"?{request.url.query}"
 
-        print(f"🎯 Target Details:")
+        print("🎯 Target Details:")
         print(f"  Server: {TARGET_SERVER}")
         print(f"  Path: {server_path}")
         print(f"  Full URL: {target_url}")
@@ -136,7 +136,7 @@ async def proxy_request(request: Request) -> Response:
 
         is_initialize = body_json and body_json.get("method") == "initialize"
 
-        print(f"\n🔍 Request Analysis:")
+        print("\n🔍 Request Analysis:")
         print(f"  Is Initialize: {is_initialize}")
         print(f"  Has Body: {bool(body)}")
         print(f"  Body Method: {body_json.get('method') if body_json else 'None'}")
@@ -157,7 +157,7 @@ async def proxy_request(request: Request) -> Response:
         accept_header = request.headers.get("accept", "")
         expects_sse = "text/event-stream" in accept_header
 
-        print(f"\n🎭 Response Type Analysis:")
+        print("\n🎭 Response Type Analysis:")
         print(f"  Accept Header: '{accept_header}'")
         print(f"  Expects SSE: {expects_sse}")
         print(f"  Will use: {'SSE Stream' if expects_sse else 'JSON Response'}")
@@ -217,9 +217,7 @@ def map_inspector_path_to_server(inspector_path: str) -> str:
 
     # Inspector typically sends requests to /mcp/inspector
     # but the actual MCP server expects the TARGET_PATH (usually /mcp)
-    if inspector_path.startswith("/mcp/inspector"):
-        return TARGET_PATH
-    elif inspector_path.startswith("/mcp"):
+    if inspector_path.startswith("/mcp/inspector") or inspector_path.startswith("/mcp"):
         return TARGET_PATH
     else:
         # For any other paths, forward as-is
@@ -230,7 +228,7 @@ async def proxy_json_request(session, target_url, method, body, headers):
     """Proxy a JSON request and response with detailed logging"""
 
     try:
-        print(f"\n🌐 JSON REQUEST DETAILS:")
+        print("\n🌐 JSON REQUEST DETAILS:")
         print(f"  Target URL: {target_url}")
         print(f"  Method: {method}")
         print(f"  Body size: {len(body) if body else 0} bytes")
@@ -250,7 +248,7 @@ async def proxy_json_request(session, target_url, method, body, headers):
             method, target_url, data=body if body else None, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
         ) as response:
             # Log server response
-            print(f"\n📥 SERVER → PROXY JSON RESPONSE")
+            print("\n📥 SERVER → PROXY JSON RESPONSE")
             print("-" * 50)
             print(f"Status: {response.status}")
             print(f"Reason: {response.reason}")
@@ -289,7 +287,7 @@ async def proxy_json_request(session, target_url, method, body, headers):
                     print(f"  Raw: {response_body.decode('utf-8', errors='ignore')}")
                     print(f"  Parse error: {e}")
 
-            print(f"\n🔄 PROXY → INSPECTOR JSON RESPONSE")
+            print("\n🔄 PROXY → INSPECTOR JSON RESPONSE")
             print("-" * 50)
             print(f"Forwarding status: {response.status}")
             print(f"Forwarding headers: {response_headers}")
@@ -321,35 +319,35 @@ async def proxy_sse_request(target_url, method, body, headers):
 
         async def sse_proxy_generator():
             try:
-                print(f"\n🌐 SSE CONNECTION DETAILS:")
+                print("\n🌐 SSE CONNECTION DETAILS:")
                 print(f"  Target URL: {target_url}")
                 print(f"  Method: {method}")
                 print(f"  Body size: {len(body) if body else 0} bytes")
                 print(f"  Headers count: {len(headers)}")
 
-                print(f"\n📋 SSE Request Headers:")
+                print("\n📋 SSE Request Headers:")
                 for name, value in headers.items():
                     print(f"    {name}: {value}")
 
                 if body:
-                    print(f"\n📦 SSE Request Body:")
+                    print("\n📦 SSE Request Body:")
                     print(f"  Raw bytes: {body[:200]}...")
                     try:
                         body_json = orjson.loads(body)
                         print(f"  Parsed JSON: {orjson.dumps(body_json, option=orjson.OPT_INDENT_2).decode()}")
                     except:
-                        print(f"  Not valid JSON")
+                        print("  Not valid JSON")
 
                 # Test connection first
                 timeout = aiohttp.ClientTimeout(total=30, connect=10)
                 async with aiohttp.ClientSession(timeout=timeout) as sse_session:
                     # Test basic connectivity first
-                    print(f"\n🔍 SSE CONNECTION TEST:")
+                    print("\n🔍 SSE CONNECTION TEST:")
                     try:
                         async with sse_session.get(
                             f"{TARGET_SERVER}{TARGET_PATH}", timeout=aiohttp.ClientTimeout(total=5)
                         ) as test_response:
-                            print(f"  ✅ Connection test successful")
+                            print("  ✅ Connection test successful")
                             print(f"  Test status: {test_response.status}")
                             print(f"  Test headers: {dict(test_response.headers)}")
                     except Exception as e:
@@ -362,7 +360,7 @@ async def proxy_sse_request(target_url, method, body, headers):
                         yield f"data: {orjson.dumps(error_event).decode()}\n\n"
                         return
 
-                    print(f"\n🚀 MAKING ACTUAL SSE REQUEST:")
+                    print("\n🚀 MAKING ACTUAL SSE REQUEST:")
                     print(f"  URL: {target_url}")
                     print(f"  Method: {method}")
                     print(f"  Timeout: {timeout}")
@@ -370,7 +368,7 @@ async def proxy_sse_request(target_url, method, body, headers):
                     async with sse_session.request(
                         method, target_url, data=body if body else None, headers=headers
                     ) as response:
-                        print(f"\n📥 SERVER SSE RESPONSE RECEIVED:")
+                        print("\n📥 SERVER SSE RESPONSE RECEIVED:")
                         print(f"  Status: {response.status}")
                         print(f"  Reason: {response.reason}")
                         print(f"  Version: {response.version}")
@@ -396,11 +394,11 @@ async def proxy_sse_request(target_url, method, body, headers):
                             SESSION_ID = captured_session
                             print(f"🔑 UPDATED global session ID: {SESSION_ID}")
                         else:
-                            print(f"⚠️  No session ID found in response headers")
+                            print("⚠️  No session ID found in response headers")
 
                         if response.status != 200:
                             error_data = await response.read()
-                            print(f"❌ Server returned non-200 status")
+                            print("❌ Server returned non-200 status")
                             print(f"  Status: {response.status}")
                             print(f"  Error body: {error_data.decode()}")
                             error_event = {
@@ -411,8 +409,8 @@ async def proxy_sse_request(target_url, method, body, headers):
                             yield f"data: {orjson.dumps(error_event).decode()}\n\n"
                             return
 
-                        print(f"\n🌊 STREAMING SERVER RESPONSE TO INSPECTOR:")
-                        print(f"  Starting to read chunks...")
+                        print("\n🌊 STREAMING SERVER RESPONSE TO INSPECTOR:")
+                        print("  Starting to read chunks...")
 
                         # Read the response line by line for SSE
                         event_count = 0
@@ -474,7 +472,7 @@ async def proxy_sse_request(target_url, method, body, headers):
                             print(f"📡 SSE Final buffer: {repr(buffer)}")
                             yield buffer
 
-                        print(f"\n✅ SSE STREAMING COMPLETE:")
+                        print("\n✅ SSE STREAMING COMPLETE:")
                         print(f"  Total non-empty events: {event_count}")
                         print(f"  Total empty lines: {empty_line_count}")
                         print(f"  Total events: {event_count + empty_line_count}")
@@ -506,7 +504,7 @@ async def proxy_sse_request(target_url, method, body, headers):
             response_headers["Mcp-Session-Id"] = SESSION_ID
             print(f"🔑 Adding session ID to response headers: {SESSION_ID}")
 
-        print(f"\n📤 CREATING SSE RESPONSE TO INSPECTOR:")
+        print("\n📤 CREATING SSE RESPONSE TO INSPECTOR:")
         print(f"  Response headers: {response_headers}")
 
         return StreamingResponse(sse_proxy_generator(), media_type="text/event-stream", headers=response_headers)

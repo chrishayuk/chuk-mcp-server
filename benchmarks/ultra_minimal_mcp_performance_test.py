@@ -12,13 +12,12 @@ Updated to work with the actual tools from zero_config_examples.py
 """
 
 import asyncio
-import time
+import gc
 import json
 import statistics
 import sys
+import time
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
-import gc
 
 
 @dataclass
@@ -283,7 +282,7 @@ class UltraMinimalMCPTest:
             writer.close()
             await writer.wait_closed()
 
-            print(f"📊 MCP endpoint check: HTTP response received")
+            print("📊 MCP endpoint check: HTTP response received")
 
             if self.verbose and response:
                 print(f"📝 Response preview: {response[:200]}...")
@@ -291,7 +290,7 @@ class UltraMinimalMCPTest:
             if b"HTTP/1.1 200" in response or b"ChukMCPServer" in response:
                 return True
             else:
-                print(f"❌ Unexpected MCP endpoint response")
+                print("❌ Unexpected MCP endpoint response")
                 if self.verbose:
                     print(f"   Full response: {response.decode('utf-8', errors='ignore')[:500]}")
                 return False
@@ -530,7 +529,7 @@ class UltraMinimalMCPTest:
 
         return best_result or MCPResult("MCP Max", 0, 0, 0, 0, 0, 0, 0)
 
-    def _print_mcp_summary(self, results: List[MCPResult]):
+    def _print_mcp_summary(self, results: list[MCPResult]):
         """Print MCP performance summary"""
         print("\n" + "=" * 60)
         print("📊 ULTRA-MINIMAL MCP PROTOCOL RESULTS")
@@ -543,7 +542,7 @@ class UltraMinimalMCPTest:
         # Find best MCP result
         best_result = max(results, key=lambda r: r.rps)
 
-        print(f"🚀 Maximum MCP Performance:")
+        print("🚀 Maximum MCP Performance:")
         print(f"   Peak RPS: {best_result.rps:>12,.0f}")
         print(f"   Avg Latency: {best_result.avg_ms:>9.2f}ms")
         print(f"   Success Rate: {best_result.success_rate:>8.1f}%")
@@ -551,7 +550,7 @@ class UltraMinimalMCPTest:
         print(f"   Operation: {best_result.name}")
 
         # Detailed MCP results
-        print(f"\n📋 All MCP Test Results:")
+        print("\n📋 All MCP Test Results:")
         print("   Operation               |    RPS     | Avg(ms) | Success% | MCP Errors")
         print("   " + "-" * 75)
 
@@ -562,7 +561,7 @@ class UltraMinimalMCPTest:
             )
 
         # MCP Performance Analysis
-        print(f"\n🔍 MCP Performance Analysis:")
+        print("\n🔍 MCP Performance Analysis:")
         if best_result.rps > 15000:
             print("   🏆 EXCEPTIONAL MCP performance!")
             print("   🚀 Your ChukMCPServer is world-class")
@@ -585,14 +584,14 @@ class UltraMinimalMCPTest:
 
         if tool_results:
             avg_tool_rps = sum(r.rps for r in tool_results) / len(tool_results)
-            print(f"\n🔧 Tool Performance:")
+            print("\n🔧 Tool Performance:")
             print(f"   Average Tool RPS: {avg_tool_rps:>8,.0f}")
             for result in tool_results:
                 print(f"   {result.name}: {result.rps:>8,.0f} RPS")
 
         if resource_results:
             avg_resource_rps = sum(r.rps for r in resource_results) / len(resource_results)
-            print(f"\n📂 Resource Performance:")
+            print("\n📂 Resource Performance:")
             print(f"   Average Resource RPS: {avg_resource_rps:>8,.0f}")
             for result in resource_results:
                 print(f"   {result.name}: {result.rps:>8,.0f} RPS")
@@ -701,7 +700,7 @@ async def main():
         print("⚡ Quick mode: Reduced duration and concurrency")
 
     if args.verbose:
-        print(f"📊 Test Configuration:")
+        print("📊 Test Configuration:")
         print(f"   Duration: {args.duration}s per test")
         print(f"   Max Concurrency: {args.concurrency}")
         print(f"   Target: {args.host}:{args.port}")
@@ -725,9 +724,9 @@ async def main():
         else:
             print("❌ MCP performance testing failed. Check server status.")
             print(f"💡 Make sure your zero_config_examples.py server is running on {args.host}:{args.port}")
-            print(f"💡 Try: uv run examples/zero_config_examples.py")
+            print("💡 Try: uv run examples/zero_config_examples.py")
             if args.port != 8000:
-                print(f"💡 Or run server with custom port to match your test target")
+                print("💡 Or run server with custom port to match your test target")
             sys.exit(1)
 
     finally:

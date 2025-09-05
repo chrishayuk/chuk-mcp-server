@@ -9,13 +9,11 @@ Target: Match AB performance - 20,000+ RPS for simple endpoints.
 """
 
 import asyncio
-import time
-import socket
+import gc
 import statistics
 import sys
+import time
 from dataclasses import dataclass
-from typing import List, Optional
-import gc
 
 
 @dataclass
@@ -318,7 +316,7 @@ class UltraMinimalPerfTest:
 
         return best_result or UltraResult("Max Test", 0, 0, 0, 0, 0, 0)
 
-    def _print_ultra_summary(self, results: List[UltraResult]):
+    def _print_ultra_summary(self, results: list[UltraResult]):
         """Print ultra-minimal summary"""
         print("\n" + "=" * 60)
         print("📊 ULTRA-MINIMAL PERFORMANCE RESULTS")
@@ -331,14 +329,14 @@ class UltraMinimalPerfTest:
         # Find best result
         best_result = max(results, key=lambda r: r.rps)
 
-        print(f"🚀 Maximum Performance Achieved:")
+        print("🚀 Maximum Performance Achieved:")
         print(f"   Peak RPS: {best_result.rps:>12,.0f}")
         print(f"   Avg Latency: {best_result.avg_ms:>9.2f}ms")
         print(f"   Success Rate: {best_result.success_rate:>8.1f}%")
         print(f"   Test: {best_result.name}")
 
         # Detailed results
-        print(f"\n📋 All Test Results:")
+        print("\n📋 All Test Results:")
         print("   Test Name               |    RPS     | Avg(ms) | Success%")
         print("   " + "-" * 60)
 
@@ -346,7 +344,7 @@ class UltraMinimalPerfTest:
             print(f"   {result.name:<23} | {result.rps:>8,.0f} | {result.avg_ms:>6.1f} | {result.success_rate:>6.1f}%")
 
         # Compare to AB baseline
-        print(f"\n🔍 Performance Analysis:")
+        print("\n🔍 Performance Analysis:")
         if best_result.rps > 20000:
             print("   🏆 EXCELLENT! Matches high-performance expectations")
             print("   🚀 Your server optimizations are working perfectly")
@@ -364,8 +362,8 @@ class UltraMinimalPerfTest:
             print("   🔍 Significant bottlenecks present")
 
         # AB comparison
-        print(f"\n📊 Comparison Notes:")
-        print(f"   AB baseline: ~26,000 RPS (reported)")
+        print("\n📊 Comparison Notes:")
+        print("   AB baseline: ~26,000 RPS (reported)")
         print(f"   Ultra test: {best_result.rps:>8,.0f} RPS (achieved)")
 
         if best_result.rps > 20000:

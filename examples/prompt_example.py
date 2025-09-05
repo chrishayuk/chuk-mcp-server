@@ -7,17 +7,18 @@ This example demonstrates the new @prompt decorator functionality
 for creating custom prompts through the MCP protocol.
 """
 
-from chuk_mcp_server import ChukMCPServer, prompt, tool, resource
+from chuk_mcp_server import ChukMCPServer, prompt
 
 # ============================================================================
 # Example 1: Global Prompt Decorators (Zero Config)
 # ============================================================================
 
+
 @prompt
 def code_review(code: str, language: str = "python") -> str:
     """
     Generate a code review prompt for the given code.
-    
+
     This prompt will ask for a comprehensive code review including:
     - Code quality assessment
     - Potential bugs or issues
@@ -39,6 +40,7 @@ def code_review(code: str, language: str = "python") -> str:
 Please provide specific, actionable feedback with examples where appropriate.
 """
 
+
 @prompt
 def documentation_writer(function_name: str, description: str, parameters: str = "", returns: str = "") -> str:
     """Generate documentation for a function."""
@@ -57,7 +59,8 @@ Please generate:
 Format the documentation in a clear, professional style suitable for API documentation.
 """
 
-@prompt  
+
+@prompt
 def meeting_summarizer(transcript: str, meeting_type: str = "general", action_items: bool = True) -> str:
     """Generate a meeting summary from a transcript."""
     base_prompt = f"""Summarize this {meeting_type} meeting transcript:
@@ -69,12 +72,13 @@ Please provide:
 2. **Decisions Made**: Any decisions reached during the meeting
 3. **Important Information**: Key facts or insights shared
 """
-    
+
     if action_items:
         base_prompt += "4. **Action Items**: Specific tasks assigned with owners and deadlines\n"
-    
+
     base_prompt += "\nFormat the summary in clear sections with bullet points for easy reading."
     return base_prompt
+
 
 @prompt
 def creative_writing(genre: str, theme: str, word_count: int = 500) -> str:
@@ -101,16 +105,18 @@ def creative_writing(genre: str, theme: str, word_count: int = 500) -> str:
 Begin writing your {genre} story now.
 """
 
+
 # ============================================================================
-# Example 2: Server-based Prompt Registration  
+# Example 2: Server-based Prompt Registration
 # ============================================================================
 
 # Create server instance
 mcp = ChukMCPServer(
     name="Prompt Demo Server",
     description="Demonstration of ChukMCPServer prompt capabilities",
-    prompts=True  # Enable prompts capability
+    prompts=True,  # Enable prompts capability
 )
+
 
 # Add some tools for comparison
 @mcp.tool
@@ -121,8 +127,9 @@ def analyze_text(text: str, analysis_type: str = "sentiment") -> dict:
         "analysis_type": analysis_type,
         "length": len(text),
         "word_count": len(text.split()),
-        "mock_result": f"Mock {analysis_type} analysis complete"
+        "mock_result": f"Mock {analysis_type} analysis complete",
     }
+
 
 # Add some resources
 @mcp.resource("config://prompts")
@@ -134,11 +141,12 @@ def get_prompt_config() -> dict:
         "supported_formats": ["string", "structured"],
         "capabilities": [
             "Dynamic argument parsing",
-            "Type validation", 
+            "Type validation",
             "Caching and optimization",
-            "Zero configuration"
-        ]
+            "Zero configuration",
+        ],
     }
+
 
 # Server-based prompt decorators
 @mcp.prompt
@@ -163,7 +171,7 @@ def sql_generator(table: str, operation: str = "SELECT", conditions: str = "", f
         query += ";"
     else:
         query = f"-- Unknown operation: {operation}\n-- Available operations: SELECT, INSERT, UPDATE, DELETE"
-    
+
     return f"""Here's the SQL query for your {operation.upper()} operation on the {table} table:
 
 ```sql
@@ -178,10 +186,11 @@ def sql_generator(table: str, operation: str = "SELECT", conditions: str = "", f
 Please review and modify as needed for your specific use case.
 """
 
+
 @mcp.prompt
 def email_composer(recipient: str, subject: str, tone: str = "professional", purpose: str = "general") -> str:
     """Compose email templates based on context."""
-    
+
     # Tone-based greeting
     if tone == "formal":
         greeting = "Dear"
@@ -192,7 +201,7 @@ def email_composer(recipient: str, subject: str, tone: str = "professional", pur
     else:  # professional
         greeting = "Hello"
         closing = "Best regards"
-    
+
     return f"""Compose an email with the following specifications:
 
 **To**: {recipient}
@@ -227,13 +236,14 @@ def email_composer(recipient: str, subject: str, tone: str = "professional", pur
 Please draft the complete email following this structure.
 """
 
+
 if __name__ == "__main__":
     print("🚀 ChukMCPServer - Prompt Decorator Demo")
     print("=" * 50)
     print("📝 This server demonstrates prompt decorator capabilities:")
     print()
     print("Global Prompts (@prompt decorator):")
-    print("  • code_review - Generate code review prompts")  
+    print("  • code_review - Generate code review prompts")
     print("  • documentation_writer - Create function documentation")
     print("  • meeting_summarizer - Summarize meeting transcripts")
     print("  • creative_writing - Generate creative writing prompts")
@@ -250,6 +260,6 @@ if __name__ == "__main__":
     print("  • prompts/list - List all available prompts")
     print("  • prompts/get - Get a specific prompt with arguments")
     print()
-    
+
     # Run the server
     mcp.run(debug=True)

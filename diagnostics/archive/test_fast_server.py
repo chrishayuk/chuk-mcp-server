@@ -7,9 +7,9 @@ and performs well with the quick_benchmark.py script.
 """
 
 import asyncio
-import aiohttp
-import json
 import time
+
+import aiohttp
 
 
 async def test_mcp_server(base_url: str = "http://localhost:8000"):

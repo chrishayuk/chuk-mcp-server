@@ -10,15 +10,14 @@ This version is optimized for maximum performance by:
 """
 
 import asyncio
-import json
-import time
-import random
 import logging
-from typing import List, Optional, Dict, Any, Union
+import random
+import time
 from datetime import datetime
+from typing import Any
 
 # Import our modular ChukMCPServer framework
-from chuk_mcp_server import ChukMCPServer, Capabilities
+from chuk_mcp_server import Capabilities, ChukMCPServer
 
 # ============================================================================
 # Production Logging Configuration (MINIMAL)
@@ -127,7 +126,7 @@ mcp = ChukMCPServer(
 # ============================================================================
 
 
-def ensure_int(value: Union[str, int, float]) -> int:
+def ensure_int(value: str | int | float) -> int:
     """Ensure a value is converted to int safely"""
     if isinstance(value, int):
         return value
@@ -145,7 +144,7 @@ def ensure_int(value: Union[str, int, float]) -> int:
         return int(value)
 
 
-def ensure_float(value: Union[str, int, float]) -> float:
+def ensure_float(value: str | int | float) -> float:
     """Ensure a value is converted to float safely"""
     if isinstance(value, (int, float)):
         return float(value)
@@ -164,7 +163,7 @@ def ensure_float(value: Union[str, int, float]) -> float:
 
 
 @mcp.tool
-async def async_hello(name: str, delay: Union[str, int, float] = 0.1) -> str:
+async def async_hello(name: str, delay: str | int | float = 0.1) -> str:
     """
     Async hello with configurable delay.
 
@@ -188,7 +187,7 @@ async def async_hello(name: str, delay: Union[str, int, float] = 0.1) -> str:
 
 
 @mcp.tool
-async def concurrent_web_requests(urls: List[str], timeout: Union[str, float] = 5.0) -> Dict[str, Any]:
+async def concurrent_web_requests(urls: list[str], timeout: str | float = 5.0) -> dict[str, Any]:
     """
     Make multiple concurrent web requests (simulated).
 
@@ -270,8 +269,8 @@ async def concurrent_web_requests(urls: List[str], timeout: Union[str, float] = 
 
 @mcp.tool
 async def data_stream_processor(
-    item_count: Union[str, int] = 10, process_delay: Union[str, float] = 0.1, batch_size: Union[str, int] = 3
-) -> Dict[str, Any]:
+    item_count: str | int = 10, process_delay: str | float = 0.1, batch_size: str | int = 3
+) -> dict[str, Any]:
     """
     Process data using async streaming patterns with batching.
 
@@ -302,10 +301,10 @@ async def data_stream_processor(
                     "category": random.choice(["A", "B", "C"]),
                 }
 
-        async def process_batch(batch_items: List[Dict]):
+        async def process_batch(batch_items: list[dict]):
             """Process a batch of items concurrently"""
 
-            async def process_single_item(item: Dict):
+            async def process_single_item(item: dict):
                 await asyncio.sleep(process_delay_float)
                 return {
                     **item,
@@ -367,9 +366,7 @@ async def data_stream_processor(
 
 
 @mcp.tool
-async def real_time_dashboard(
-    duration: Union[str, int] = 5, update_interval: Union[str, float] = 0.5
-) -> Dict[str, Any]:
+async def real_time_dashboard(duration: str | int = 5, update_interval: str | float = 0.5) -> dict[str, Any]:
     """
     Generate real-time dashboard data with live metrics.
 
@@ -471,9 +468,7 @@ async def real_time_dashboard(
 
 
 @mcp.tool
-async def async_file_processor(
-    file_count: Union[str, int] = 5, processing_complexity: str = "medium"
-) -> Dict[str, Any]:
+async def async_file_processor(file_count: str | int = 5, processing_complexity: str = "medium") -> dict[str, Any]:
     """
     Simulate async file processing with different complexity levels.
 
@@ -578,9 +573,7 @@ async def async_file_processor(
 
 
 @mcp.tool
-async def distributed_task_coordinator(
-    task_count: Union[str, int] = 8, worker_count: Union[str, int] = 3
-) -> Dict[str, Any]:
+async def distributed_task_coordinator(task_count: str | int = 8, worker_count: str | int = 3) -> dict[str, Any]:
     """
     Simulate distributed task coordination with multiple workers.
 
@@ -619,7 +612,7 @@ async def distributed_task_coordinator(
             while True:
                 try:
                     task = await asyncio.wait_for(task_queue.get(), timeout=0.1)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
 
                 # Simulate task processing
@@ -719,7 +712,7 @@ async def distributed_task_coordinator(
 
 
 @mcp.resource("async://server-metrics", mime_type="application/json")
-async def get_server_metrics() -> Dict[str, Any]:
+async def get_server_metrics() -> dict[str, Any]:
     """
     Get live server metrics (OPTIMIZED FOR 20,000+ RPS).
 
@@ -813,7 +806,7 @@ async def get_async_performance_report() -> str:
 
 
 @mcp.resource("async://examples", mime_type="application/json")
-async def get_async_examples() -> Dict[str, Any]:
+async def get_async_examples() -> dict[str, Any]:
     """Get comprehensive async tool usage examples (optimized)."""
     # No artificial delay
 
@@ -869,8 +862,8 @@ def main():
     info = mcp.info()
     print(f"Server: {info['server']['name']}")
     print(f"Version: {info['server']['version']}")
-    print(f"Type: Async-Native (Resource Performance Optimized)")
-    print(f"Framework: ChukMCPServer with chuk_mcp")
+    print("Type: Async-Native (Resource Performance Optimized)")
+    print("Framework: ChukMCPServer with chuk_mcp")
     print()
 
     # Handle both old and new info structure

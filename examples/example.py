@@ -6,15 +6,14 @@ This is the final optimized version that works perfectly with Inspector
 and demonstrates all the modular components working together.
 """
 
-import json
-import time
-import random
 import logging
-from typing import List, Optional, Dict, Any
+import random
+import time
 from datetime import datetime
+from typing import Any
 
 # Import our modular ChukMCPServer framework
-from chuk_mcp_server import ChukMCPServer, Capabilities
+from chuk_mcp_server import Capabilities, ChukMCPServer
 
 # Configure logging for production
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -187,7 +186,7 @@ def text_process(text: str, operation: str) -> str:
 
 
 @mcp.tool
-def list_tools() -> Dict[str, Any]:
+def list_tools() -> dict[str, Any]:
     """Get information about all available tools."""
     tools_info = []
 
@@ -211,7 +210,7 @@ def list_tools() -> Dict[str, Any]:
 
 
 @mcp.resource("server://status")
-def server_status() -> Dict[str, Any]:
+def server_status() -> dict[str, Any]:
     """Get comprehensive server status."""
     return {
         "server": "ChukMCPServer Example",
@@ -228,7 +227,7 @@ def server_status() -> Dict[str, Any]:
 
 
 @mcp.resource("config://settings", mime_type="application/json")
-def get_settings() -> Dict[str, Any]:
+def get_settings() -> dict[str, Any]:
     """Get server configuration and capabilities."""
     return {
         "app_name": "ChukMCPServer Example Server",
@@ -331,7 +330,7 @@ This is a demonstration of ChukMCPServer's clean and simple API powered by chuk_
 
 
 @mcp.resource("data://examples", mime_type="application/json")
-def get_examples() -> Dict[str, Any]:
+def get_examples() -> dict[str, Any]:
     """Get comprehensive tool usage examples."""
     return {
         "description": "Comprehensive tool usage examples for ChukMCP Server",
@@ -447,7 +446,7 @@ def main():
     info = mcp.info()
     print(f"Server: {info['server']['name']}")
     print(f"Version: {info['server']['version']}")
-    print(f"Framework: ChukMCPServer with chuk_mcp")
+    print("Framework: ChukMCPServer with chuk_mcp")
     print()
 
     # Handle both old and new info structure
