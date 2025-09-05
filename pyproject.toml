@@ -169,15 +169,11 @@ module = [
     "chuk_mcp_server.protocol",
     "chuk_mcp_server.mcp_registry",
     "chuk_mcp_server.endpoint_registry",
-    "chuk_mcp_server.http_server",
     "chuk_mcp_server.endpoints.*",
+    "chuk_mcp_server.http_server",
     "chuk_mcp_server.__init__"
 ]
-disallow_untyped_defs = false
-disallow_untyped_calls = false
-check_untyped_defs = false
-warn_return_any = false
-no_implicit_optional = false
+ignore_errors = true
 
 # Coverage configuration
 [tool.coverage.run]

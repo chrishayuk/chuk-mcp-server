@@ -7,6 +7,8 @@ Clean, modular configuration system where cloud_detector uses
 providers from the cloud module.
 """
 
+from typing import Any
+
 from .cloud_detector import CloudDetector
 from .container_detector import ContainerDetector
 from .environment_detector import EnvironmentDetector
@@ -17,7 +19,7 @@ from .system_detector import SystemDetector
 
 
 # Convenience functions
-def get_smart_defaults() -> dict:
+def get_smart_defaults() -> dict[str, Any]:
     """Get all smart defaults."""
     return SmartConfig().get_all_defaults()
 
@@ -27,7 +29,7 @@ def detect_cloud_provider():
     return CloudDetector().detect()
 
 
-def get_cloud_config() -> dict:
+def get_cloud_config() -> dict[str, Any]:
     """Get cloud configuration overrides."""
     return CloudDetector().get_config_overrides()
 

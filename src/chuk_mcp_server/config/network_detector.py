@@ -5,6 +5,7 @@ Network configuration detection (host and port).
 """
 
 import socket
+from typing import Any
 
 from .base import ConfigDetector
 
@@ -28,7 +29,7 @@ class NetworkDetector(ConfigDetector):
 
     PREFERRED_PORTS = [8000, 8001, 8080, 3000, 5000, 4000]
 
-    def detect(self) -> dict:
+    def detect(self) -> dict[str, Any]:
         """Detect network configuration (implements abstract method)."""
         return {"host": self.detect_host(), "port": self.detect_port()}
 

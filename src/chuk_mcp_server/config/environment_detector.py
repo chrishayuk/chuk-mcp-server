@@ -6,6 +6,7 @@ Enhanced environment detection that integrates with cloud detection.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from .base import ConfigDetector
 
@@ -149,7 +150,7 @@ class EnvironmentDetector(ConfigDetector):
             logger.debug(f"Error checking development indicators: {e}")
         return False
 
-    def get_detection_info(self) -> dict:
+    def get_detection_info(self) -> dict[str, Any]:
         """Return detailed flags and values used in detection."""
         cloud_info = self.get_cloud_detector().get_detection_info()
         return {

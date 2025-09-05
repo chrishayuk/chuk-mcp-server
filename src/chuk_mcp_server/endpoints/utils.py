@@ -34,7 +34,7 @@ _ERROR_RESPONSES = {
 
 
 def json_response_fast(
-    data: dict[str, Any] | list | str | int | float | bool, status_code: int = 200, cache_level: str = "none"
+    data: dict[str, Any] | list[Any] | str | int | float | bool, status_code: int = 200, cache_level: str = "none"
 ) -> Response:
     """
     Ultra-fast JSON response using pre-computed headers.
@@ -124,7 +124,7 @@ def not_found_response() -> Response:
     return _NOT_FOUND_RESPONSE
 
 
-def method_not_allowed_response(allowed_methods: list | None = None) -> Response:
+def method_not_allowed_response(allowed_methods: list[str] | None = None) -> Response:
     """Pre-built 405 response with optional Allow header"""
     if allowed_methods:
         # Need custom headers, create new response
@@ -145,7 +145,7 @@ def bad_request_response() -> Response:
     return _BAD_REQUEST_RESPONSE
 
 
-def validate_json_request_fast(request_body: bytes) -> tuple[bool, dict | str]:
+def validate_json_request_fast(request_body: bytes) -> tuple[bool, dict[str, Any] | str]:
     """
     Optimized JSON validation using orjson.
 
@@ -164,7 +164,7 @@ def validate_json_request_fast(request_body: bytes) -> tuple[bool, dict | str]:
         return False, "JSON parsing error"
 
 
-def create_cors_preflight_response_fast(allowed_methods: list = None, max_age: int = 3600) -> Response:
+def create_cors_preflight_response_fast(allowed_methods: list[str] | None = None, max_age: int = 3600) -> Response:
     """
     Ultra-fast CORS preflight response.
 
@@ -205,7 +205,7 @@ class ResponsePool:
         else:
             return Response(content, status_code=status_code, media_type="application/json", headers=_CORS_NOCACHE)
 
-    def return_response(self, response: Response):
+    def return_response(self, response: Response) -> None:
         """Return a response object to the pool."""
         if len(self.pool) < self.pool_size:
             # Reset response for reuse
@@ -218,7 +218,7 @@ class ResponsePool:
 _response_pool = ResponsePool()
 
 
-def pooled_json_response(data: dict | list, status_code: int = 200) -> Response:
+def pooled_json_response(data: dict[str, Any] | list[Any], status_code: int = 200) -> Response:
     """
     JSON response using object pooling for maximum performance.
 
