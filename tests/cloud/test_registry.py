@@ -239,3 +239,67 @@ class TestCloudDetectionRegistry:
         assert len(results) == 5
         # At least one should have detected something
         assert any(r is not None for r in results)
+
+    def test_get_provider(self):
+        """Test getting a specific provider by name."""
+        registry = CloudDetectionRegistry()
+
+        # Try to get non-existent provider
+        assert registry.get_provider("nonexistent") is None
+
+        # Register a provider and get it
+        provider = MockProvider("test", "Test Provider")
+        registry.register_provider(provider)
+
+        retrieved = registry.get_provider("test")
+        assert retrieved == provider
+        assert retrieved.name == "test"
+
+    def test_get_registry_info(self):
+        """Test getting registry information."""
+        registry = CloudDetectionRegistry()
+
+        # Register some providers
+        provider1 = MockProvider("p1", "Provider 1", should_detect=False)
+        provider2 = MockProvider("p2", "Provider 2", should_detect=True)
+        registry.register_provider(provider1)
+        registry.register_provider(provider2)
+
+        # Get registry info
+        info = registry.get_registry_info()
+
+        # Check structure
+        assert "total_providers" in info
+        assert "provider_names" in info
+        assert "current_detection" in info
+        assert "cache_status" in info
+
+        assert info["total_providers"] == 2
+        assert set(info["provider_names"]) == {"p1", "p2"}
+
+        # Current detection should find p2
+        assert info["current_detection"]["provider"] == "p2"
+        assert info["current_detection"]["display_name"] == "Provider 2"
+        assert info["current_detection"]["service_type"] == "mock-env"  # Returns get_environment_type() by default
+
+        # Cache should be populated after detection
+        assert info["cache_status"]["cached"] is True
+        assert info["cache_status"]["cached_provider"] == "p2"
+
+    def test_get_registry_info_no_detection(self):
+        """Test registry info when no provider is detected."""
+        registry = CloudDetectionRegistry()
+
+        # Register non-detecting provider
+        provider = MockProvider("p1", "Provider 1", should_detect=False)
+        registry.register_provider(provider)
+
+        info = registry.get_registry_info()
+
+        assert info["total_providers"] == 1
+        assert info["provider_names"] == ["p1"]
+        assert info["current_detection"]["provider"] is None
+        assert info["current_detection"]["display_name"] is None
+        assert info["current_detection"]["service_type"] is None
+        assert info["cache_status"]["cached"] is False
+        assert info["cache_status"]["cached_provider"] is None

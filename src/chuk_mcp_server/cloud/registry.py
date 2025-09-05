@@ -111,7 +111,7 @@ def cloud_provider(
         # We'll register it when the cloud module is imported
         # For now, just mark it for registration
         if not hasattr(cls, "_registry_info"):
-            cls._registry_info = (name, display_name, priority, instance)  # type: ignore[attr-defined]
+            cls._registry_info = (name, display_name or name.upper(), priority, instance)  # type: ignore[attr-defined]
 
         return cls
 

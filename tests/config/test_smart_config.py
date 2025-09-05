@@ -416,7 +416,18 @@ class TestSmartConfigIntegration:
             assert result["log_level"] == "INFO"
 
     @patch("pathlib.Path.cwd")
-    @patch.dict(os.environ, {"AWS_LAMBDA_FUNCTION_NAME": "my-function", "AWS_REGION": "us-east-1"})
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_LAMBDA_FUNCTION_NAME": "my-function",
+            "AWS_REGION": "us-east-1",
+            "CI": "",
+            "GITHUB_ACTIONS": "",
+            "JENKINS": "",
+            "TRAVIS": "",
+        },
+        clear=False,
+    )
     @patch("psutil.cpu_count")
     @patch("psutil.virtual_memory")
     def test_serverless_aws_scenario(self, mock_memory, mock_cpu_count, mock_cwd):
