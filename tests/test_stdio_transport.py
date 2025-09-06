@@ -3,13 +3,14 @@
 Tests for stdio transport functionality.
 """
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from chuk_mcp_server.protocol import MCPProtocolHandler
-from chuk_mcp_server.stdio_transport import StdioTransport
+from chuk_mcp_server.stdio_transport import StdioTransport, run_stdio_server
 
 
 @pytest.fixture
@@ -155,3 +156,235 @@ class TestStdioTransport:
         """Test context manager interface."""
         with stdio_transport as transport:
             assert transport == stdio_transport
+
+    @pytest.mark.asyncio
+    async def test_start_transport(self, stdio_transport):
+        """Test starting the transport."""
+        with patch("asyncio.get_event_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            # Make connect_read_pipe return an async coroutine
+            mock_loop.connect_read_pipe = AsyncMock(return_value=(None, None))
+            mock_get_loop.return_value = mock_loop
+
+            with patch("asyncio.StreamReader") as mock_reader_class:
+                mock_reader = MagicMock()
+                mock_reader_class.return_value = mock_reader
+
+                with patch("asyncio.StreamReaderProtocol"):
+                    # Use AsyncMock for the async _listen method
+                    with patch.object(stdio_transport, "_listen", new_callable=AsyncMock) as mock_listen:
+                        await stdio_transport.start()
+
+                        assert stdio_transport.running is True
+                        assert stdio_transport.reader is not None
+                        mock_listen.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stop_transport(self, stdio_transport):
+        """Test stopping the transport."""
+        # Set up transport as if it's running
+        stdio_transport.running = True
+        mock_reader = MagicMock()
+        stdio_transport.reader = mock_reader
+
+        await stdio_transport.stop()
+
+        assert stdio_transport.running is False
+        mock_reader.feed_eof.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_listen_with_data(self, stdio_transport):
+        """Test listening for messages."""
+        # Create mock reader that returns data then EOF
+        mock_reader = AsyncMock()
+        mock_reader.read = AsyncMock(
+            side_effect=[
+                b'{"jsonrpc":"2.0","method":"test","id":1}\n',
+                b"",  # EOF
+            ]
+        )
+        stdio_transport.reader = mock_reader
+        stdio_transport.running = True
+
+        with patch.object(stdio_transport, "_handle_message", new_callable=AsyncMock) as mock_handle:
+            # Patch running flag to stop after first message
+            async def handle_side_effect(msg):
+                stdio_transport.running = False
+
+            mock_handle.side_effect = handle_side_effect
+
+            await stdio_transport._listen()
+
+            mock_handle.assert_called_once_with('{"jsonrpc":"2.0","method":"test","id":1}')
+
+    @pytest.mark.asyncio
+    async def test_listen_with_partial_messages(self, stdio_transport):
+        """Test listening with partial message chunks."""
+        mock_reader = AsyncMock()
+        mock_reader.read = AsyncMock(
+            side_effect=[
+                b'{"jsonrpc":"2.0",',
+                b'"method":"test","id":1}\n',
+                b"",  # EOF
+            ]
+        )
+        stdio_transport.reader = mock_reader
+        stdio_transport.running = True
+
+        with patch.object(stdio_transport, "_handle_message", new_callable=AsyncMock) as mock_handle:
+            # Stop after handling message
+            async def handle_side_effect(msg):
+                stdio_transport.running = False
+
+            mock_handle.side_effect = handle_side_effect
+
+            await stdio_transport._listen()
+
+            mock_handle.assert_called_once_with('{"jsonrpc":"2.0","method":"test","id":1}')
+
+    @pytest.mark.asyncio
+    async def test_listen_with_multiple_messages(self, stdio_transport):
+        """Test listening with multiple messages in one chunk."""
+        mock_reader = AsyncMock()
+        mock_reader.read = AsyncMock(
+            side_effect=[
+                b'{"jsonrpc":"2.0","method":"test1","id":1}\n{"jsonrpc":"2.0","method":"test2","id":2}\n',
+                b"",  # EOF
+            ]
+        )
+        stdio_transport.reader = mock_reader
+        stdio_transport.running = True
+
+        messages_handled = []
+
+        async def handle_side_effect(msg):
+            messages_handled.append(msg)
+            if len(messages_handled) >= 2:
+                stdio_transport.running = False
+
+        with patch.object(stdio_transport, "_handle_message", new_callable=AsyncMock) as mock_handle:
+            mock_handle.side_effect = handle_side_effect
+
+            await stdio_transport._listen()
+
+            assert mock_handle.call_count == 2
+            assert messages_handled[0] == '{"jsonrpc":"2.0","method":"test1","id":1}'
+            assert messages_handled[1] == '{"jsonrpc":"2.0","method":"test2","id":2}'
+
+    @pytest.mark.asyncio
+    async def test_listen_cancelled(self, stdio_transport):
+        """Test listening when cancelled."""
+
+        mock_reader = AsyncMock()
+        mock_reader.read = AsyncMock(side_effect=asyncio.CancelledError())
+        stdio_transport.reader = mock_reader
+        stdio_transport.running = True
+
+        await stdio_transport._listen()
+
+        # Should exit cleanly without error
+        assert True
+
+    @pytest.mark.asyncio
+    async def test_listen_with_exception(self, stdio_transport):
+        """Test listening with exception during read."""
+        mock_reader = AsyncMock()
+        mock_reader.read = AsyncMock(side_effect=Exception("Read error"))
+        stdio_transport.reader = mock_reader
+        stdio_transport.running = True
+
+        with patch.object(stdio_transport, "_send_error", new_callable=AsyncMock) as mock_send_error:
+            # Stop after error
+            async def send_error_side_effect(*args):
+                stdio_transport.running = False
+
+            mock_send_error.side_effect = send_error_side_effect
+
+            await stdio_transport._listen()
+
+            mock_send_error.assert_called_once()
+            error_args = mock_send_error.call_args[0]
+            assert error_args[1] == -32700  # Parse error code
+
+    @pytest.mark.asyncio
+    async def test_handle_message_with_exception(self, stdio_transport, mock_protocol):
+        """Test handling message that causes exception."""
+        mock_protocol.handle_request.side_effect = Exception("Handler error")
+
+        message = json.dumps({"jsonrpc": "2.0", "method": "test", "id": 1})
+
+        with patch.object(stdio_transport, "_send_error", new_callable=AsyncMock) as mock_send_error:
+            await stdio_transport._handle_message(message)
+
+            mock_send_error.assert_called_once()
+            error_args = mock_send_error.call_args[0]
+            assert error_args[0] == 1  # request id
+            assert error_args[1] == -32603  # Internal error code
+            assert "Handler error" in error_args[2]
+
+    @pytest.mark.asyncio
+    async def test_send_response_with_no_writer(self, stdio_transport):
+        """Test sending response when writer is None."""
+        stdio_transport.writer = None
+
+        # Should not raise error
+        await stdio_transport._send_response({"test": "data"})
+
+    @pytest.mark.asyncio
+    async def test_send_response_with_exception(self, stdio_transport):
+        """Test sending response with write exception."""
+        mock_writer = MagicMock()
+        mock_writer.write.side_effect = Exception("Write error")
+        stdio_transport.writer = mock_writer
+
+        # Should log error but not raise
+        await stdio_transport._send_response({"test": "data"})
+
+    def test_context_manager_exit_with_running_loop(self, stdio_transport):
+        """Test context manager exit with running event loop."""
+        with patch("asyncio.get_running_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_get_loop.return_value = mock_loop
+
+            stdio_transport.__exit__(None, None, None)
+
+            mock_loop.create_task.assert_called_once()
+
+    def test_context_manager_exit_without_loop(self, stdio_transport):
+        """Test context manager exit without event loop."""
+        with patch("asyncio.get_running_loop", side_effect=RuntimeError("No loop")):
+            stdio_transport.__exit__(None, None, None)
+
+            assert stdio_transport.running is False
+
+
+class TestRunStdioServer:
+    """Test run_stdio_server function."""
+
+    @patch("chuk_mcp_server.stdio_transport.asyncio.run")
+    @patch("chuk_mcp_server.stdio_transport.logging.basicConfig")
+    def test_run_stdio_server(self, mock_logging, mock_asyncio_run):
+        """Test running the stdio server."""
+        mock_protocol = MagicMock(spec=MCPProtocolHandler)
+
+        run_stdio_server(mock_protocol)
+
+        # Verify logging was configured
+        mock_logging.assert_called_once()
+        logging_kwargs = mock_logging.call_args[1]
+        assert logging_kwargs["stream"] is not None
+
+        # Verify asyncio.run was called
+        mock_asyncio_run.assert_called_once()
+
+    @patch("chuk_mcp_server.stdio_transport.asyncio.run")
+    def test_run_stdio_server_keyboard_interrupt(self, mock_asyncio_run):
+        """Test keyboard interrupt handling - note that KeyboardInterrupt is not caught."""
+        mock_protocol = MagicMock(spec=MCPProtocolHandler)
+
+        # Simulate KeyboardInterrupt
+        mock_asyncio_run.side_effect = KeyboardInterrupt()
+
+        # KeyboardInterrupt will propagate (not caught in run_stdio_server)
+        with pytest.raises(KeyboardInterrupt):
+            run_stdio_server(mock_protocol)
