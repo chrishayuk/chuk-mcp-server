@@ -7,12 +7,12 @@ before moving to MCP protocol testing.
 """
 
 import asyncio
-import httpx
-import time
 import statistics
 import sys
-from typing import Dict, List, Any, Optional
+import time
 from dataclasses import dataclass
+
+import httpx
 
 
 @dataclass
@@ -26,7 +26,7 @@ class BasicResult:
     max_ms: float
     success_rate: float
     total_requests: int
-    errors: Dict[str, int]
+    errors: dict[str, int]
 
 
 class BasicHTTPTest:
@@ -34,7 +34,7 @@ class BasicHTTPTest:
 
     def __init__(self, base_url: str = "http://localhost:8001"):
         self.base_url = base_url.rstrip("/")
-        self.results: List[BasicResult] = []
+        self.results: list[BasicResult] = []
 
     async def run_basic_tests(self):
         """Run focused basic HTTP tests"""
@@ -73,7 +73,7 @@ class BasicHTTPTest:
             # Quick availability check first
             available = await self._check_endpoint_availability(endpoint["path"])
             if not available:
-                print(f"   ❌ Endpoint not available")
+                print("   ❌ Endpoint not available")
                 continue
 
             # Performance test
@@ -104,7 +104,7 @@ class BasicHTTPTest:
                 if result.errors:
                     print(f"   ⚠️  Errors: {result.errors}")
             else:
-                print(f"   ❌ Test failed completely")
+                print("   ❌ Test failed completely")
 
     async def _check_endpoint_availability(self, path: str) -> bool:
         """Quick check if endpoint is available"""
@@ -117,7 +117,7 @@ class BasicHTTPTest:
 
     async def _test_single_endpoint(
         self, path: str, name: str, concurrency: int = 10, duration: float = 3.0
-    ) -> Optional[BasicResult]:
+    ) -> BasicResult | None:
         """Test a single endpoint"""
 
         async def worker():
@@ -289,7 +289,7 @@ class BasicHTTPTest:
         avg_latency = sum(r.avg_ms for r in self.results) / len(self.results)
         avg_success = sum(r.success_rate for r in self.results) / len(self.results)
 
-        print(f"\n📈 Overall Averages:")
+        print("\n📈 Overall Averages:")
         print(f"   RPS: {avg_rps:.1f}")
         print(f"   Latency: {avg_latency:.2f}ms")
         print(f"   Success Rate: {avg_success:.1f}%")
@@ -312,7 +312,7 @@ class BasicHTTPTest:
         print(f"💡 Recommendation: {recommendation}")
 
         # Specific issues
-        print(f"\n🔍 Specific Issues Found:")
+        print("\n🔍 Specific Issues Found:")
         for result in self.results:
             if result.success_rate < 100:
                 print(f"   ⚠️  {result.endpoint}: {100 - result.success_rate:.1f}% failure rate")

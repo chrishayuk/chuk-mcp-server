@@ -6,9 +6,9 @@ Quick diagnostic to check MCP server availability and endpoints.
 """
 
 import asyncio
-import httpx
-import json
 import sys
+
+import httpx
 
 
 async def diagnose_mcp_server(base_url: str = "http://localhost:8001"):

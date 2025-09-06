@@ -62,6 +62,7 @@ All platforms work with ZERO configuration! 🚀
 """
 
 import sys
+from typing import Any
 
 # Import cloud functionality
 from .cloud import detect_cloud_provider, is_cloud_environment
@@ -89,9 +90,9 @@ from .types import (
 
 
 # Create backward compatibility
-def Capabilities(**kwargs):
+def Capabilities(**kwargs: Any) -> dict[str, Any]:
     """Legacy capabilities function for backward compatibility."""
-    return create_server_capabilities(**kwargs)
+    return create_server_capabilities(**kwargs)  # type: ignore[no-any-return]
 
 
 __version__ = "2.1.0"  # Enhanced cloud support version
@@ -111,7 +112,7 @@ def get_or_create_global_server() -> ChukMCPServer:
     return _global_server
 
 
-def run(**kwargs):
+def run(**kwargs: Any) -> None:
     """Run the global smart server with cloud detection."""
     server = get_or_create_global_server()
     server.run(**kwargs)
@@ -122,10 +123,10 @@ def run(**kwargs):
 # ============================================================================
 
 
-def get_cloud_handler():
+def get_cloud_handler() -> object:
     """Magic function to get cloud-specific handler."""
     server = get_or_create_global_server()
-    handler = server.get_cloud_handler()
+    handler = server.get_cloud_handler()  # type: ignore
 
     if handler is None:
         cloud_provider = detect_cloud_provider()
@@ -140,10 +141,10 @@ def get_cloud_handler():
     return handler
 
 
-def get_gcf_handler():
+def get_gcf_handler() -> object:
     """Get Google Cloud Functions handler."""
     server = get_or_create_global_server()
-    adapter = server.get_cloud_adapter()
+    adapter = server.get_cloud_adapter()  # type: ignore
 
     if adapter and hasattr(adapter, "get_handler"):
         from .cloud.providers.gcp import GCPProvider
@@ -158,10 +159,10 @@ def get_gcf_handler():
     )
 
 
-def get_lambda_handler():
+def get_lambda_handler() -> object:
     """Get AWS Lambda handler."""
     server = get_or_create_global_server()
-    adapter = server.get_cloud_adapter()
+    adapter = server.get_cloud_adapter()  # type: ignore
 
     if adapter and hasattr(adapter, "get_handler"):
         from .cloud.providers.aws import AWSProvider
@@ -173,10 +174,10 @@ def get_lambda_handler():
     raise RuntimeError("Not in AWS Lambda environment.")
 
 
-def get_azure_handler():
+def get_azure_handler() -> object:
     """Get Azure Functions handler."""
     server = get_or_create_global_server()
-    adapter = server.get_cloud_adapter()
+    adapter = server.get_cloud_adapter()  # type: ignore
 
     if adapter and hasattr(adapter, "get_handler"):
         from .cloud.providers.azure import AzureProvider
@@ -196,25 +197,25 @@ def is_cloud() -> bool:
 def is_gcf() -> bool:
     """Check if running in Google Cloud Functions."""
     cloud_provider = detect_cloud_provider()
-    return cloud_provider and cloud_provider.name == "gcp"
+    return bool(cloud_provider and cloud_provider.name == "gcp")
 
 
 def is_lambda() -> bool:
     """Check if running in AWS Lambda."""
     cloud_provider = detect_cloud_provider()
-    return cloud_provider and cloud_provider.name == "aws"
+    return bool(cloud_provider and cloud_provider.name == "aws")
 
 
 def is_azure() -> bool:
     """Check if running in Azure Functions."""
     cloud_provider = detect_cloud_provider()
-    return cloud_provider and cloud_provider.name == "azure"
+    return bool(cloud_provider and cloud_provider.name == "azure")
 
 
-def get_deployment_info() -> dict:
+def get_deployment_info() -> dict[str, Any]:
     """Get deployment information for current environment."""
     server = get_or_create_global_server()
-    return server.get_cloud_deployment_info()
+    return server.get_cloud_deployment_info()  # type: ignore
 
 
 # ============================================================================
@@ -222,7 +223,7 @@ def get_deployment_info() -> dict:
 # ============================================================================
 
 
-def _auto_export_cloud_handlers():
+def _auto_export_cloud_handlers() -> None:
     """Automatically export cloud handlers based on environment detection."""
     import sys
 
@@ -235,7 +236,7 @@ def _auto_export_cloud_handlers():
 
         # Get the global server and its cloud adapter
         server = get_or_create_global_server()
-        adapter = server.get_cloud_adapter()
+        adapter = server.get_cloud_adapter()  # type: ignore
 
         if not adapter:
             return
@@ -247,26 +248,26 @@ def _auto_export_cloud_handlers():
         # Export handler with standard names for each platform
         if cloud_provider.name == "gcp":
             # GCF expects 'mcp_gcf_handler' or custom entry point
-            current_module.mcp_gcf_handler = handler
+            current_module.mcp_gcf_handler = handler  # type: ignore
 
         elif cloud_provider.name == "aws":
             # Lambda expects 'lambda_handler' by default
-            current_module.lambda_handler = handler
-            current_module.handler = handler  # Alternative name
+            current_module.lambda_handler = handler  # type: ignore
+            current_module.handler = handler  # type: ignore
 
         elif cloud_provider.name == "azure":
             # Azure Functions expects 'main' by default
-            current_module.main = handler
-            current_module.azure_handler = handler  # Alternative name
+            current_module.main = handler  # type: ignore
+            current_module.azure_handler = handler  # type: ignore
 
         elif cloud_provider.name in ["vercel", "netlify", "cloudflare"]:
             # Edge functions often expect 'handler' or 'main'
-            current_module.handler = handler
-            current_module.main = handler
+            current_module.handler = handler  # type: ignore
+            current_module.main = handler  # type: ignore
 
         # Always export generic names
-        current_module.cloud_handler = handler
-        current_module.mcp_handler = handler
+        current_module.cloud_handler = handler  # type: ignore
+        current_module.mcp_handler = handler  # type: ignore
 
     except Exception:
         # Silently ignore errors during auto-export
@@ -317,7 +318,7 @@ __all__ = [
 # ============================================================================
 
 
-def show_cloud_examples():
+def show_cloud_examples() -> None:
     """Show cloud-specific zero configuration examples."""
     examples = """
 ☁️ ChukMCPServer - Cloud Zero Configuration Examples

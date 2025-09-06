@@ -134,7 +134,7 @@ class AWSProvider(CloudProvider):
         memory_mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", 128))
 
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for AWS Lambda runtime
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 1,  # Lambda is single-threaded per instance
             "max_connections": min(memory_mb // 10, 1000),  # ~1 connection per 10MB
@@ -151,7 +151,7 @@ class AWSProvider(CloudProvider):
     def _get_fargate_config(self) -> dict[str, Any]:
         """Get Fargate specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for AWS Fargate load balancer
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 4,  # Will be optimized by system detector
             "max_connections": 2000,
@@ -164,7 +164,7 @@ class AWSProvider(CloudProvider):
     def _get_beanstalk_config(self) -> dict[str, Any]:
         """Get Elastic Beanstalk specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for AWS Elastic Beanstalk load balancer
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 4,  # Will be optimized by system detector
             "max_connections": 3000,
@@ -179,7 +179,7 @@ class AWSProvider(CloudProvider):
     def _get_ec2_config(self) -> dict[str, Any]:
         """Get EC2 specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for AWS EC2 load balancer
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 4,  # Will be optimized by system detector
             "max_connections": 5000,
@@ -198,3 +198,10 @@ class AWSProvider(CloudProvider):
             return "lambda_standard"
         else:  # < 1GB
             return "lambda_minimal"
+
+
+# Manual registration function (called by providers/__init__.py)
+def register_aws_provider(registry: Any) -> None:
+    """Register AWS provider with the registry."""
+    aws_provider = AWSProvider()
+    registry.register_provider(aws_provider)

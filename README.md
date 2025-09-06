@@ -1,651 +1,765 @@
 # ChukMCPServer
 
-A **zero-configuration MCP framework** with **world-class performance** and intelligent defaults. Build production-ready MCP servers with **39,000+ RPS** and **ZERO configuration**.
+[![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
+[![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
+[![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
+[![Tests](https://img.shields.io/badge/tests-859%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
-## 🚀 Features
+**The fastest, most intelligent MCP (Model Context Protocol) server framework.** Build LLM-integrated tools with zero configuration, blazing performance, and seamless Claude Desktop integration.
 
-- **🧠 Zero Configuration**: Auto-detects everything - project name, environment, network, performance settings
-- **⚡ World-Class Performance**: **39,651 RPS** peak with sub-5ms latency
-- **🧩 Clean API**: Simple decorators similar to FastAPI
-- **🛡️ Type Safety**: Automatic schema generation from Python type hints
-- **🔍 Inspector Compatible**: Perfect integration with MCP Inspector
-- **📊 Rich Resources**: Support for JSON, Markdown, and custom MIME types
-- **🌊 Async Native**: Advanced concurrent and streaming capabilities
-- **🏗️ Modular Architecture**: Registry-driven design for extensibility
-- **🚀 Production Ready**: Comprehensive error handling and session management
+## 🎯 Why ChukMCPServer?
 
-## 📦 Installation
+- **🚀 Instant Setup**: Works with Claude Desktop in under 30 seconds
+- **⚡ Blazing Fast**: 39,000+ requests/second with sub-5ms latency
+- **🧠 Zero Config**: Auto-detects everything - just write your tools
+- **🔌 Dual Transport**: Native stdio for Claude Desktop + HTTP/SSE for web
+- **📦 No Dependencies**: Pure Python with optional performance boosters
+- **🎨 Clean API**: Decorator-based like FastAPI, but simpler
 
-```bash
-pip install chuk-mcp-server
-```
-
-## 🎯 Zero Configuration Quick Start
-
-### Ultimate Zero Config (Magic Decorators)
+## 📸 Quick Demo
 
 ```python
+# server.py - A complete MCP server in 10 lines!
 from chuk_mcp_server import tool, resource, run
 
-# ✨ CLEAN: No server creation, no configuration needed!
 @tool
-async def hello(name: str = "World") -> str:
-    """Say hello to someone (async)."""
-    return f"Hello, {name}!"
+def calculate(expression: str) -> str:
+    """Evaluate a mathematical expression."""
+    return f"{expression} = {eval(expression)}"
 
-@tool  
-async def calculate(expression: str) -> str:
-    """Calculate mathematical expressions (async)."""
-    try:
-        result = eval(expression)  # Note: Use safely in production
-        return f"{expression} = {result}"
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@resource("config://settings")
-async def get_settings() -> dict:
-    """Server configuration (async resource)."""
-    return {
-        "app": "Zero Config Demo",
-        "version": "1.0.0",
-        "magic": True,
-        "performance_optimized": True
-    }
+@resource("data://example")
+def get_data() -> dict:
+    """Get example data."""
+    return {"message": "Hello from ChukMCP!", "status": "ready"}
 
 if __name__ == "__main__":
-    # ✨ CLEAN: Just run() - everything auto-detected!
-    run()  # Auto-detects host, port, performance settings, everything!
+    run()  # That's it! 🎉
 ```
 
-### Traditional Style (Still Zero Config)
+## 🚀 Quickstart
+
+### 1. Install
+
+```bash
+# Using pip
+pip install chuk-mcp-server
+
+# Using uv (recommended)
+uv add chuk-mcp-server
+
+# Or run without installing (uvx)
+uvx chuk-mcp-server --help
+```
+
+### 2. Choose Your Transport Mode
+
+ChukMCPServer supports two transport modes:
+
+#### 🖥️ **Stdio Mode** (for Claude Desktop & CLI tools)
+- Direct process communication via stdin/stdout
+- Required for Claude Desktop integration
+- Best for local tools and scripts
+
+#### 🌐 **HTTP Mode** (for web apps & remote access)
+- RESTful HTTP with SSE streaming
+- WebSocket-like real-time updates
+- Perfect for web integrations and APIs
+
+### 3. Configure Claude Desktop (Stdio Mode)
+
+Add to your Claude Desktop config:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### Option A: Run your custom server
+```json
+{
+  "mcpServers": {
+    "my-tools": {
+      "command": "python",
+      "args": ["/path/to/server.py", "--stdio"],
+      "env": {}
+    }
+  }
+}
+```
+
+#### Option B: Use uvx (no installation needed)
+```json
+{
+  "mcpServers": {
+    "chuk-tools": {
+      "command": "uvx",
+      "args": ["chuk-mcp-server", "stdio"]
+    }
+  }
+}
+```
+
+#### Option C: Use installed package
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "chuk-mcp-server",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+### 4. Run HTTP Server (for Web Clients)
+
+```bash
+# Using your script
+python server.py --http --port 8000
+
+# Using CLI
+chuk-mcp-server http --port 8000
+
+# Using uvx
+uvx chuk-mcp-server http --host 0.0.0.0 --port 8080
+```
+
+#### Connect from a web client:
+```javascript
+// JavaScript/TypeScript client example
+const response = await fetch('http://localhost:8000/mcp', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/list',
+    id: 1
+  })
+});
+
+// Server-Sent Events for streaming
+const events = new EventSource('http://localhost:8000/mcp');
+events.onmessage = (event) => {
+  console.log('Received:', JSON.parse(event.data));
+};
+```
+
+### 5. Test Your Setup
+
+```bash
+# Test stdio mode
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
+
+# Test HTTP mode
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# Get server info (HTTP mode)
+curl http://localhost:8000/health
+```
+
+## 🔄 Transport Modes Explained
+
+ChukMCPServer intelligently auto-detects the best transport mode, or you can explicitly choose:
+
+### When to Use Each Mode
+
+| Feature | Stdio Mode | HTTP Mode |
+|---------|-----------|-----------|
+| **Use Case** | Claude Desktop, CLI tools | Web apps, APIs, remote access |
+| **Communication** | Process pipes (stdin/stdout) | Network (HTTP/SSE) |
+| **Security** | Most secure (local only) | Network security needed |
+| **Performance** | Lowest latency | < 5ms latency |
+| **Setup** | No ports needed | Requires port |
+| **Debugging** | Logs to stderr | Browser DevTools |
+| **Scaling** | Single client | Multiple clients |
+| **Claude Desktop** | ✅ Required | ❌ Not supported |
+| **Web Integration** | ❌ Not supported | ✅ Full support |
+
+### Stdio Transport (Process Communication)
+Perfect for Claude Desktop and command-line tools:
+- ✅ Direct integration with Claude Desktop
+- ✅ Minimal overhead, maximum security
+- ✅ No network ports needed
+- ✅ Ideal for local tools and scripts
+
+```python
+# Auto-detects stdio when piped or when MCP_STDIO env is set
+mcp.run()  
+
+# Or explicitly use stdio
+mcp.run(stdio=True)
+
+# In your script, handle stdio mode properly:
+import sys
+import logging
+
+# IMPORTANT: Logs must go to stderr in stdio mode
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+```
+
+### HTTP Transport (Network Communication)
+Perfect for web apps and remote access:
+- ✅ RESTful API with SSE streaming
+- ✅ Cross-platform web clients
+- ✅ Remote access capability
+- ✅ Built-in health checks and monitoring
+
+```python
+# Auto-detects HTTP when not in stdio mode
+mcp.run()  
+
+# Or explicitly configure HTTP
+mcp.run(host="0.0.0.0", port=8080, stdio=False)
+
+# Access endpoints:
+# POST http://localhost:8080/mcp    - MCP protocol endpoint
+# GET  http://localhost:8080/health - Health check
+# GET  http://localhost:8080/tools  - List available tools
+```
+
+### Smart Auto-Detection
+The framework automatically chooses the right mode:
+```python
+# Just call run() - it figures out the rest!
+mcp.run()
+
+# Detection logic:
+# 1. If stdin is piped → stdio mode
+# 2. If MCP_STDIO env var → stdio mode  
+# 3. If MCP_TRANSPORT env var → use that mode
+# 4. Otherwise → HTTP mode
+```
+
+## 🎨 Real-World Examples
+
+### Complete File System Tools
 
 ```python
 from chuk_mcp_server import ChukMCPServer
+import os
+from pathlib import Path
 
-# ✨ Smart server with auto-detected configuration
-mcp = ChukMCPServer()  # Uses SmartConfig for all detection!
+mcp = ChukMCPServer(name="filesystem-tools")
 
 @mcp.tool
-async def process_data(data: list, operation: str = "sum") -> dict:
-    """Process data asynchronously."""
-    if operation == "sum":
-        result = sum(data) if all(isinstance(x, (int, float)) for x in data) else 0
-    elif operation == "count":
-        result = len(data)
-    else:
-        result = f"Unknown operation: {operation}"
+def list_files(directory: str = ".", pattern: str = "*") -> list[str]:
+    """List files in a directory matching a pattern."""
+    path = Path(directory)
+    if not path.exists():
+        return [f"Error: {directory} does not exist"]
     
+    files = []
+    for item in path.glob(pattern):
+        if item.is_file():
+            size = item.stat().st_size
+            files.append(f"{item.name} ({size:,} bytes)")
+    return files
+
+@mcp.tool
+def read_file(filepath: str, lines: int = None) -> str:
+    """Read contents of a file."""
+    try:
+        with open(filepath, 'r') as f:
+            if lines:
+                return ''.join(f.readlines()[:lines])
+            return f.read()
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+@mcp.tool  
+def write_file(filepath: str, content: str, append: bool = False) -> str:
+    """Write content to a file."""
+    mode = 'a' if append else 'w'
+    try:
+        with open(filepath, mode) as f:
+            f.write(content)
+        return f"Successfully wrote to {filepath}"
+    except Exception as e:
+        return f"Error writing file: {e}"
+
+@mcp.resource("fs://current-dir")
+def current_directory() -> dict:
+    """Get current directory information."""
+    cwd = os.getcwd()
     return {
-        "operation": operation,
-        "input_size": len(data),
-        "result": result,
-        "async": True
+        "path": cwd,
+        "files": len([f for f in os.listdir(cwd) if os.path.isfile(f)]),
+        "directories": len([d for d in os.listdir(cwd) if os.path.isdir(d)]),
+        "readable": os.access(cwd, os.R_OK),
+        "writable": os.access(cwd, os.W_OK)
     }
 
-@mcp.resource("docs://readme")  
-async def get_readme() -> str:
-    """Project documentation (async resource)."""
-    return """# Zero Configuration MCP Server
+if __name__ == "__main__":
+    # Run with smart auto-detection
+    mcp.run()
+    
+    # Or explicitly choose transport:
+    # mcp.run(stdio=True)  # For Claude Desktop
+    # mcp.run(port=8080)   # For HTTP clients
+```
 
-This server was created with **ZERO** configuration!
+### API Integration Tools
 
-## Performance Results
-- MCP Ping: 39,651 RPS
-- Async Tool Calls: 25,000+ RPS  
-- Async Resource Reads: 26,000+ RPS
-"""
+```python
+from chuk_mcp_server import ChukMCPServer
+import httpx
+import asyncio
+
+mcp = ChukMCPServer(name="api-tools")
+
+@mcp.tool
+async def fetch_url(url: str, method: str = "GET", headers: dict = None) -> dict:
+    """Fetch data from a URL."""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.request(method, url, headers=headers)
+            return {
+                "status": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.text[:1000],  # First 1000 chars
+                "size": len(response.content)
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+@mcp.tool
+async def parallel_fetch(urls: list[str]) -> list[dict]:
+    """Fetch multiple URLs in parallel."""
+    async with httpx.AsyncClient() as client:
+        tasks = [client.get(url) for url in urls]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        results = []
+        for url, resp in zip(urls, responses):
+            if isinstance(resp, Exception):
+                results.append({"url": url, "error": str(resp)})
+            else:
+                results.append({
+                    "url": url,
+                    "status": resp.status_code,
+                    "size": len(resp.content)
+                })
+        return results
+
+@mcp.resource("api://status")
+async def api_status() -> dict:
+    """Check status of common APIs."""
+    endpoints = [
+        "https://api.github.com",
+        "https://api.openai.com/v1/models",
+        "https://www.googleapis.com/discovery/v1/apis"
+    ]
+    
+    statuses = {}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for endpoint in endpoints:
+            try:
+                resp = await client.get(endpoint)
+                statuses[endpoint] = "✅ Online" if resp.status_code < 500 else "⚠️ Issues"
+            except:
+                statuses[endpoint] = "❌ Offline"
+    
+    return statuses
 
 if __name__ == "__main__":
-    mcp.run()  # Auto-detects everything!
+    mcp.run()
+```
+
+### Data Processing Tools
+
+```python
+from chuk_mcp_server import ChukMCPServer
+import json
+import csv
+from io import StringIO
+
+mcp = ChukMCPServer(name="data-tools")
+
+@mcp.tool
+def json_to_csv(json_data: str | list | dict) -> str:
+    """Convert JSON data to CSV format."""
+    if isinstance(json_data, str):
+        data = json.loads(json_data)
+    else:
+        data = json_data
+    
+    if not isinstance(data, list):
+        data = [data]
+    
+    if not data:
+        return "No data to convert"
+    
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+    writer.writeheader()
+    writer.writerows(data)
+    return output.getvalue()
+
+@mcp.tool
+def analyze_json(json_data: str | dict) -> dict:
+    """Analyze JSON structure and statistics."""
+    if isinstance(json_data, str):
+        data = json.loads(json_data)
+    else:
+        data = json_data
+    
+    def analyze_value(value, path="root"):
+        stats = {"path": path, "type": type(value).__name__}
+        
+        if isinstance(value, dict):
+            stats["keys"] = len(value)
+            stats["nested"] = {}
+            for k, v in value.items():
+                stats["nested"][k] = analyze_value(v, f"{path}.{k}")
+        elif isinstance(value, list):
+            stats["length"] = len(value)
+            if value:
+                stats["item_types"] = list(set(type(v).__name__ for v in value))
+        elif isinstance(value, str):
+            stats["length"] = len(value)
+        elif isinstance(value, (int, float)):
+            stats["value"] = value
+            
+        return stats
+    
+    return analyze_value(data)
+
+@mcp.tool
+def transform_data(
+    data: list[dict],
+    operations: list[str]
+) -> list[dict]:
+    """
+    Apply transformations to data.
+    Operations: 'uppercase', 'lowercase', 'trim', 'remove_nulls'
+    """
+    result = data.copy()
+    
+    for op in operations:
+        if op == "uppercase":
+            result = [{k: v.upper() if isinstance(v, str) else v 
+                      for k, v in item.items()} for item in result]
+        elif op == "lowercase":
+            result = [{k: v.lower() if isinstance(v, str) else v 
+                      for k, v in item.items()} for item in result]
+        elif op == "trim":
+            result = [{k: v.strip() if isinstance(v, str) else v 
+                      for k, v in item.items()} for item in result]
+        elif op == "remove_nulls":
+            result = [{k: v for k, v in item.items() if v is not None} 
+                     for item in result]
+    
+    return result
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+## 🖥️ CLI Usage
+
+ChukMCPServer includes a powerful CLI for both development and production:
+
+```bash
+# Install the CLI
+pip install chuk-mcp-server
+
+# Or use without installing (uvx)
+uvx chuk-mcp-server --help
+```
+
+### CLI Commands
+
+#### Stdio Mode (for Claude Desktop)
+```bash
+# Basic stdio server
+chuk-mcp-server stdio
+
+# With debug output (logs to stderr)
+chuk-mcp-server stdio --debug
+
+# Test with a simple command
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
+```
+
+#### HTTP Mode (for Web Clients)
+```bash
+# Basic HTTP server
+chuk-mcp-server http
+
+# Custom host and port
+chuk-mcp-server http --host 0.0.0.0 --port 8080
+
+# With debug mode
+chuk-mcp-server http --debug --port 3000
+```
+
+#### Auto Mode (Smart Detection)
+```bash
+# Let the server decide based on environment
+chuk-mcp-server auto
+
+# It will choose:
+# - stdio: if stdin is piped or MCP_STDIO is set
+# - http: otherwise
+```
+
+### Environment Variables
+
+Control behavior through environment variables:
+
+```bash
+# Force stdio mode
+MCP_STDIO=1 python server.py
+
+# Force HTTP mode
+MCP_TRANSPORT=http python server.py
+
+# Set performance mode
+MCP_PERFORMANCE_MODE=high python server.py
+
+# Configure HTTP settings
+MCP_HOST=0.0.0.0 MCP_PORT=8080 python server.py
+```
+
+## ⚡ Performance
+
+ChukMCPServer is the fastest MCP implementation available:
+
+| Metric | Performance | Conditions |
+|--------|------------|------------|
+| **Throughput** | 39,651 RPS | Ping endpoint, local |
+| **Latency** | < 5ms p99 | Tool execution |
+| **Concurrency** | 1,000+ connections | HTTP/SSE mode |
+| **Memory** | < 50MB | 1000 tools registered |
+| **Startup** | < 100ms | Full initialization |
+
+### Performance Tips
+
+```python
+# Enable performance mode
+mcp = ChukMCPServer(performance_mode="high")
+
+# Or via environment
+os.environ["MCP_PERFORMANCE_MODE"] = "high_performance"
 ```
 
 ## 🧠 Smart Configuration
 
-ChukMCPServer features a **modular smart configuration system** that auto-detects optimal settings:
+ChukMCPServer auto-detects everything:
 
-### Automatic Detection
-- **🏠 Environment**: Development, production, testing, serverless, containers
-- **🌐 Network**: Optimal host/port binding (localhost for dev, 0.0.0.0 for prod)
-- **⚡ Performance**: Workers, connections, logging levels based on hardware
-- **🐳 Platform**: Docker, Kubernetes, AWS Lambda, Vercel, Railway
-- **📊 Project**: Auto-detects name from directory, package.json, pyproject.toml
+- **Project name** from package.json, pyproject.toml, or directory
+- **Environment** (development/production/serverless)
+- **Network settings** (host, port, available ports)
+- **Transport mode** (stdio vs HTTP)
+- **Performance settings** based on system resources
+- **Cloud environment** (AWS, GCP, Azure, Vercel, etc.)
 
-### Smart Defaults in Action
-
-```bash
-🧠 ChukMCPServer - Modular Zero Configuration Mode
-============================================================
-📊 Environment: development
-🌐 Network: localhost:8000
-🔧 Workers: 8
-🔗 Max Connections: 1000
-🐳 Container: False
-⚡ Performance Mode: development
-📝 Log Level: INFO
-============================================================
-```
-
-### Performance Mode Options
+Override anything you need:
 
 ```python
-# Performance optimized (39,000+ RPS)
-python zero_config_examples.py --performance
-
-# Development mode (full logging)
-python zero_config_examples.py --development  
-
-# Smart auto-detection (detects context)
-python zero_config_examples.py
-```
-
-## 📊 World-Class Performance
-
-### 🏆 Latest Performance Results
-
-**ChukMCPServer delivers exceptional performance that rivals the fastest web frameworks:**
-
-```
-🚀 ULTRA-MINIMAL MCP PROTOCOL RESULTS
-============================================================
-🏆 Maximum MCP Performance:
-   Peak RPS:       39,651
-   Avg Latency:      4.99ms
-   Success Rate:    100.0%
-   Concurrency:     1,000 connections
-   MCP Errors:          0
-
-📋 MCP Operation Performance:
-   Operation               |    RPS     | Avg(ms) | Success%
-   --------------------------------------------------------
-   MCP Ping                |   39,651 |    5.0 |  100.0%
-   MCP Tools List          |   36,203 |    5.5 |  100.0%
-   MCP Resources List      |   36,776 |    5.4 |  100.0%
-   Hello Tool Call         |   25,668 |    3.9 |  100.0%
-   Calculate Tool Call     |   24,463 |    4.1 |  100.0%
-   Settings Resource Read  |   26,019 |    3.8 |  100.0%
-   README Resource Read    |   26,584 |    3.8 |  100.0%
-
-🔍 Performance Analysis:
-   🏆 EXCEPTIONAL MCP performance!
-   🚀 Your ChukMCPServer is world-class
-```
-
-### Performance Achievements
-- **⚡ Peak Throughput**: 39,651 RPS (new record!)
-- **🎯 Ultra-low Latency**: Sub-5ms average response time
-- **🔄 Perfect Concurrency**: Linear scaling to 1,000+ connections
-- **🛡️ Zero Errors**: 100% success rate under maximum load
-- **📊 Efficient Protocol**: Only ~25% overhead over raw HTTP
-
-### Performance Comparison
-
-| Framework | RPS | Latency | Config Required |
-|-----------|-----|---------|-----------------|
-| **ChukMCPServer** | **39,651** | **4.99ms** | **Zero** ✨ |
-| FastAPI + DB | 1,000-5,000 | 20-100ms | High |
-| Express.js + DB | 2,000-8,000 | 15-50ms | High |
-| Spring Boot + DB | 500-2,000 | 50-200ms | Very High |
-
-## 🎭 Modular Architecture
-
-ChukMCPServer uses a **modular, zero-config architecture** optimized for maximum performance:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                 ChukMCPServer v2.0                      │
-├─────────────────────────────────────────────────────────┤
-│  🧠 Smart Configuration System (Modular)               │
-│  • ProjectDetector (auto-detects name)                 │
-│  • EnvironmentDetector (dev/prod/container)            │
-│  • NetworkDetector (optimal host/port)                 │
-│  • SystemDetector (performance optimization)           │
-│  • ContainerDetector (Docker/K8s detection)            │
-├─────────────────────────────────────────────────────────┤
-│  🎯 Core Framework (types.py, core.py)                 │
-│  • Clean decorator API                                 │
-│  • Type-safe parameter handling                        │
-│  • orjson optimization throughout                      │
-├─────────────────────────────────────────────────────────┤
-│  📋 Registry System                                     │
-│  • MCP Registry (tools, resources, prompts)            │
-│  • HTTP Registry (endpoints, middleware)               │
-│  • Pre-cached schema generation                        │
-├─────────────────────────────────────────────────────────┤
-│  🌐 Protocol Layer (protocol.py)                       │
-│  • MCP JSON-RPC handling                              │
-│  • Session management                                  │
-│  • SSE streaming support                               │
-├─────────────────────────────────────────────────────────┤
-│  📡 HTTP Server (http_server.py)                       │
-│  • uvloop + Starlette                                 │
-│  • Auto-registered endpoints                           │
-│  • CORS and middleware support                         │
-├─────────────────────────────────────────────────────────┤
-│  🧱 chuk_mcp Integration                                │
-│  • Direct type usage (no conversion layers)            │
-│  • Robust protocol implementation                      │
-│  • Production-grade error handling                     │
-└─────────────────────────────────────────────────────────┘
-```
-
-## 🔍 MCP Inspector Integration
-
-ChukMCPServer works perfectly with [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-1. **Start your server**:
-   ```bash
-   python zero_config_examples.py  # Runs on http://localhost:8000
-   ```
-
-2. **Use MCP Inspector**:
-   - Transport Type: **Streamable HTTP**
-   - URL: `http://localhost:8000/mcp`
-   - All tools and resources will be automatically discovered
-
-3. **For development with proxy**:
-   ```bash
-   # Use proxy on port 8011 for Inspector
-   # URL: http://localhost:8011/mcp/inspector
-   ```
-
-## 🛠️ Advanced Features
-
-### Type Safety and Parameter Conversion
-
-```python
-from typing import Union, List
-
-@tool
-async def smart_calculator(
-    expression: str,
-    precision: Union[str, int] = 2,
-    format_output: bool = True
-) -> str:
-    """
-    ChukMCPServer automatically handles:
-    - String "2" → int 2
-    - String "true" → bool True
-    - JSON arrays → Python lists
-    """
-    # Your tool logic here
-    pass
-```
-
-### Rich Resources with Multiple MIME Types
-
-```python
-@resource("docs://readme")
-async def get_documentation() -> str:
-    """🧠 Auto-inferred: mime_type=text/markdown"""
-    return "# My API Documentation\n\nThis is **markdown** content!"
-
-@resource("data://metrics")
-async def get_metrics() -> dict:
-    """🧠 Auto-inferred: mime_type=application/json"""
-    return {
-        "cpu_usage": 45.2,
-        "memory_usage": 67.8,
-        "requests_per_second": 39651  # Your actual performance!
-    }
-```
-
-### Smart Environment Detection
-
-```python
-# Development mode (localhost:8000, debug=True, full logging)
-NODE_ENV=development python server.py
-
-# Production mode (0.0.0.0:PORT, debug=False, minimal logging)  
-NODE_ENV=production python server.py
-
-# Container mode (auto-detected from Docker/K8s environment)
-# Automatically uses 0.0.0.0, optimizes for containers
-
-# Serverless mode (auto-detected from AWS Lambda, Vercel, etc.)
-# Automatically optimizes for cold starts and single workers
-```
-
-## 🚀 Examples
-
-### Zero Config Examples
-
-```bash
-# Performance optimized (39,000+ RPS)
-python examples/zero_config_examples.py --performance
-
-# Development mode (full logging)
-python examples/zero_config_examples.py --development
-
-# Smart auto-detection
-python examples/zero_config_examples.py
-```
-
-### Production Server Example
-
-See [`examples/production_server.py`](examples/production_server.py) for a comprehensive server with:
-- 7 production-ready tools
-- 4 rich resources
-- Type-safe parameter handling
-- Comprehensive documentation
-
-### Async Native Example
-
-See [`examples/async_production_server.py`](examples/async_production_server.py) for advanced async capabilities:
-- Concurrent API requests
-- Stream processing with async generators
-- Real-time monitoring
-- Distributed task coordination
-- File processing with concurrent batches
-
-## 🧪 Testing and Benchmarks
-
-### Ultra-Minimal Performance Test
-
-```bash
-# Run the world-class performance benchmark
-python benchmarks/ultra_minimal_mcp_performance_test.py
-
-# Custom host/port
-python benchmarks/ultra_minimal_mcp_performance_test.py localhost:8001
-
-# Performance mode with custom settings
-python benchmarks/ultra_minimal_mcp_performance_test.py --concurrency 500 --duration 10
-```
-
-### Expected Results
-
-**Your ChukMCPServer Performance:**
-```
-🚀 ULTRA-MINIMAL MCP PROTOCOL RESULTS
-============================================================
-🏆 Maximum MCP Performance:
-   Peak RPS:       39,651
-   Avg Latency:      4.99ms
-   Success Rate:    100.0%
-   Performance Grade: S+ (World-class)
-   
-🔍 Performance Analysis:
-   🏆 EXCEPTIONAL MCP performance!
-   🚀 Your ChukMCPServer is world-class
-   🧠 Zero configuration overhead confirmed
-```
-
-## 📋 API Reference
-
-### Zero Config API
-
-```python
-from chuk_mcp_server import tool, resource, run
-
-# Global decorators (ultimate simplicity)
-@tool
-async def hello(name: str) -> str:
-    """Auto-inferred: category=general, tags=["tool", "general"]"""
-    return f"Hello, {name}!"
-
-@resource("config://settings")
-async def get_settings() -> dict:
-    """Auto-inferred: mime_type=application/json, tags=["resource", "config"]"""
-    return {"app": "zero-config", "magic": True}
-
-# Just run - everything auto-detected!
-run()  # 🧠 Everything auto-detected using SmartConfig!
-```
-
-### Traditional API
-
-```python
-from chuk_mcp_server import ChukMCPServer
-
-# Create server (all parameters optional - smart defaults used)
 mcp = ChukMCPServer(
-    name="My Server",        # Auto-detected from directory/package.json
-    version="1.0.0", 
-    host=None,               # Auto-detected (localhost/0.0.0.0)
-    port=None,               # Auto-detected (finds available port)
-    debug=None,              # Auto-detected (based on environment)
-    tools=True,              # Enable tools capability
-    resources=True,          # Enable resources capability
-    prompts=False,           # Enable prompts capability
-    logging=False            # Enable logging capability
+    name="my-server",           # Auto-detected if not set
+    port=3000,                  # Auto-detected if not set
+    host="0.0.0.0",            # Auto-detected if not set
+    performance_mode="high"     # Auto-detected if not set
 )
-
-# Decorators with smart inference
-@mcp.tool                              # Auto-infers name, description, tags
-@mcp.tool(tags=["custom"])            # Override smart defaults
-@mcp.resource("uri://path")           # Auto-infers MIME type, tags
-@mcp.endpoint("/path", methods=["GET"]) # Custom HTTP endpoint
-
-# Manual registration
-mcp.add_tool(tool_handler)
-mcp.add_resource(resource_handler)
-
-# Smart configuration access
-mcp.get_smart_config()                # Get all smart configuration
-mcp.get_smart_config_summary()        # Get detection summary
-mcp.refresh_smart_config()            # Refresh configuration
-
-# Run server with smart defaults
-mcp.run()  # All parameters optional - uses smart detection
 ```
 
-### Configuration Introspection
+## 📚 API Reference
+
+### Tools
 
 ```python
-# Get comprehensive smart configuration
-smart_config = mcp.get_smart_config()
-print(f"Environment: {smart_config['environment']}")
-print(f"Workers: {smart_config['workers']}")
-print(f"Performance Mode: {smart_config['performance_mode']}")
+@mcp.tool
+def my_tool(param: str, optional: int = 10) -> dict:
+    """Tool description for LLM."""
+    return {"result": param, "count": optional}
 
-# Get detection summary
-summary = mcp.get_smart_config_summary()
-for key, value in summary["detection_summary"].items():
-    print(f"{key}: {value}")
+# Async tools
+@mcp.tool
+async def async_tool(data: str) -> str:
+    await asyncio.sleep(1)
+    return f"Processed: {data}"
 
-# Refresh configuration (useful for runtime changes)
-mcp.refresh_smart_config()
+# Renamed tools
+@mcp.tool("custom-name")
+def another_tool() -> str:
+    return "result"
 ```
 
-## 🏗️ Development
-
-### Project Structure
-
-```
-chuk_mcp_server/
-├── __init__.py              # Zero-config exports
-├── core.py                  # Clean ChukMCPServer class (modular config)
-├── config/                  # Modular smart configuration system
-│   ├── __init__.py          # SmartConfig orchestrator
-│   ├── project_detector.py  # Auto-detect project name
-│   ├── environment_detector.py  # Dev/prod/container detection
-│   ├── network_detector.py  # Optimal host/port detection
-│   ├── system_detector.py   # Performance optimization
-│   ├── container_detector.py  # Docker/K8s detection
-│   └── smart_config.py      # Main configuration class
-├── types/                   # High-performance type system
-│   ├── __init__.py          # Clean public API
-│   ├── tools.py             # ToolHandler with orjson optimization
-│   ├── resources.py         # ResourceHandler with caching
-│   ├── parameters.py        # Type inference and schema generation
-│   └── serialization.py     # orjson serialization utilities
-├── protocol.py              # MCP protocol implementation
-├── http_server.py           # HTTP server with performance optimization
-├── endpoint_registry.py     # HTTP endpoint management
-├── mcp_registry.py          # MCP component management
-├── decorators.py            # Global decorators
-└── endpoints/               # Modular endpoint handlers
-    ├── __init__.py
-    ├── mcp.py               # Core MCP endpoint with SSE
-    ├── health.py            # Health check endpoint
-    ├── info.py              # Server info endpoint
-    ├── ping.py              # Ultra-fast ping endpoint
-    ├── version.py           # Version endpoint
-    └── utils.py             # Performance utilities
-
-examples/
-├── zero_config_examples.py  # Ultimate zero config demo
-├── production_server.py     # High-performance server example
-├── async_production_server.py  # Async native example
-└── standalone_async_e2e_demo.py  # Comprehensive async demo
-
-benchmarks/
-├── ultra_minimal_mcp_performance_test.py  # World-class performance test
-├── quick_benchmark.py       # Quick performance test
-└── mcp_performance_test.py  # Comprehensive performance analysis
-```
-
-### Performance Optimizations
-
-ChukMCPServer achieves world-class performance through:
-
-1. **🧠 Smart Configuration**: Zero overhead auto-detection
-2. **⚡ orjson Throughout**: 2-3x faster JSON serialization
-3. **📊 Schema Caching**: Pre-computed tool/resource schemas
-4. **🌊 uvloop Integration**: Maximum async I/O performance
-5. **🎯 Direct Type Usage**: No conversion layers or overhead
-6. **🚀 Efficient Parameter Handling**: Optimized type inference
-7. **🔄 Connection Optimization**: Efficient resource management
-8. **📈 Modular Architecture**: Clean separation, optimal performance
-
-### Smart Configuration Benefits
-
-The modular smart configuration system provides:
-- **⚡ Zero Performance Overhead**: Configuration detection adds <1ms
-- **🧠 Intelligent Defaults**: Always optimal for the environment
-- **🔄 Runtime Refresh**: Change configuration without restart
-- **📊 Full Introspection**: Understand how everything was detected
-- **🧩 Modular & Testable**: Each detector is independently testable
-
-## 🚀 Deployment
-
-### Zero Config Deployment
+### Resources
 
 ```python
-# Development
-python server.py  # Auto-detects: localhost:8000, debug=True
+@mcp.resource("protocol://path")
+def my_resource() -> dict:
+    """Resource description."""
+    return {"data": "value"}
 
-# Production  
-NODE_ENV=production python server.py  # Auto-detects: 0.0.0.0:PORT, debug=False
+# Async resources
+@mcp.resource("async://data")
+async def async_resource() -> dict:
+    await fetch_data()
+    return {"data": "value"}
 
-# Container
-docker run myapp  # Auto-detects: container mode, optimized settings
-
-# Serverless
-# Automatically optimizes for AWS Lambda, Vercel, etc.
+# Markdown resources
+@mcp.resource("docs://readme", mime_type="text/markdown")
+def get_docs() -> str:
+    return "# Documentation\nContent here..."
 ```
 
-### Docker
+### Prompts
+
+```python
+@mcp.prompt
+def my_prompt(context: str) -> str:
+    """Generate a prompt based on context."""
+    return f"Based on {context}, please..."
+
+# With arguments
+@mcp.prompt("code-review")
+def code_review_prompt(language: str, code: str) -> str:
+    return f"Review this {language} code:\n{code}"
+```
+
+## 🔍 Troubleshooting
+
+### Claude Desktop Integration
+
+**Issue: "Server not found" in Claude Desktop**
+```json
+// Make sure the path is absolute and the file exists
+{
+  "mcpServers": {
+    "my-tools": {
+      "command": "python",
+      "args": ["/absolute/path/to/server.py", "--stdio"]
+    }
+  }
+}
+```
+
+**Issue: "Connection failed"**
+```bash
+# Test your server standalone first
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py --stdio
+
+# Should return a JSON response with your tools
+```
+
+**Issue: Logs cluttering output**
+```python
+# Ensure logs go to stderr, not stdout
+import sys
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+```
+
+### HTTP Mode Issues
+
+**Issue: Port already in use**
+```bash
+# Use a different port
+chuk-mcp-server http --port 8081
+
+# Or find what's using the port
+lsof -i :8000  # macOS/Linux
+netstat -ano | findstr :8000  # Windows
+```
+
+**Issue: Can't connect from another machine**
+```bash
+# Bind to all interfaces (not just localhost)
+chuk-mcp-server http --host 0.0.0.0 --port 8000
+```
+
+### Debug Mode
+
+Enable debug output to see what's happening:
+```bash
+# Stdio mode (logs to stderr)
+chuk-mcp-server stdio --debug
+
+# HTTP mode
+chuk-mcp-server http --debug
+
+# Or via environment
+DEBUG=1 python server.py
+```
+
+## 🐳 Docker Support
 
 ```dockerfile
 FROM python:3.11-slim
+RUN pip install chuk-mcp-server
+COPY server.py .
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-# Zero config - automatically detects container environment
+# For stdio mode
 CMD ["python", "server.py"]
+
+# For HTTP mode
+# EXPOSE 8000
+# CMD ["chuk-mcp-server", "http", "--host", "0.0.0.0"]
 ```
 
-### Environment Variables (Optional)
+## 🧪 Testing
+
+```python
+# test_server.py
+from chuk_mcp_server import ChukMCPServer
+import pytest
+
+@pytest.fixture
+def mcp():
+    server = ChukMCPServer()
+    
+    @server.tool
+    def test_tool(value: int) -> int:
+        return value * 2
+    
+    return server
+
+def test_tool_execution(mcp):
+    # Tools are automatically executable
+    result = mcp.get_tools()[0]
+    assert result["name"] == "test_tool"
+```
+
+## 🤝 Contributing
+
+Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
 
 ```bash
-# Override smart detection if needed
-export NODE_ENV=production     # Force production mode
-export PORT=8080              # Custom port
-export DEBUG=false            # Override debug setting
-export LOG_LEVEL=WARNING      # Custom log level
+# Setup development environment
+git clone https://github.com/chrishayuk/chuk-mcp-server
+cd chuk-mcp-server
+pip install -e ".[dev]"
 
-# Run with automatic optimization
-python server.py
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov
+
+# Type checking
+mypy src
 ```
-
-## 🔧 Configuration Options
-
-### Performance Modes
-
-```python
-# Performance mode (39,000+ RPS)
-python server.py --performance
-# - LOG_LEVEL=WARNING (minimal logging)  
-# - debug=False (no debug overhead)
-# - Optimized for maximum throughput
-
-# Development mode (full logging)
-python server.py --development
-# - Full logging enabled
-# - debug=True (helpful for development) 
-# - Still fast: 12,000+ RPS
-
-# Smart auto-detection
-python server.py
-# - Detects context automatically
-# - Performance testing → performance mode
-# - Development work → development mode
-```
-
-### Manual Configuration (Override Smart Defaults)
-
-```python
-# Override specific settings
-mcp = ChukMCPServer(
-    host="0.0.0.0",          # Override smart host detection
-    port=9000,               # Override smart port detection  
-    debug=False              # Override smart debug detection
-)
-
-# Or use smart defaults with manual run override
-mcp = ChukMCPServer()        # All smart defaults
-mcp.run(host="0.0.0.0", port=9000, debug=False)  # Runtime override
-```
-
-## 🎯 Why ChukMCPServer?
-
-### **🧠 True Zero Configuration**
-- **Auto-detects everything**: Project name, environment, network, performance
-- **Smart inference**: Categories, MIME types, optimal settings
-- **No setup required**: Just add decorators and run
-- **Context aware**: Automatically optimizes for development vs production
-
-### **🏆 Exceptional Performance**
-- **39,651 RPS** - New world record for MCP servers
-- **Sub-5ms latency** - Ultra-fast response times
-- **Perfect scaling** - Linear performance to 1,000+ connections
-- **Zero overhead** - Smart configuration adds <1ms startup
-
-### **⚡ Modular Architecture**
-- **Clean separation**: Configuration, core, protocol, HTTP layers
-- **Independently testable**: Each component can be tested in isolation
-- **Performance optimized**: Each layer optimized for maximum speed
-- **Maintainable**: Clear responsibilities, easy to extend
-
-### **🛡️ Production Ready**
-- **Type safety** - Automatic schema generation and validation
-- **Error handling** - Comprehensive error management
-- **MCP compliance** - Full protocol implementation
-- **Inspector integration** - Perfect development experience
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file.
 
 ## 🙏 Acknowledgments
 
-- Built on [chuk_mcp](https://github.com/chrishayuk/chuk-mcp) for robust MCP protocol implementation
-- Inspired by [FastAPI](https://fastapi.tiangolo.com/) for clean decorator-based APIs
-- Compatible with [MCP Inspector](https://github.com/modelcontextprotocol/inspector) for development
-- Performance optimized with [orjson](https://github.com/ijl/orjson) and [uvloop](https://github.com/MagicStack/uvloop)
+Built on top of the [Model Context Protocol](https://modelcontextprotocol.io) specification by Anthropic.
 
-## 📞 Support
+## 🔗 Links
 
-- **Issues**: [GitHub Issues](https://github.com/your-org/chuk-mcp-server/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/chuk-mcp-server/discussions)
-- **Documentation**: [Full Documentation](https://chuk-mcp-server.readthedocs.io/)
+- [Documentation](https://github.com/chrishayuk/chuk-mcp-server/docs)
+- [PyPI Package](https://pypi.org/project/chuk-mcp-server/)
+- [GitHub Repository](https://github.com/chrishayuk/chuk-mcp-server)
+- [Issue Tracker](https://github.com/chrishayuk/chuk-mcp-server/issues)
 
 ---
 
-**Built with ❤️ for zero-configuration, world-class MCP performance**
+**Made with ❤️ for the MCP community**

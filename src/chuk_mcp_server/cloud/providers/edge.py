@@ -54,7 +54,7 @@ class VercelProvider(CloudProvider):
         return {
             "cloud_provider": "vercel",
             "service_type": self.get_service_type(),
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Vercel edge platform routing
             "port": int(os.environ.get("PORT", 3000)),
             "workers": 1,
             "max_connections": 100,
@@ -110,7 +110,7 @@ class NetlifyProvider(CloudProvider):
         return {
             "cloud_provider": "netlify",
             "service_type": self.get_service_type(),
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Netlify edge platform routing
             "port": int(os.environ.get("PORT", 8888)),
             "workers": 1,
             "max_connections": 100,
@@ -162,7 +162,7 @@ class CloudflareProvider(CloudProvider):
         return {
             "cloud_provider": "cloudflare",
             "service_type": self.get_service_type(),
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Cloudflare edge platform routing
             "port": int(os.environ.get("PORT", 8787)),
             "workers": 1,
             "max_connections": 50,  # Very conservative for edge

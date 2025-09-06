@@ -19,14 +19,14 @@ This test suite validates:
 """
 
 import asyncio
-import aiohttp
-import json
+import logging
 import time
 import uuid
-from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
-import logging
 from enum import Enum
+from typing import Any
+
+import aiohttp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -58,18 +58,18 @@ class MCPComplianceValidator:
 
     def __init__(self, server_url: str):
         self.server_url = server_url.rstrip("/")
-        self.session_id: Optional[str] = None
-        self.server_capabilities: Dict[str, Any] = {}
+        self.session_id: str | None = None
+        self.server_capabilities: dict[str, Any] = {}
         self.protocol_version: str = ""
-        self.test_results: List[TestCase] = []
+        self.test_results: list[TestCase] = []
 
-    async def run_compliance_tests(self) -> List[TestCase]:
+    async def run_compliance_tests(self) -> list[TestCase]:
         """Run complete MCP compliance test suite"""
 
         print("🧪 MCP Specification Compliance Test Suite")
         print("=" * 60)
         print(f"Target Server: {self.server_url}")
-        print(f"Specification: MCP 2025-06-18 (Latest)")
+        print("Specification: MCP 2025-06-18 (Latest)")
         print(f"Test Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print("=" * 60)
 
@@ -348,7 +348,7 @@ class MCPComplianceValidator:
 
     # Test Implementation Methods
 
-    async def _validate_jsonrpc_format(self) -> Tuple[bool, str]:
+    async def _validate_jsonrpc_format(self) -> tuple[bool, str]:
         """Validate JSON-RPC 2.0 message format compliance"""
 
         test_message = {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
@@ -383,7 +383,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during validation: {str(e)}"
 
-    async def _validate_required_fields(self) -> Tuple[bool, str]:
+    async def _validate_required_fields(self) -> tuple[bool, str]:
         """Test required field validation"""
 
         # Test missing jsonrpc field
@@ -403,7 +403,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during test: {str(e)}"
 
-    async def _validate_request_ids(self) -> Tuple[bool, str]:
+    async def _validate_request_ids(self) -> tuple[bool, str]:
         """Test request ID requirements"""
 
         # Test with null ID (should be rejected per 2025-06-18 spec)
@@ -423,7 +423,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during test: {str(e)}"
 
-    async def _test_initialize(self) -> Tuple[bool, str]:
+    async def _test_initialize(self) -> tuple[bool, str]:
         """Test MCP initialize handshake"""
 
         init_message = {
@@ -473,7 +473,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during initialize: {str(e)}"
 
-    async def _test_capabilities(self) -> Tuple[bool, str]:
+    async def _test_capabilities(self) -> tuple[bool, str]:
         """Test capability declaration"""
 
         if not self.server_capabilities:
@@ -492,7 +492,7 @@ class MCPComplianceValidator:
 
         return True, f"Server capabilities: {', '.join(declared_caps)}"
 
-    async def _test_initialized_notification(self) -> Tuple[bool, str]:
+    async def _test_initialized_notification(self) -> tuple[bool, str]:
         """Test initialized notification"""
 
         notification = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
@@ -512,7 +512,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during notification: {str(e)}"
 
-    async def _test_session_management(self) -> Tuple[bool, str]:
+    async def _test_session_management(self) -> tuple[bool, str]:
         """Test session management"""
 
         if not self.session_id:
@@ -533,7 +533,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during session test: {str(e)}"
 
-    async def _validate_server_capabilities(self) -> Tuple[bool, str]:
+    async def _validate_server_capabilities(self) -> tuple[bool, str]:
         """Validate server capabilities declaration"""
 
         if not self.server_capabilities:
@@ -551,7 +551,7 @@ class MCPComplianceValidator:
 
         return True, f"Valid capabilities structure with {len(self.server_capabilities)} capabilities"
 
-    async def _test_tools_list(self) -> Tuple[bool, str]:
+    async def _test_tools_list(self) -> tuple[bool, str]:
         """Test tools/list functionality"""
 
         message = {"jsonrpc": "2.0", "id": "tools-list-test", "method": "tools/list", "params": {}}
@@ -587,7 +587,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during tools/list: {str(e)}"
 
-    async def _test_tool_execution(self) -> Tuple[bool, str]:
+    async def _test_tool_execution(self) -> tuple[bool, str]:
         """Test tool execution"""
 
         if not hasattr(self, "tools") or not self.tools:
@@ -606,7 +606,7 @@ class MCPComplianceValidator:
         # Prepare tool call based on schema
         tool_args = {}
         input_schema = test_tool.get("inputSchema", {})
-        properties = input_schema.get("properties", {})
+        input_schema.get("properties", {})
 
         # Try to provide simple test arguments
         if test_tool["name"] == "add":
@@ -651,7 +651,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during tool execution: {str(e)}"
 
-    async def _validate_tool_schemas(self) -> Tuple[bool, str]:
+    async def _validate_tool_schemas(self) -> tuple[bool, str]:
         """Validate tool schema compliance"""
 
         if not hasattr(self, "tools"):
@@ -664,7 +664,7 @@ class MCPComplianceValidator:
 
             # Required fields
             if "name" not in tool:
-                issues.append(f"Tool missing 'name' field")
+                issues.append("Tool missing 'name' field")
             if "description" not in tool:
                 issues.append(f"Tool '{tool_name}' missing 'description' field")
             if "inputSchema" not in tool:
@@ -680,7 +680,7 @@ class MCPComplianceValidator:
 
         return True, f"All {len(self.tools)} tool schemas valid"
 
-    async def _test_resources_list(self) -> Tuple[bool, str]:
+    async def _test_resources_list(self) -> tuple[bool, str]:
         """Test resources/list functionality"""
 
         message = {"jsonrpc": "2.0", "id": "resources-list-test", "method": "resources/list", "params": {}}
@@ -716,7 +716,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during resources/list: {str(e)}"
 
-    async def _test_resource_reading(self) -> Tuple[bool, str]:
+    async def _test_resource_reading(self) -> tuple[bool, str]:
         """Test resource reading functionality"""
 
         if not hasattr(self, "resources") or not self.resources:
@@ -760,7 +760,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during resource read: {str(e)}"
 
-    async def _validate_resource_schemas(self) -> Tuple[bool, str]:
+    async def _validate_resource_schemas(self) -> tuple[bool, str]:
         """Validate resource schema compliance"""
 
         if not hasattr(self, "resources"):
@@ -773,7 +773,7 @@ class MCPComplianceValidator:
 
             # Required fields
             if "uri" not in resource:
-                issues.append(f"Resource missing 'uri' field")
+                issues.append("Resource missing 'uri' field")
             if "name" not in resource:
                 issues.append(f"Resource '{resource_uri}' missing 'name' field")
             if "description" not in resource:
@@ -784,7 +784,7 @@ class MCPComplianceValidator:
 
         return True, f"All {len(self.resources)} resource schemas valid"
 
-    async def _test_ping(self) -> Tuple[bool, str]:
+    async def _test_ping(self) -> tuple[bool, str]:
         """Test ping utility"""
 
         message = {"jsonrpc": "2.0", "id": "ping-test", "method": "ping", "params": {}}
@@ -804,14 +804,14 @@ class MCPComplianceValidator:
                     return False, f"Ping failed: {data['error']}"
 
                 # Ping should return empty result
-                result = data.get("result", {})
+                data.get("result", {})
 
                 return True, "Ping successful"
 
         except Exception as e:
             return False, f"Exception during ping: {str(e)}"
 
-    async def _test_error_security(self) -> Tuple[bool, str]:
+    async def _test_error_security(self) -> tuple[bool, str]:
         """Test that errors don't leak sensitive information"""
 
         # Try to cause an error and check the response
@@ -851,7 +851,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during error security test: {str(e)}"
 
-    async def _test_malformed_requests(self) -> Tuple[bool, str]:
+    async def _test_malformed_requests(self) -> tuple[bool, str]:
         """Test handling of malformed requests"""
 
         # Test with invalid JSON
@@ -871,13 +871,13 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during malformed request test: {str(e)}"
 
-    async def _test_standard_errors(self) -> Tuple[bool, str]:
+    async def _test_standard_errors(self) -> tuple[bool, str]:
         """Test standard JSON-RPC error codes"""
 
         # This is tested in other methods, summarize here
         return True, "Standard error codes tested in other test cases"
 
-    async def _test_method_not_found(self) -> Tuple[bool, str]:
+    async def _test_method_not_found(self) -> tuple[bool, str]:
         """Test method not found error"""
 
         message = {
@@ -901,7 +901,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during method not found test: {str(e)}"
 
-    async def _test_invalid_params(self) -> Tuple[bool, str]:
+    async def _test_invalid_params(self) -> tuple[bool, str]:
         """Test invalid parameters error"""
 
         if not hasattr(self, "tools") or not self.tools:
@@ -935,13 +935,13 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during invalid params test: {str(e)}"
 
-    async def _test_structured_tool_output(self) -> Tuple[bool, str]:
+    async def _test_structured_tool_output(self) -> tuple[bool, str]:
         """Test structured tool output (new in 2025-06-18)"""
 
         # This is primarily about server capability, hard to test without specific tools
         return True, "Structured tool output support is tool-specific (cannot test generically)"
 
-    async def _test_protocol_version_header(self) -> Tuple[bool, str]:
+    async def _test_protocol_version_header(self) -> tuple[bool, str]:
         """Test MCP-Protocol-Version header handling"""
 
         message = {"jsonrpc": "2.0", "id": "protocol-version-test", "method": "ping", "params": {}}
@@ -960,7 +960,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during protocol version test: {str(e)}"
 
-    async def _test_meta_field_support(self) -> Tuple[bool, str]:
+    async def _test_meta_field_support(self) -> tuple[bool, str]:
         """Test _meta field support"""
 
         message = {
@@ -985,7 +985,7 @@ class MCPComplianceValidator:
         except Exception as e:
             return False, f"Exception during _meta field test: {str(e)}"
 
-    async def _test_oauth_indicators(self) -> Tuple[bool, str]:
+    async def _test_oauth_indicators(self) -> tuple[bool, str]:
         """Test OAuth 2.1 compliance indicators"""
 
         # This would require checking for OAuth-related headers or metadata

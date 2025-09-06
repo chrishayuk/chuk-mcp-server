@@ -6,13 +6,13 @@ A simple Python script that connects to an MCP server and inspects its capabilit
 tools, and resources. This behaves like the MCP Inspector but without the proxy.
 """
 
+import argparse
 import asyncio
 import json
-import time
+from dataclasses import dataclass
+from typing import Any
+
 import aiohttp
-import argparse
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
 
 
 @dataclass
@@ -20,8 +20,8 @@ class MCPClient:
     """Simple MCP client for testing servers."""
 
     server_url: str
-    session: Optional[aiohttp.ClientSession] = None
-    session_id: Optional[str] = None
+    session: aiohttp.ClientSession | None = None
+    session_id: str | None = None
     message_id: int = 0
 
     def __post_init__(self):
@@ -37,7 +37,7 @@ class MCPClient:
         self.message_id += 1
         return self.message_id
 
-    async def send_request(self, method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def send_request(self, method: str, params: dict[str, Any] = None) -> dict[str, Any]:
         """Send a JSON-RPC request to the MCP server."""
         if params is None:
             params = {}
@@ -118,7 +118,7 @@ class MCPClient:
         except Exception as e:
             print(f"❌ Failed to send initialized: {e}")
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """Get list of available tools."""
         print("🔧 Fetching tools...")
 
@@ -135,7 +135,7 @@ class MCPClient:
 
         return []
 
-    async def list_resources(self) -> List[Dict[str, Any]]:
+    async def list_resources(self) -> list[dict[str, Any]]:
         """Get list of available resources."""
         print("📂 Fetching resources...")
 
@@ -152,7 +152,7 @@ class MCPClient:
 
         return []
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a specific tool."""
         print(f"🛠️  Calling tool: {tool_name}")
 
@@ -163,12 +163,12 @@ class MCPClient:
             return response
 
         if "result" in response:
-            print(f"✅ Tool call successful")
+            print("✅ Tool call successful")
             return response["result"]
 
         return {}
 
-    async def read_resource(self, uri: str) -> Dict[str, Any]:
+    async def read_resource(self, uri: str) -> dict[str, Any]:
         """Read a specific resource."""
         print(f"📖 Reading resource: {uri}")
 
@@ -179,13 +179,13 @@ class MCPClient:
             return response
 
         if "result" in response:
-            print(f"✅ Resource read successful")
+            print("✅ Resource read successful")
             return response["result"]
 
         return {}
 
 
-def print_tools(tools: List[Dict[str, Any]]):
+def print_tools(tools: list[dict[str, Any]]):
     """Pretty print tools information."""
     if not tools:
         print("   No tools available")
@@ -203,7 +203,7 @@ def print_tools(tools: List[Dict[str, Any]]):
 
         schema = tool.get("inputSchema", {})
         if "properties" in schema:
-            print(f"      Parameters:")
+            print("      Parameters:")
             for prop, details in schema["properties"].items():
                 prop_type = details.get("type", "unknown")
                 prop_desc = details.get("description", "")
@@ -214,7 +214,7 @@ def print_tools(tools: List[Dict[str, Any]]):
         print()
 
 
-def print_resources(resources: List[Dict[str, Any]]):
+def print_resources(resources: list[dict[str, Any]]):
     """Pretty print resources information."""
     if not resources:
         print("   No resources available")
@@ -238,7 +238,7 @@ def print_resources(resources: List[Dict[str, Any]]):
 
 async def inspect_server(server_url: str, interactive: bool = False):
     """Main inspection function."""
-    print(f"🔍 MCP Server Inspector")
+    print("🔍 MCP Server Inspector")
     print(f"📡 Connecting to: {server_url}")
     print("=" * 60)
 
@@ -269,7 +269,7 @@ async def inspect_server(server_url: str, interactive: bool = False):
         await client.close()
 
 
-async def interactive_mode(client: MCPClient, tools: List[Dict[str, Any]], resources: List[Dict[str, Any]]):
+async def interactive_mode(client: MCPClient, tools: list[dict[str, Any]], resources: list[dict[str, Any]]):
     """Interactive mode for testing tools and resources."""
     print("\n🎮 Interactive Mode")
     print("Commands:")

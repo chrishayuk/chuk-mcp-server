@@ -10,14 +10,14 @@ Expected: 20,000+ RPS for ping, 15,000+ RPS for version, 10,000+ RPS for MCP cal
 """
 
 import asyncio
-import httpx
-import time
+import gc
 import json
 import statistics
 import sys
+import time
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
-import gc
+
+import httpx
 
 
 @dataclass
@@ -622,7 +622,7 @@ class LightweightPerfTest:
         # Process results
         times = [r[0] for r in results]
         successes = sum(1 for r in results if r[1])
-        failures = burst_size - successes
+        burst_size - successes
 
         rps = burst_size / actual_duration if actual_duration > 0 else 0
         success_rate = successes / burst_size * 100
@@ -647,7 +647,7 @@ class LightweightPerfTest:
             total_requests=burst_size,
         )
 
-    def _print_performance_summary(self, results: List[PerfResult]):
+    def _print_performance_summary(self, results: list[PerfResult]):
         """Print comprehensive performance summary"""
         print("\n" + "=" * 60)
         print("📊 LIGHTWEIGHT PERFORMANCE TEST RESULTS (httpx)")
@@ -657,7 +657,7 @@ class LightweightPerfTest:
         best_rps = max(results, key=lambda r: r.rps)
         best_latency = min(results, key=lambda r: r.avg_ms)
 
-        print(f"🚀 Peak Performance:")
+        print("🚀 Peak Performance:")
         print(f"   Best RPS: {best_rps.rps:>10,.0f} ({best_rps.name})")
         print(f"   Best Latency: {best_latency.avg_ms:>7.2f}ms ({best_latency.name})")
 
@@ -665,14 +665,14 @@ class LightweightPerfTest:
         total_requests = sum(r.total_requests for r in results)
         avg_success_rate = statistics.mean([r.success_rate for r in results])
 
-        print(f"\n📈 Overall Statistics:")
+        print("\n📈 Overall Statistics:")
         print(f"   Total Requests: {total_requests:>10,}")
         print(f"   Avg Success Rate: {avg_success_rate:>8.1f}%")
         print(f"   Tests Completed: {len(results):>9}")
-        print(f"   HTTP Client: httpx (modern async)")
+        print("   HTTP Client: httpx (modern async)")
 
         # Detailed results table
-        print(f"\n📋 Detailed Results:")
+        print("\n📋 Detailed Results:")
         print("   Test Name          |    RPS     | Avg(ms) | P95(ms) | Success%")
         print("   " + "-" * 65)
 
@@ -705,14 +705,14 @@ class LightweightPerfTest:
         print(f"\n{emoji} Performance Grade: {grade}")
 
         # httpx specific benefits
-        print(f"\n⚡ httpx Benefits:")
+        print("\n⚡ httpx Benefits:")
         print("   ✅ Modern async HTTP client")
         print("   ✅ Automatic connection pooling")
         print("   ✅ Built-in response streaming")
         print("   ✅ Lower memory overhead")
 
         # Recommendations
-        print(f"\n💡 Analysis:")
+        print("\n💡 Analysis:")
         if best_rps.rps > 15000 and avg_success_rate > 99:
             print("   🎉 Exceptional performance! Your server + httpx combo is outstanding.")
             print("   🔥 This is reference-level high-performance MCP implementation.")
