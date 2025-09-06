@@ -59,6 +59,7 @@ Please generate:
 Format the documentation in a clear, professional style suitable for API documentation.
 """
 
+
 @prompt
 def meeting_summarizer(transcript: str, meeting_type: str = "general", action_items: str = "") -> str:
     """Generate a meeting summary from a transcript."""
@@ -71,7 +72,7 @@ Please provide:
 2. **Decisions Made**: Any decisions reached during the meeting
 3. **Important Information**: Key facts or insights shared
 """
-    
+
     if action_items and action_items.strip():
         base_prompt += f"4. **Action Items**: {action_items}\n"
     else:

@@ -229,9 +229,8 @@ class PromptHandler:
                 elif lower_val in ("false", "0", "no", "off", "f", "n"):
                     return False
                 else:
-                    # For unrecognized strings, use parameter default if available, otherwise False
-                    # This handles cases where UI allows free-form text input for boolean params
-                    return param.default if param.default is not None else False
+                    # For unrecognized strings, raise an error to ensure valid input
+                    raise ValueError(f"Cannot convert string '{value}' to boolean")
             elif isinstance(value, int | float):
                 return bool(value)
             elif value is None:
