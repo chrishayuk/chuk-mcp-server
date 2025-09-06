@@ -120,7 +120,7 @@ class MCPComponentRegistry:
         # Update indexes
         self._update_indexes(config)
 
-        logger.info(f"🔧 Registered {component_type.value}: {name} (v{version})")
+        logger.debug(f"🔧 Registered {component_type.value}: {name} (v{version})")
         if tags:
             logger.debug(f"   Tags: {', '.join(tags)}")
 

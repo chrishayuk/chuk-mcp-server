@@ -40,7 +40,7 @@ class StdioTransport:
 
     async def start(self) -> None:
         """Start the stdio transport server."""
-        logger.info("🚀 Starting stdio transport")
+        # Don't log in stdio mode to keep output clean
         self.running = True
 
         # Set up async stdio
@@ -66,7 +66,7 @@ class StdioTransport:
                     break
                 chunk = await self.reader.read(4096)
                 if not chunk:
-                    logger.info("Stdin closed, shutting down")
+                    # Stdin closed, shutting down
                     break
 
                 # Decode and add to buffer
@@ -84,10 +84,11 @@ class StdioTransport:
                     await self._handle_message(line)
 
             except asyncio.CancelledError:
-                logger.info("Stdio transport cancelled")
+                # Stdio transport cancelled
                 break
             except Exception as e:
-                logger.error(f"Error in stdio listener: {e}")
+                # Error in stdio listener - suppress logging in stdio mode
+                pass
                 await self._send_error(None, -32700, f"Parse error: {str(e)}")
 
     async def _handle_message(self, message: str) -> None:
@@ -106,7 +107,7 @@ class StdioTransport:
             params = request_data.get("params", {})
             request_id = request_data.get("id")
 
-            logger.debug(f"📥 Received: {method}")
+            # Debug: Received {method}
 
             # Handle initialize specially to create session
             if method == "initialize":
@@ -114,7 +115,7 @@ class StdioTransport:
                 protocol_version = params.get("protocolVersion", "2025-03-26")
                 session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
                 self.session_id = session_id
-                logger.info(f"🔑 Created stdio session: {session_id[:8]}...")
+                # Created stdio session
 
             # Process through protocol handler
             response, error = await self.protocol.handle_request(request_data, self.session_id)
@@ -124,10 +125,12 @@ class StdioTransport:
                 await self._send_response(response)
 
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON: {e}")
+            # Invalid JSON - send error response
+            pass
             await self._send_error(None, -32700, f"Parse error: {str(e)}")
         except Exception as e:
-            logger.error(f"Error handling message: {e}")
+            # Error handling message - send error response
+            pass
             request_id = request_data.get("id") if "request_data" in locals() else None
             await self._send_error(request_id, -32603, f"Internal error: {str(e)}")
 
@@ -147,10 +150,11 @@ class StdioTransport:
                 self.writer.write(json_str + "\n")
                 self.writer.flush()
 
-            logger.debug(f"📤 Sent response for: {response.get('id')}")
+            # Sent response
 
-        except Exception as e:
-            logger.error(f"Error sending response: {e}")
+        except Exception:
+            # Error sending response - critical failure
+            pass
 
     async def _send_error(self, request_id: Any, code: int, message: str) -> None:
         """
@@ -166,7 +170,7 @@ class StdioTransport:
 
     async def stop(self) -> None:
         """Stop the stdio transport."""
-        logger.info("Stopping stdio transport")
+        # Stopping stdio transport
         self.running = False
 
         # Close reader if available
@@ -202,7 +206,8 @@ def run_stdio_server(protocol_handler: MCPProtocolHandler) -> None:
         try:
             await transport.start()
         except KeyboardInterrupt:
-            logger.info("Stdio server interrupted")
+            # Stdio server interrupted
+            pass
         finally:
             await transport.stop()
 

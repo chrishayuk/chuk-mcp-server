@@ -136,11 +136,10 @@ class ChukMCPServer:
         # HTTP server will be created when needed
         self._server = None
 
-        # Print smart configuration info in debug mode
-        if self.smart_debug:
-            self._print_smart_config()
+        # Don't print banner during init - will be done in run() if needed
+        # This avoids cluttering stdio mode
 
-        logger.info(f"Initialized ChukMCP Server: {name} v{version}")
+        logger.debug(f"Initialized ChukMCP Server: {name} v{version}")
 
     def _print_smart_config(self):
         """Print smart configuration summary using modular config."""
@@ -582,21 +581,40 @@ class ChukMCPServer:
             )
             stdio = bool(stdio)
 
-        if final_debug:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            # Use the smart log level from modular config
-            log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
-            logging.basicConfig(level=log_level)
-
         # Check if stdio mode is requested
         if stdio:
+            # In stdio mode, suppress all logging to keep stdout clean
+            # Set logging to CRITICAL to suppress most messages
+            import sys
+
+            logging.basicConfig(
+                level=logging.CRITICAL,
+                stream=sys.stderr,
+                format="%(message)s",  # Minimal format
+            )
+            # Suppress specific noisy loggers
+            logging.getLogger("chuk_mcp_server").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.protocol").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.core").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.stdio_transport").setLevel(logging.CRITICAL)
+
             # Run in stdio mode
             from .stdio_transport import run_stdio_server
 
-            logger.info("🔄 Running in stdio mode")
             run_stdio_server(self.protocol)
         else:
+            # HTTP mode - normal logging
+            if final_debug:
+                logging.basicConfig(level=logging.DEBUG)
+            else:
+                # Use the smart log level from modular config
+                log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
+                logging.basicConfig(level=log_level)
+
+            # Show the banner in debug mode for HTTP
+            if self.smart_debug:
+                self._print_smart_config()
+
             # Create HTTP server
             if self._server is None:
                 self._server = create_server(self.protocol)

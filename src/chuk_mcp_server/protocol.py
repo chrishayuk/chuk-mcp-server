@@ -84,7 +84,8 @@ class MCPProtocolHandler:
         self.resources: dict[str, ResourceHandler] = {}
         self.prompts: dict[str, PromptHandler] = {}
 
-        logger.info("✅ MCP protocol handler initialized with chuk_mcp")
+        # Don't log during init to keep stdio mode clean
+        logger.debug("MCP protocol handler initialized with chuk_mcp")
 
     def register_tool(self, tool: ToolHandler) -> None:
         """Register a tool handler."""
