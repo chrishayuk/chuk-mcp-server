@@ -3,8 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-824%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
-[![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://img.shields.io/badge/tests-859%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
 **The fastest, most intelligent MCP (Model Context Protocol) server framework.** Build LLM-integrated tools with zero configuration, blazing performance, and seamless Claude Desktop integration.
 
@@ -47,33 +47,50 @@ pip install chuk-mcp-server
 
 # Using uv (recommended)
 uv add chuk-mcp-server
+
+# Or run without installing (uvx)
+uvx chuk-mcp-server --help
 ```
 
-### 2. Run with Claude Desktop
+### 2. Choose Your Transport Mode
+
+ChukMCPServer supports two transport modes:
+
+#### 🖥️ **Stdio Mode** (for Claude Desktop & CLI tools)
+- Direct process communication via stdin/stdout
+- Required for Claude Desktop integration
+- Best for local tools and scripts
+
+#### 🌐 **HTTP Mode** (for web apps & remote access)
+- RESTful HTTP with SSE streaming
+- WebSocket-like real-time updates
+- Perfect for web integrations and APIs
+
+### 3. Configure Claude Desktop (Stdio Mode)
 
 Add to your Claude Desktop config:
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
+#### Option A: Run your custom server
 ```json
 {
   "mcpServers": {
     "my-tools": {
       "command": "python",
-      "args": ["/path/to/server.py"],
-      "env": {"MCP_STDIO": "1"}
+      "args": ["/path/to/server.py", "--stdio"],
+      "env": {}
     }
   }
 }
 ```
 
-Or use `uvx` for zero-install:
-
+#### Option B: Use uvx (no installation needed)
 ```json
 {
   "mcpServers": {
-    "chuk": {
+    "chuk-tools": {
       "command": "uvx",
       "args": ["chuk-mcp-server", "stdio"]
     }
@@ -81,23 +98,142 @@ Or use `uvx` for zero-install:
 }
 ```
 
-### 3. Test It
+#### Option C: Use installed package
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "chuk-mcp-server",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+### 4. Run HTTP Server (for Web Clients)
 
 ```bash
-# Quick test with stdio
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py
+# Using your script
+python server.py --http --port 8000
 
-# Run as HTTP server
-python server.py  # Visit http://localhost:8000
+# Using CLI
+chuk-mcp-server http --port 8000
 
-# Use the CLI
-uvx chuk-mcp-server stdio  # For Claude Desktop
-uvx chuk-mcp-server http   # For web/HTTP clients
+# Using uvx
+uvx chuk-mcp-server http --host 0.0.0.0 --port 8080
+```
+
+#### Connect from a web client:
+```javascript
+// JavaScript/TypeScript client example
+const response = await fetch('http://localhost:8000/mcp', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/list',
+    id: 1
+  })
+});
+
+// Server-Sent Events for streaming
+const events = new EventSource('http://localhost:8000/mcp');
+events.onmessage = (event) => {
+  console.log('Received:', JSON.parse(event.data));
+};
+```
+
+### 5. Test Your Setup
+
+```bash
+# Test stdio mode
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
+
+# Test HTTP mode
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# Get server info (HTTP mode)
+curl http://localhost:8000/health
+```
+
+## 🔄 Transport Modes Explained
+
+ChukMCPServer intelligently auto-detects the best transport mode, or you can explicitly choose:
+
+### When to Use Each Mode
+
+| Feature | Stdio Mode | HTTP Mode |
+|---------|-----------|-----------|
+| **Use Case** | Claude Desktop, CLI tools | Web apps, APIs, remote access |
+| **Communication** | Process pipes (stdin/stdout) | Network (HTTP/SSE) |
+| **Security** | Most secure (local only) | Network security needed |
+| **Performance** | Lowest latency | < 5ms latency |
+| **Setup** | No ports needed | Requires port |
+| **Debugging** | Logs to stderr | Browser DevTools |
+| **Scaling** | Single client | Multiple clients |
+| **Claude Desktop** | ✅ Required | ❌ Not supported |
+| **Web Integration** | ❌ Not supported | ✅ Full support |
+
+### Stdio Transport (Process Communication)
+Perfect for Claude Desktop and command-line tools:
+- ✅ Direct integration with Claude Desktop
+- ✅ Minimal overhead, maximum security
+- ✅ No network ports needed
+- ✅ Ideal for local tools and scripts
+
+```python
+# Auto-detects stdio when piped or when MCP_STDIO env is set
+mcp.run()  
+
+# Or explicitly use stdio
+mcp.run(stdio=True)
+
+# In your script, handle stdio mode properly:
+import sys
+import logging
+
+# IMPORTANT: Logs must go to stderr in stdio mode
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+```
+
+### HTTP Transport (Network Communication)
+Perfect for web apps and remote access:
+- ✅ RESTful API with SSE streaming
+- ✅ Cross-platform web clients
+- ✅ Remote access capability
+- ✅ Built-in health checks and monitoring
+
+```python
+# Auto-detects HTTP when not in stdio mode
+mcp.run()  
+
+# Or explicitly configure HTTP
+mcp.run(host="0.0.0.0", port=8080, stdio=False)
+
+# Access endpoints:
+# POST http://localhost:8080/mcp    - MCP protocol endpoint
+# GET  http://localhost:8080/health - Health check
+# GET  http://localhost:8080/tools  - List available tools
+```
+
+### Smart Auto-Detection
+The framework automatically chooses the right mode:
+```python
+# Just call run() - it figures out the rest!
+mcp.run()
+
+# Detection logic:
+# 1. If stdin is piped → stdio mode
+# 2. If MCP_STDIO env var → stdio mode  
+# 3. If MCP_TRANSPORT env var → use that mode
+# 4. Otherwise → HTTP mode
 ```
 
 ## 🎨 Real-World Examples
 
-### File System Tools
+### Complete File System Tools
 
 ```python
 from chuk_mcp_server import ChukMCPServer
@@ -155,7 +291,12 @@ def current_directory() -> dict:
     }
 
 if __name__ == "__main__":
-    mcp.run()  # Auto-detects stdio vs HTTP mode!
+    # Run with smart auto-detection
+    mcp.run()
+    
+    # Or explicitly choose transport:
+    # mcp.run(stdio=True)  # For Claude Desktop
+    # mcp.run(port=8080)   # For HTTP clients
 ```
 
 ### API Integration Tools
@@ -315,28 +456,70 @@ if __name__ == "__main__":
     mcp.run()
 ```
 
-## 🔌 Transport Modes
+## 🖥️ CLI Usage
 
-ChukMCPServer supports two transport modes, auto-detected based on environment:
-
-### STDIO Mode (for Claude Desktop & CLI tools)
+ChukMCPServer includes a powerful CLI for both development and production:
 
 ```bash
-# Auto-detects stdio when piped or when MCP_STDIO is set
-MCP_STDIO=1 python server.py
+# Install the CLI
+pip install chuk-mcp-server
 
-# Or use the CLI
-uvx chuk-mcp-server stdio
+# Or use without installing (uvx)
+uvx chuk-mcp-server --help
 ```
 
-### HTTP Mode (for web clients & APIs)
+### CLI Commands
+
+#### Stdio Mode (for Claude Desktop)
+```bash
+# Basic stdio server
+chuk-mcp-server stdio
+
+# With debug output (logs to stderr)
+chuk-mcp-server stdio --debug
+
+# Test with a simple command
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
+```
+
+#### HTTP Mode (for Web Clients)
+```bash
+# Basic HTTP server
+chuk-mcp-server http
+
+# Custom host and port
+chuk-mcp-server http --host 0.0.0.0 --port 8080
+
+# With debug mode
+chuk-mcp-server http --debug --port 3000
+```
+
+#### Auto Mode (Smart Detection)
+```bash
+# Let the server decide based on environment
+chuk-mcp-server auto
+
+# It will choose:
+# - stdio: if stdin is piped or MCP_STDIO is set
+# - http: otherwise
+```
+
+### Environment Variables
+
+Control behavior through environment variables:
 
 ```bash
-# Auto-detects HTTP when not piped
-python server.py
+# Force stdio mode
+MCP_STDIO=1 python server.py
 
-# Or use the CLI  
-uvx chuk-mcp-server http --port 8000
+# Force HTTP mode
+MCP_TRANSPORT=http python server.py
+
+# Set performance mode
+MCP_PERFORMANCE_MODE=high python server.py
+
+# Configure HTTP settings
+MCP_HOST=0.0.0.0 MCP_PORT=8080 python server.py
 ```
 
 ## ⚡ Performance
@@ -439,23 +622,69 @@ def code_review_prompt(language: str, code: str) -> str:
     return f"Review this {language} code:\n{code}"
 ```
 
-## 🔧 CLI Usage
+## 🔍 Troubleshooting
 
+### Claude Desktop Integration
+
+**Issue: "Server not found" in Claude Desktop**
+```json
+// Make sure the path is absolute and the file exists
+{
+  "mcpServers": {
+    "my-tools": {
+      "command": "python",
+      "args": ["/absolute/path/to/server.py", "--stdio"]
+    }
+  }
+}
+```
+
+**Issue: "Connection failed"**
 ```bash
-# Install globally
-pip install chuk-mcp-server
+# Test your server standalone first
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py --stdio
 
-# Run in stdio mode (for MCP clients)
-chuk-mcp-server stdio
+# Should return a JSON response with your tools
+```
 
-# Run in HTTP mode
-chuk-mcp-server http --port 8000
+**Issue: Logs cluttering output**
+```python
+# Ensure logs go to stderr, not stdout
+import sys
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+```
 
-# Run with debug output
+### HTTP Mode Issues
+
+**Issue: Port already in use**
+```bash
+# Use a different port
+chuk-mcp-server http --port 8081
+
+# Or find what's using the port
+lsof -i :8000  # macOS/Linux
+netstat -ano | findstr :8000  # Windows
+```
+
+**Issue: Can't connect from another machine**
+```bash
+# Bind to all interfaces (not just localhost)
+chuk-mcp-server http --host 0.0.0.0 --port 8000
+```
+
+### Debug Mode
+
+Enable debug output to see what's happening:
+```bash
+# Stdio mode (logs to stderr)
 chuk-mcp-server stdio --debug
 
-# Auto-detect mode from environment
-chuk-mcp-server auto
+# HTTP mode
+chuk-mcp-server http --debug
+
+# Or via environment
+DEBUG=1 python server.py
 ```
 
 ## 🐳 Docker Support
