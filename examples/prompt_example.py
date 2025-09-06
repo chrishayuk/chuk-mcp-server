@@ -58,7 +58,7 @@ Format the documentation in a clear, professional style suitable for API documen
 """
 
 @prompt  
-def meeting_summarizer(transcript: str, meeting_type: str = "general", action_items: bool = True) -> str:
+def meeting_summarizer(transcript: str, meeting_type: str = "general", action_items: str = "") -> str:
     """Generate a meeting summary from a transcript."""
     base_prompt = f"""Summarize this {meeting_type} meeting transcript:
 
@@ -70,7 +70,9 @@ Please provide:
 3. **Important Information**: Key facts or insights shared
 """
     
-    if action_items:
+    if action_items.strip():
+        base_prompt += f"4. **Action Items**: {action_items}\n"
+    else:
         base_prompt += "4. **Action Items**: Specific tasks assigned with owners and deadlines\n"
     
     base_prompt += "\nFormat the summary in clear sections with bullet points for easy reading."
