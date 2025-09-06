@@ -321,18 +321,36 @@ class MCPProtocolHandler:
                 # Convert other types to string content
                 content = format_content(str(result))
 
+            # Ensure proper message format for MCP Inspector
+            if isinstance(content, list) and len(content) > 0:
+                # Convert content format to proper MCP message format
+                messages = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if "role" in item and "content" in item:
+                            # Already properly formatted
+                            messages.append(item)
+                        else:
+                            # Convert content item to proper message format
+                            messages.append({"role": "user", "content": item})
+                    else:
+                        # Convert string or other types to proper message format
+                        messages.append({"role": "user", "content": {"type": "text", "text": str(item)}})
+            else:
+                # Fallback to properly formatted message structure
+                messages = [{"role": "user", "content": {"type": "text", "text": str(result)}}]
+
             response = {
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {
                     "description": prompt_handler.description or f"Prompt: {prompt_name}",
-                    "messages": content
-                    if isinstance(content, list)
-                    else [{"role": "user", "content": {"type": "text", "text": str(result)}}],
+                    "messages": messages,
                 },
             }
 
             logger.info(f"💬 Generated prompt {prompt_name}")
+            logger.info(f"🔍 DEBUG Response messages: {messages}")
             return response, None
 
         except Exception as e:

@@ -218,17 +218,31 @@ class PromptHandler:
             if isinstance(value, bool):
                 return value
             elif isinstance(value, str):
-                lower_val = value.lower()
-                if lower_val in ("true", "1", "yes", "on", "t", "y"):
+                # Handle string representations of booleans more robustly
+                lower_val = value.lower().strip()
+                # Handle empty string and null string - use parameter default or False
+                if lower_val == "" or lower_val == "null":
+                    # For empty/null strings, use the parameter default if available, otherwise False
+                    return param.default if param.default is not None else False
+                elif lower_val in ("true", "1", "yes", "on", "t", "y"):
                     return True
                 elif lower_val in ("false", "0", "no", "off", "f", "n"):
                     return False
                 else:
-                    raise ValueError(f"Cannot convert string '{value}' to boolean")
+                    # For unrecognized strings, use parameter default if available, otherwise False
+                    # This handles cases where UI allows free-form text input for boolean params
+                    return param.default if param.default is not None else False
             elif isinstance(value, int | float):
                 return bool(value)
+            elif value is None:
+                # Handle None explicitly
+                return False
             else:
-                return bool(value)
+                # Try converting to bool as last resort
+                try:
+                    return bool(value)
+                except Exception as e:
+                    raise ValueError(f"Cannot convert {type(value).__name__} '{value}' to boolean") from e
 
         elif param.type == "string":
             if isinstance(value, str):
