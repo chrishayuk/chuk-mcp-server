@@ -302,7 +302,6 @@ class MCPProtocolHandler:
         prompt_name = params.get("name")
         arguments = params.get("arguments", {})
 
-
         if prompt_name not in self.prompts:
             return self._create_error_response(msg_id, -32602, f"Unknown prompt: {prompt_name}"), None
 
@@ -332,20 +331,14 @@ class MCPProtocolHandler:
                             messages.append(item)
                         else:
                             # Convert content item to proper message format
-                            messages.append({
-                                "role": "user", 
-                                "content": item
-                            })
+                            messages.append({"role": "user", "content": item})
                     else:
                         # Convert string or other types to proper message format
-                        messages.append({
-                            "role": "user", 
-                            "content": {"type": "text", "text": str(item)}
-                        })
+                        messages.append({"role": "user", "content": {"type": "text", "text": str(item)}})
             else:
                 # Fallback to properly formatted message structure
                 messages = [{"role": "user", "content": {"type": "text", "text": str(result)}}]
-            
+
             response = {
                 "jsonrpc": "2.0",
                 "id": msg_id,
