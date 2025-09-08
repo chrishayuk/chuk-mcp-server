@@ -4,7 +4,9 @@
 Core - Main ChukMCP Server class with modular smart configuration
 """
 
+import asyncio
 import logging
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -20,6 +22,7 @@ from .endpoint_registry import http_endpoint_registry
 from .http_server import create_server
 from .mcp_registry import mcp_registry
 from .protocol import MCPProtocolHandler
+from .transport.stdio_sync import StdioSyncTransport
 
 # Updated imports for clean types API
 from .types import (
@@ -71,6 +74,7 @@ class ChukMCPServer:
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
+        transport: str | None = None,  # Added transport parameter
         **kwargs,  # noqa: ARG002
     ):
         """
@@ -90,6 +94,7 @@ class ChukMCPServer:
             host: Host to bind to (auto-detected if None)
             port: Port to bind to (auto-detected if None)
             debug: Debug mode (auto-detected if None)
+            transport: Transport mode ('http' or 'stdio') (auto-detected if None)
             **kwargs: Additional keyword arguments
         """
         # Initialize the modular smart configuration system
@@ -117,6 +122,7 @@ class ChukMCPServer:
         self.smart_host = host or smart_defaults["host"]
         self.smart_port = port or smart_defaults["port"]
         self.smart_debug = debug if debug is not None else smart_defaults["debug"]
+        self.smart_transport = transport  # Store transport preference
 
         # Store additional smart configuration
         self.smart_environment = smart_defaults["environment"]
@@ -135,9 +141,8 @@ class ChukMCPServer:
         # HTTP server will be created when needed
         self._server = None
 
-        # Print smart configuration info in debug mode
-        if self.smart_debug:
-            self._print_smart_config()
+        # Print smart configuration info in debug mode (will be suppressed for stdio)
+        self._should_print_config = self.smart_debug
 
         logger.info(f"Initialized ChukMCP Server: {name} v{version}")
 
@@ -559,6 +564,10 @@ class ChukMCPServer:
             port: Port to bind to (uses smart default if None)
             debug: Enable debug logging (uses smart default if None)
         """
+        # Check if STDIO transport was requested
+        if self.smart_transport == "stdio":
+            return self.run_stdio(debug)
+        
         # Use smart defaults if not overridden
         final_host = host or self.smart_host
         final_port = port or self.smart_port
@@ -576,7 +585,8 @@ class ChukMCPServer:
             self._server = create_server(self.protocol)
 
         # Show startup information
-        self._print_startup_info(final_host, final_port, final_debug)
+        if getattr(self, '_should_print_config', True):
+            self._print_startup_info(final_host, final_port, final_debug)
 
         # Run the server
         try:
@@ -585,6 +595,39 @@ class ChukMCPServer:
             logger.info("\n👋 Server shutting down gracefully...")
         except Exception as e:
             logger.error(f"❌ Server error: {e}")
+            raise
+
+    def run_stdio(self, debug: bool | None = None):
+        """
+        Run the MCP server over STDIO transport.
+        
+        Args:
+            debug: Enable debug logging (uses smart default if None)
+        """
+        final_debug = debug if debug is not None else self.smart_debug
+        
+        # Configure logging to stderr for stdio transport
+        if final_debug:
+            logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
+        else:
+            # Use the smart log level from modular config, always to stderr
+            log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
+            logging.basicConfig(level=log_level, stream=sys.stderr)
+        
+        # Suppress smart config output for stdio transport
+        self._should_print_config = False
+        
+        # Create and run STDIO transport
+        transport = StdioSyncTransport(self.protocol)
+        
+        logger.info(f"🚀 Starting {self.server_info.name} over STDIO transport")
+        
+        try:
+            transport.run()
+        except KeyboardInterrupt:
+            logger.info("👋 STDIO transport shutting down gracefully...")
+        except Exception as e:
+            logger.error(f"❌ STDIO transport error: {e}")
             raise
 
     def _print_startup_info(self, host: str, port: int, debug: bool):
