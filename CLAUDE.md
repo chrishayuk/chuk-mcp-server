@@ -148,8 +148,10 @@ uv build
 ```
 
 ### Running Examples & Benchmarks
+
+#### HTTP Transport (Default)
 ```bash
-# Zero config example
+# Zero config example (HTTP transport)
 python examples/zero_config_example.py
 uv run python examples/zero_config_example.py
 
@@ -166,6 +168,67 @@ python benchmarks/quick_benchmark.py
 # Run with custom settings
 python benchmarks/ultra_minimal_mcp_performance_test.py localhost:8001 --concurrency 500 --duration 10
 ```
+
+#### STDIO Transport (MCP Standard)
+```bash
+# Method 1: Global decorators with transport parameter
+python -c "
+from chuk_mcp_server import tool, run
+
+@tool
+def hello(name: str = 'World') -> str:
+    return f'Hello, {name}!'
+
+run(transport='stdio')
+"
+
+# Method 2: Constructor-based transport selection
+python -c "
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer(transport='stdio')
+
+@mcp.tool
+def hello(name: str = 'World') -> str:
+    return f'Hello, {name}!'
+
+mcp.run()  # Automatically uses STDIO transport
+"
+
+# Method 3: Dedicated run_stdio() method
+python -c "
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer()
+
+@mcp.tool
+def hello(name: str = 'World') -> str:
+    return f'Hello, {name}!'
+
+mcp.run_stdio()  # Direct STDIO method call
+"
+
+# Test STDIO server manually
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"test","version":"1.0"},"protocolVersion":"2025-06-18"}}' | python your_server.py
+
+# Example STDIO server
+python examples/stdio_example.py
+
+# STDIO transport testing
+python tests/transport/test_stdio_complete.py
+```
+
+#### Transport Methods Summary
+1. **Global Decorators**: `run(transport="stdio")` - Simplest approach
+2. **Constructor Parameter**: `ChukMCPServer(transport="stdio")` - Clean class-based API  
+3. **Dedicated Method**: `mcp.run_stdio()` - Explicit method call
+
+#### Transport Comparison
+- **HTTP Transport**: Web-based, REST endpoints, browser compatible, 39,000+ RPS
+- **STDIO Transport**: Process-based, standard MCP protocol, subprocess communication
+- **Use Cases**:
+  - HTTP: Web apps, APIs, development servers, cloud deployment
+  - STDIO: MCP clients, subprocess integration, Claude Desktop, editor plugins
 
 ## Architecture
 
@@ -205,12 +268,18 @@ ChukMCPServer is a high-performance MCP (Model Context Protocol) framework that 
    - Session management and SSE streaming support
    - Error handling and request/response processing
 
-6. **HTTP Server** (`src/chuk_mcp_server/http_server.py`)
+6. **Transport Layer** (`src/chuk_mcp_server/transport/`)
+   - **HTTP Transport**: Starlette + uvloop for maximum performance (39,000+ RPS)
+   - **STDIO Transport**: Standard MCP protocol over stdin/stdout
+   - Auto-registered endpoints with CORS support (HTTP)
+   - Optimized for high concurrency (1,000+ connections)
+
+7. **HTTP Server** (`src/chuk_mcp_server/http_server.py`)
    - Built on Starlette + uvloop for maximum performance
    - Auto-registered endpoints with CORS support
    - Optimized for high concurrency (1,000+ connections)
 
-7. **Cloud Support** (`src/chuk_mcp_server/cloud/`)
+8. **Cloud Support** (`src/chuk_mcp_server/cloud/`)
    - Auto-detection of cloud environments
    - Platform-specific adapters for serverless deployment
    - Support for GCP, AWS Lambda, Azure Functions, Edge platforms
@@ -229,4 +298,21 @@ ChukMCPServer is a high-performance MCP (Model Context Protocol) framework that 
 - Global decorators: `@tool`, `@resource` with `run()` for ultimate simplicity
 - Class-based: `ChukMCPServer()` for traditional usage
 - Cloud handlers: Auto-exported based on detected environment
-- HTTP endpoint: `/mcp` for MCP protocol over HTTP with SSE
+- **HTTP Transport**: `/mcp` endpoint for MCP protocol over HTTP with SSE
+- **STDIO Transport**: Standard MCP protocol over stdin/stdout for process communication
+
+### Transport Support
+
+ChukMCPServer supports both standard MCP transports:
+
+1. **HTTP Transport** (Default)
+   - High-performance web server (39,000+ RPS)
+   - RESTful endpoints with CORS support
+   - Server-Sent Events (SSE) for streaming
+   - Perfect for web apps, APIs, and cloud deployment
+   
+2. **STDIO Transport** (MCP Standard)
+   - Standard MCP protocol over stdin/stdout
+   - Process-based communication
+   - Perfect for MCP clients, Claude Desktop, editor plugins
+   - Zero network overhead, direct process integration

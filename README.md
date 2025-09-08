@@ -57,10 +57,74 @@ if __name__ == "__main__":
     run()  # Auto-detects host, port, performance settings, everything!
 ```
 
+## 🔌 Transport Support
+
+ChukMCPServer supports both standard MCP transports with zero configuration:
+
+### HTTP Transport (Default) - 39,000+ RPS
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+run()  # HTTP transport - perfect for web apps and APIs
+```
+
+### STDIO Transport (MCP Standard)
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+run(transport="stdio")  # STDIO transport - perfect for MCP clients
+```
+
+**Testing STDIO:**
+```bash
+# Test manually with JSON-RPC
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"test","version":"1.0"},"protocolVersion":"2025-06-18"}}' | python your_server.py
+
+# Run STDIO example
+python examples/stdio_example.py
+```
+
+**Use Cases:**
+- **HTTP**: Web apps, APIs, development servers, cloud deployment  
+- **STDIO**: MCP clients, Claude Desktop, editor plugins, subprocess integration
+
 ### Traditional Style (Still Zero Config)
 
 ```python
+# HTTP Transport (default)
 from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer()  # HTTP transport by default
+
+@mcp.tool
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+mcp.run()  # Starts HTTP server
+```
+
+```python
+# STDIO Transport via constructor
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer(transport="stdio")  # STDIO transport
+
+@mcp.tool
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+mcp.run()  # Starts STDIO transport automatically
+```
+
+### Class-Based API Options
 
 # ✨ Smart server with auto-detected configuration
 mcp = ChukMCPServer()  # Uses SmartConfig for all detection!
