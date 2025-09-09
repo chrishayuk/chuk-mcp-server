@@ -115,13 +115,13 @@ def get_or_create_global_server() -> ChukMCPServer:
 def run(transport: str = "http", **kwargs: Any) -> None:
     """
     Run the global smart server with cloud detection and transport selection.
-    
+
     Args:
         transport: Transport type ("http" or "stdio")
         **kwargs: Additional arguments passed to the transport
     """
     server = get_or_create_global_server()
-    
+
     if transport.lower() == "stdio":
         server.run_stdio(**kwargs)
     else:

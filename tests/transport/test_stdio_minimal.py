@@ -4,10 +4,9 @@
 import json
 import subprocess
 import sys
-import time
 
 # First create a minimal server script
-server_script = '''#!/usr/bin/env python3
+server_script = """#!/usr/bin/env python3
 import sys
 import json
 import asyncio
@@ -28,51 +27,50 @@ transport = StdioTransport(protocol)
 
 print("🔌 Minimal STDIO server starting...", file=sys.stderr)
 asyncio.run(transport.run())
-'''
+"""
+
 
 def test_minimal_stdio():
     """Test minimal stdio functionality."""
     print("🧪 Testing Minimal STDIO Transport")
     print("=" * 50)
-    
+
     # Write the server script
-    with open('/tmp/minimal_stdio_server.py', 'w') as f:
+    with open("/tmp/minimal_stdio_server.py", "w") as f:
         f.write(server_script)
-    
+
     # Start server
     proc = subprocess.Popen(
-        [sys.executable, '/tmp/minimal_stdio_server.py'],
+        [sys.executable, "/tmp/minimal_stdio_server.py"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        bufsize=0
+        bufsize=0,
     )
-    
+
     try:
         print("🚀 Server started, sending initialize...")
-        
+
         # Send initialize request
         init_request = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "initialize",
-            "params": {
-                "clientInfo": {"name": "test-client", "version": "1.0.0"},
-                "protocolVersion": "2025-06-18"
-            }
+            "params": {"clientInfo": {"name": "test-client", "version": "1.0.0"}, "protocolVersion": "2025-06-18"},
         }
-        
+
         request_line = json.dumps(init_request) + "\\n"
         print(f"→ Sending: {request_line.strip()}")
-        
+
         proc.stdin.write(request_line)
         proc.stdin.flush()
-        
+
         # Wait for response with timeout
         import select
+
         ready, _, _ = select.select([proc.stdout], [], [], 5)
-        
+
         if ready:
             response_line = proc.stdout.readline()
             if response_line:
@@ -96,16 +94,17 @@ def test_minimal_stdio():
             stderr_output = proc.stderr.read()
             print(f"Server stderr: {stderr_output}")
             return False
-            
+
     except Exception as e:
         print(f"❌ Test failed: {e}")
         stderr_output = proc.stderr.read()
         print(f"Server stderr: {stderr_output}")
         return False
-        
+
     finally:
         proc.terminate()
         proc.wait()
+
 
 if __name__ == "__main__":
     success = test_minimal_stdio()

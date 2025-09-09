@@ -4,7 +4,6 @@
 Core - Main ChukMCP Server class with modular smart configuration
 """
 
-import asyncio
 import logging
 import sys
 from collections.abc import Callable
@@ -576,7 +575,7 @@ class ChukMCPServer:
         # Check if STDIO transport was requested
         if self.smart_transport == "stdio":
             return self.run_stdio(debug)
-        
+
         # Use smart defaults if not overridden
         final_host = host or self.smart_host
         final_port = port or self.smart_port
@@ -629,9 +628,9 @@ class ChukMCPServer:
             # Create HTTP server
             if self._server is None:
                 self._server = create_server(self.protocol)
-        
+
             # Show startup information
-            if getattr(self, '_should_print_config', True):
+            if getattr(self, "_should_print_config", True):
                 self._print_startup_info(final_host, final_port, final_debug)
 
             # Run the server
@@ -646,12 +645,12 @@ class ChukMCPServer:
     def run_stdio(self, debug: bool | None = None):
         """
         Run the MCP server over STDIO transport.
-        
+
         Args:
             debug: Enable debug logging (uses smart default if None)
         """
         final_debug = debug if debug is not None else self.smart_debug
-        
+
         # Configure logging to stderr for stdio transport
         if final_debug:
             logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
@@ -659,15 +658,15 @@ class ChukMCPServer:
             # Use the smart log level from modular config, always to stderr
             log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
             logging.basicConfig(level=log_level, stream=sys.stderr)
-        
+
         # Suppress smart config output for stdio transport
         self._should_print_config = False
-        
+
         # Create and run STDIO transport
         transport = StdioSyncTransport(self.protocol)
-        
+
         logger.info(f"🚀 Starting {self.server_info.name} over STDIO transport")
-        
+
         try:
             transport.run()
         except KeyboardInterrupt:

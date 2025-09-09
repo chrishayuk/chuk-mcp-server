@@ -13,17 +13,19 @@ Perfect for:
 """
 
 import sys
-from chuk_mcp_server import tool, resource, run
+
+from chuk_mcp_server import resource, run, tool
 
 # ============================================================================
 # Tools - Functions available via MCP
 # ============================================================================
 
+
 @tool
 def greet(name: str = "World", style: str = "friendly") -> str:
     """
     Greet someone with different styles.
-    
+
     Args:
         name: The name to greet
         style: Greeting style (friendly, formal, casual)
@@ -40,7 +42,7 @@ def greet(name: str = "World", style: str = "friendly") -> str:
 def calculate(expression: str) -> dict:
     """
     Safely evaluate mathematical expressions.
-    
+
     Args:
         expression: Mathematical expression to evaluate (e.g., "2 + 3 * 4")
     """
@@ -49,13 +51,9 @@ def calculate(expression: str) -> dict:
         allowed_chars = set("0123456789+-*/.() ")
         if not all(c in allowed_chars for c in expression):
             return {"error": "Expression contains invalid characters"}
-        
+
         result = eval(expression)
-        return {
-            "expression": expression,
-            "result": result,
-            "type": type(result).__name__
-        }
+        return {"expression": expression, "result": result, "type": type(result).__name__}
     except Exception as e:
         return {"error": f"Calculation error: {str(e)}"}
 
@@ -63,10 +61,10 @@ def calculate(expression: str) -> dict:
 @tool
 def system_info() -> dict:
     """Get basic system information."""
-    import platform
     import os
+    import platform
     import sys
-    
+
     return {
         "platform": {
             "system": platform.system(),
@@ -83,7 +81,7 @@ def system_info() -> dict:
             "user": os.getenv("USER", "unknown"),
             "path_entries": len(os.getenv("PATH", "").split(":")),
         },
-        "transport": "stdio"
+        "transport": "stdio",
     }
 
 
@@ -91,14 +89,14 @@ def system_info() -> dict:
 def create_data_structure(data_type: str, items: list = None) -> dict:
     """
     Create and manipulate different data structures.
-    
+
     Args:
         data_type: Type of structure (list, set, dict, tuple)
         items: Items to include in the structure
     """
     if items is None:
         items = ["apple", "banana", "cherry", "date"]
-    
+
     try:
         if data_type == "list":
             result = list(items)
@@ -107,15 +105,15 @@ def create_data_structure(data_type: str, items: list = None) -> dict:
         elif data_type == "dict":
             result = {f"item_{i}": item for i, item in enumerate(items)}
         elif data_type == "tuple":
-            result = list(tuple(items))  # Convert to list for JSON serialization
+            result = list(items)  # Convert to list for JSON serialization
         else:
             return {"error": f"Unsupported data type: {data_type}"}
-        
+
         return {
             "data_type": data_type,
             "input_items": items,
             "result": result,
-            "count": len(result) if isinstance(result, list) else len(result.keys())
+            "count": len(result) if isinstance(result, list) else len(result.keys()),
         }
     except Exception as e:
         return {"error": f"Error creating {data_type}: {str(e)}"}
@@ -125,6 +123,7 @@ def create_data_structure(data_type: str, items: list = None) -> dict:
 # Resources - Data/content available via MCP
 # ============================================================================
 
+
 @resource("config://server")
 def get_server_config() -> dict:
     """Server configuration and capabilities."""
@@ -132,18 +131,14 @@ def get_server_config() -> dict:
         "name": "ChukMCPServer STDIO Example",
         "version": "1.0.0",
         "transport": "stdio",
-        "capabilities": {
-            "tools": True,
-            "resources": True,
-            "prompts": False
-        },
+        "capabilities": {"tools": True, "resources": True, "prompts": False},
         "features": [
             "Zero configuration",
             "Type-safe tools",
             "Automatic schema generation",
             "Standard MCP protocol",
-            "Process-based communication"
-        ]
+            "Process-based communication",
+        ],
     }
 
 
@@ -203,20 +198,15 @@ def get_usage_examples() -> dict:
         "greet_examples": [
             {"name": "Alice", "style": "friendly"},
             {"name": "Bob", "style": "formal"},
-            {"name": "Charlie", "style": "casual"}
+            {"name": "Charlie", "style": "casual"},
         ],
-        "calculate_examples": [
-            "2 + 3",
-            "10 * 5 - 3",
-            "(4 + 6) / 2",
-            "2 ** 8"
-        ],
+        "calculate_examples": ["2 + 3", "10 * 5 - 3", "(4 + 6) / 2", "2 ** 8"],
         "data_structure_examples": [
             {"data_type": "list", "items": ["red", "green", "blue"]},
             {"data_type": "set", "items": ["a", "b", "c", "a", "b"]},
             {"data_type": "dict", "items": ["key1", "key2", "key3"]},
-            {"data_type": "tuple", "items": [1, 2, 3, 4, 5]}
-        ]
+            {"data_type": "tuple", "items": [1, 2, 3, 4, 5]},
+        ],
     }
 
 
@@ -243,6 +233,6 @@ if __name__ == "__main__":
     print("", file=sys.stderr)
     print("Ready for JSON-RPC messages on stdin...", file=sys.stderr)
     print("", file=sys.stderr)
-    
+
     # Method 1: Run the server with STDIO transport via global run()
     run(transport="stdio", debug=False)
