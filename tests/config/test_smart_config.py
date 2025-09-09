@@ -145,13 +145,15 @@ class TestSmartConfig:
         """Test performance mode detection considers environment."""
         config = SmartConfig()
 
-        with patch.object(config.environment_detector, "detect", return_value="serverless"):
-            with patch.object(
+        with (
+            patch.object(config.environment_detector, "detect", return_value="serverless"),
+            patch.object(
                 config.system_detector, "detect_performance_mode", return_value="serverless_optimized"
-            ) as mock_detect:
-                result = config.get_performance_mode()
-                assert result == "serverless_optimized"
-                mock_detect.assert_called_once_with("serverless")
+            ) as mock_detect,
+        ):
+            result = config.get_performance_mode()
+            assert result == "serverless_optimized"
+            mock_detect.assert_called_once_with("serverless")
 
     def test_get_all_defaults_comprehensive(self):
         """Test comprehensive configuration detection."""
@@ -187,6 +189,7 @@ class TestSmartConfig:
                                                 "log_level",
                                                 "performance_mode",
                                                 "containerized",
+                                                "transport_mode",
                                             }
                                             assert set(result.keys()) == expected_keys
 
@@ -414,7 +417,18 @@ class TestSmartConfigIntegration:
             assert result["log_level"] == "INFO"
 
     @patch("pathlib.Path.cwd")
-    @patch.dict(os.environ, {"AWS_LAMBDA_FUNCTION_NAME": "my-function", "AWS_REGION": "us-east-1"})
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_LAMBDA_FUNCTION_NAME": "my-function",
+            "AWS_REGION": "us-east-1",
+            "CI": "",
+            "GITHUB_ACTIONS": "",
+            "JENKINS": "",
+            "TRAVIS": "",
+        },
+        clear=False,
+    )
     @patch("psutil.cpu_count")
     @patch("psutil.virtual_memory")
     def test_serverless_aws_scenario(self, mock_memory, mock_cpu_count, mock_cwd):

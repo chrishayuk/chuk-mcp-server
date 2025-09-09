@@ -7,7 +7,7 @@ Simple test to verify integrated zero config works.
 print("🧠 Testing Integrated Zero Config...")
 
 # Test 1: Global magic decorators
-from chuk_mcp_server import tool, resource, run
+from chuk_mcp_server import resource, tool
 
 
 @tool

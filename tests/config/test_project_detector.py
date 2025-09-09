@@ -42,7 +42,7 @@ class TestProjectDetector:
         mock_cwd.return_value = Path("/home/user/src")
 
         # Mock the package.json file path
-        package_json_path = Path("/home/user/src/package.json")
+        Path("/home/user/src/package.json")
         mock_exists.side_effect = lambda: True
 
         package_data = {"name": "my-node-project", "version": "1.0.0"}

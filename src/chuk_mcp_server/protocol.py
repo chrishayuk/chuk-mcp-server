@@ -51,12 +51,12 @@ class SessionManager:
         """Get session by ID."""
         return self.sessions.get(session_id)
 
-    def update_activity(self, session_id: str):
+    def update_activity(self, session_id: str) -> None:
         """Update session last activity."""
         if session_id in self.sessions:
             self.sessions[session_id]["last_activity"] = time.time()
 
-    def cleanup_expired(self, max_age: int = 3600):
+    def cleanup_expired(self, max_age: int = 3600) -> None:
         """Remove expired sessions."""
         now = time.time()
         expired = [sid for sid, session in self.sessions.items() if now - session["last_activity"] > max_age]
@@ -84,19 +84,20 @@ class MCPProtocolHandler:
         self.resources: dict[str, ResourceHandler] = {}
         self.prompts: dict[str, PromptHandler] = {}
 
-        logger.info("✅ MCP protocol handler initialized with chuk_mcp")
+        # Don't log during init to keep stdio mode clean
+        logger.debug("MCP protocol handler initialized with chuk_mcp")
 
-    def register_tool(self, tool: ToolHandler):
+    def register_tool(self, tool: ToolHandler) -> None:
         """Register a tool handler."""
         self.tools[tool.name] = tool
         logger.debug(f"Registered tool: {tool.name}")
 
-    def register_resource(self, resource: ResourceHandler):
+    def register_resource(self, resource: ResourceHandler) -> None:
         """Register a resource handler."""
         self.resources[resource.uri] = resource
         logger.debug(f"Registered resource: {resource.uri}")
 
-    def register_prompt(self, prompt: PromptHandler):
+    def register_prompt(self, prompt: PromptHandler) -> None:
         """Register a prompt handler."""
         self.prompts[prompt.name] = prompt
         logger.debug(f"Registered prompt: {prompt.name}")
@@ -304,7 +305,6 @@ class MCPProtocolHandler:
         prompt_name = params.get("name")
         arguments = params.get("arguments", {})
 
-
         if prompt_name not in self.prompts:
             return self._create_error_response(msg_id, -32602, f"Unknown prompt: {prompt_name}"), None
 
@@ -334,20 +334,14 @@ class MCPProtocolHandler:
                             messages.append(item)
                         else:
                             # Convert content item to proper message format
-                            messages.append({
-                                "role": "user", 
-                                "content": item
-                            })
+                            messages.append({"role": "user", "content": item})
                     else:
                         # Convert string or other types to proper message format
-                        messages.append({
-                            "role": "user", 
-                            "content": {"type": "text", "text": str(item)}
-                        })
+                        messages.append({"role": "user", "content": {"type": "text", "text": str(item)}})
             else:
                 # Fallback to properly formatted message structure
                 messages = [{"role": "user", "content": {"type": "text", "text": str(result)}}]
-            
+
             response = {
                 "jsonrpc": "2.0",
                 "id": msg_id,

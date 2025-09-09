@@ -5,6 +5,7 @@ Network configuration detection (host and port).
 """
 
 import socket
+from typing import Any
 
 from .base import ConfigDetector
 
@@ -12,12 +13,14 @@ from .base import ConfigDetector
 class NetworkDetector(ConfigDetector):
     """Detects optimal network configuration (host and port)."""
 
+    # Security Note: 0.0.0.0 binding is required for cloud platforms to accept
+    # traffic from platform load balancers. This is secure in containerized environments.
     PLATFORM_HOSTS = {
-        "VERCEL": "0.0.0.0",
-        "RAILWAY_ENVIRONMENT": "0.0.0.0",
-        "RENDER": "0.0.0.0",
-        "FLY_APP_NAME": "0.0.0.0",
-        "HEROKU_APP_NAME": "0.0.0.0",
+        "VERCEL": "0.0.0.0",  # nosec B104 - Required for Vercel platform routing
+        "RAILWAY_ENVIRONMENT": "0.0.0.0",  # nosec B104 - Required for Railway platform routing
+        "RENDER": "0.0.0.0",  # nosec B104 - Required for Render platform routing
+        "FLY_APP_NAME": "0.0.0.0",  # nosec B104 - Required for Fly.io platform routing
+        "HEROKU_APP_NAME": "0.0.0.0",  # nosec B104 - Required for Heroku platform routing
     }
 
     PLATFORM_PORTS = {
@@ -28,7 +31,7 @@ class NetworkDetector(ConfigDetector):
 
     PREFERRED_PORTS = [8000, 8001, 8080, 3000, 5000, 4000]
 
-    def detect(self) -> dict:
+    def detect(self) -> dict[str, Any]:
         """Detect network configuration (implements abstract method)."""
         return {"host": self.detect_host(), "port": self.detect_port()}
 
@@ -41,7 +44,7 @@ class NetworkDetector(ConfigDetector):
 
         # Environment-based detection
         if environment in ["production", "serverless"] or is_containerized:
-            return "0.0.0.0"
+            return "0.0.0.0"  # nosec B104 - Required for containerized/serverless deployments
 
         # Development and testing: localhost for security
         return "localhost"

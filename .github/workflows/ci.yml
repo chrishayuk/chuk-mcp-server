@@ -124,7 +124,7 @@ jobs:
       
       - name: Run bandit security checks
         run: |
-          uv run bandit -r src/ -ll
+          uv run bandit -r src/ -ll --config .bandit
 
   build:
     name: Build Distribution

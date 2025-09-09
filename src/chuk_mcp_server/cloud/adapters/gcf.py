@@ -282,7 +282,7 @@ def get_gcf_handler():
         return adapter.get_handler()
 
     # Try to auto-setup if not already done
-    from ...core import get_or_create_global_server
+    from ... import get_or_create_global_server
 
     server = get_or_create_global_server()
 

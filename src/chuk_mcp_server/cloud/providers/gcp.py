@@ -136,7 +136,7 @@ class GCPProvider(CloudProvider):
     def _get_cloud_functions_config(self) -> dict[str, Any]:
         """Get Cloud Functions specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for GCP Cloud Functions runtime
             "port": int(os.environ.get("PORT", 8080)),
             "workers": 1,  # Cloud Functions is single-threaded
             "max_connections": min(int(os.environ.get("FUNCTION_MEMORY_MB", 512)) // 100 * 10, 1000),
@@ -151,7 +151,7 @@ class GCPProvider(CloudProvider):
     def _get_cloud_run_config(self) -> dict[str, Any]:
         """Get Cloud Run specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for GCP Cloud Run runtime
             "port": int(os.environ.get("PORT", 8080)),
             "workers": min(int(os.environ.get("CLOUD_RUN_CPU", 1)) * 2, 8),
             "max_connections": int(os.environ.get("CLOUD_RUN_CONCURRENCY", 1000)),
@@ -165,7 +165,7 @@ class GCPProvider(CloudProvider):
     def _get_app_engine_config(self) -> dict[str, Any]:
         """Get App Engine specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for GCP App Engine runtime
             "port": int(os.environ.get("PORT", 8080)),
             "workers": 1 if os.environ.get("GAE_ENV") == "standard" else 4,
             "max_connections": 1000,
@@ -181,7 +181,7 @@ class GCPProvider(CloudProvider):
     def _get_compute_engine_config(self) -> dict[str, Any]:
         """Get Compute Engine specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for GCP Compute Engine load balancer
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 4,  # Will be optimized by system detector
             "max_connections": 5000,

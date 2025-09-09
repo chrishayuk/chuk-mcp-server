@@ -131,6 +131,7 @@ class ChukMCPServer:
         self.smart_log_level = smart_defaults["log_level"]
         self.smart_performance_mode = smart_defaults["performance_mode"]
         self.smart_containerized = smart_defaults["containerized"]
+        self.smart_transport_mode = smart_defaults.get("transport_mode", "http")
 
         # Create protocol handler with direct chuk_mcp types
         self.protocol = MCPProtocolHandler(self.server_info, self.capabilities)
@@ -141,23 +142,28 @@ class ChukMCPServer:
         # HTTP server will be created when needed
         self._server = None
 
-        # Print smart configuration info in debug mode (will be suppressed for stdio)
+        # Don't print banner during init - will be done in run() if needed
+        # This avoids cluttering stdio mode
         self._should_print_config = self.smart_debug
 
-        logger.info(f"Initialized ChukMCP Server: {name} v{version}")
+        logger.debug(f"Initialized ChukMCP Server: {name} v{version}")
 
     def _print_smart_config(self):
         """Print smart configuration summary using modular config."""
-        print("🧠 ChukMCPServer - Modular Zero Configuration Mode")
-        print("=" * 60)
-        print(f"📊 Environment: {self.smart_environment}")
-        print(f"🌐 Network: {self.smart_host}:{self.smart_port}")
-        print(f"🔧 Workers: {self.smart_workers}")
-        print(f"🔗 Max Connections: {self.smart_max_connections}")
-        print(f"🐳 Container: {self.smart_containerized}")
-        print(f"⚡ Performance Mode: {self.smart_performance_mode}")
-        print(f"📝 Log Level: {self.smart_log_level}")
-        print("=" * 60)
+        import sys
+
+        # Always use stderr for debug output to keep stdout clean
+        output = sys.stderr
+        print("🧠 ChukMCPServer - Modular Zero Configuration Mode", file=output)
+        print("=" * 60, file=output)
+        print(f"📊 Environment: {self.smart_environment}", file=output)
+        print(f"🌐 Network: {self.smart_host}:{self.smart_port}", file=output)
+        print(f"🔧 Workers: {self.smart_workers}", file=output)
+        print(f"🔗 Max Connections: {self.smart_max_connections}", file=output)
+        print(f"🐳 Container: {self.smart_containerized}", file=output)
+        print(f"⚡ Performance Mode: {self.smart_performance_mode}", file=output)
+        print(f"📝 Log Level: {self.smart_log_level}", file=output)
+        print("=" * 60, file=output)
 
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
@@ -555,7 +561,9 @@ class ChukMCPServer:
     # Smart Server Management with Modular Configuration
     # ============================================================================
 
-    def run(self, host: str | None = None, port: int | None = None, debug: bool | None = None):
+    def run(
+        self, host: str | None = None, port: int | None = None, debug: bool | None = None, stdio: bool | None = None
+    ):
         """
         Run the MCP server with modular smart defaults.
 
@@ -563,6 +571,7 @@ class ChukMCPServer:
             host: Host to bind to (uses smart default if None)
             port: Port to bind to (uses smart default if None)
             debug: Enable debug logging (uses smart default if None)
+            stdio: Run in stdio mode instead of HTTP server (auto-detects if None)
         """
         # Check if STDIO transport was requested
         if self.smart_transport == "stdio":
@@ -573,29 +582,66 @@ class ChukMCPServer:
         final_port = port or self.smart_port
         final_debug = debug if debug is not None else self.smart_debug
 
-        if final_debug:
-            logging.basicConfig(level=logging.DEBUG)
+        # Auto-detect stdio mode if not explicitly set
+        if stdio is None:
+            # Only use stdio if explicitly requested via environment
+            stdio = (
+                self.smart_config.environment_detector.get_env_var("MCP_STDIO")
+                or self.smart_config.environment_detector.get_env_var("USE_STDIO")
+                or self.smart_config.environment_detector.get_env_var("MCP_TRANSPORT") == "stdio"
+            )
+            stdio = bool(stdio)
+
+        # Check if stdio mode is requested
+        if stdio:
+            # In stdio mode, suppress all logging to keep stdout clean
+            # Set logging to CRITICAL to suppress most messages
+            import sys
+
+            logging.basicConfig(
+                level=logging.CRITICAL,
+                stream=sys.stderr,
+                format="%(message)s",  # Minimal format
+            )
+            # Suppress specific noisy loggers
+            logging.getLogger("chuk_mcp_server").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.protocol").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.core").setLevel(logging.CRITICAL)
+            logging.getLogger("chuk_mcp_server.stdio_transport").setLevel(logging.CRITICAL)
+
+            # Run in stdio mode
+            from .stdio_transport import run_stdio_server
+
+            run_stdio_server(self.protocol)
         else:
-            # Use the smart log level from modular config
-            log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
-            logging.basicConfig(level=log_level)
+            # HTTP mode - normal logging
+            if final_debug:
+                logging.basicConfig(level=logging.DEBUG)
+            else:
+                # Use the smart log level from modular config
+                log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
+                logging.basicConfig(level=log_level)
 
-        # Create HTTP server
-        if self._server is None:
-            self._server = create_server(self.protocol)
+            # Show the banner in debug mode for HTTP
+            if self.smart_debug:
+                self._print_smart_config()
 
+            # Create HTTP server
+            if self._server is None:
+                self._server = create_server(self.protocol)
+        
         # Show startup information
         if getattr(self, '_should_print_config', True):
             self._print_startup_info(final_host, final_port, final_debug)
 
-        # Run the server
-        try:
-            self._server.run(host=final_host, port=final_port, debug=final_debug)
-        except KeyboardInterrupt:
-            logger.info("\n👋 Server shutting down gracefully...")
-        except Exception as e:
-            logger.error(f"❌ Server error: {e}")
-            raise
+            # Run the server
+            try:
+                self._server.run(host=final_host, port=final_port, debug=final_debug)
+            except KeyboardInterrupt:
+                logger.info("\n👋 Server shutting down gracefully...")
+            except Exception as e:
+                logger.error(f"❌ Server error: {e}")
+                raise
 
     def run_stdio(self, debug: bool | None = None):
         """
@@ -632,59 +678,63 @@ class ChukMCPServer:
 
     def _print_startup_info(self, host: str, port: int, debug: bool):
         """Print comprehensive startup information using modular config."""
-        print("🚀 ChukMCPServer - Modular Smart Configuration")
-        print("=" * 60)
+        import sys
+
+        # Use stderr if in stdio mode to keep stdout clean
+        output = sys.stderr if self.smart_transport_mode == "stdio" else sys.stdout
+        print("🚀 ChukMCPServer - Modular Smart Configuration", file=output)
+        print("=" * 60, file=output)
 
         # Server information
         info = self.info()
-        print(f"Server: {info['server']['name']}")
-        print(f"Version: {info['server']['version']}")
-        print("Framework: ChukMCPServer with Modular Zero Configuration")
-        print()
+        print(f"Server: {info['server']['name']}", file=output)
+        print(f"Version: {info['server']['version']}", file=output)
+        print("Framework: ChukMCPServer with Modular Zero Configuration", file=output)
+        print(file=output)
 
         # Smart configuration summary from modular system
         detection_summary = info["smart_detection_summary"]
-        print("🧠 Smart Detection Summary:")
+        print("🧠 Smart Detection Summary:", file=output)
         for key, value in detection_summary.items():
-            print(f"   {key.replace('_', ' ').title()}: {value}")
-        print()
+            print(f"   {key.replace('_', ' ').title()}: {value}", file=output)
+        print(file=output)
 
         # MCP Components
         mcp_info = info["mcp_components"]
-        print(f"🔧 MCP Tools: {mcp_info['tools']['count']}")
+        print(f"🔧 MCP Tools: {mcp_info['tools']['count']}", file=output)
         for tool_name in mcp_info["tools"]["names"]:
-            print(f"   - {tool_name}")
-        print()
+            print(f"   - {tool_name}", file=output)
+        print(file=output)
 
-        print(f"📂 MCP Resources: {mcp_info['resources']['count']}")
+        print(f"📂 MCP Resources: {mcp_info['resources']['count']}", file=output)
         for resource_uri in mcp_info["resources"]["uris"]:
-            print(f"   - {resource_uri}")
-        print()
+            print(f"   - {resource_uri}", file=output)
+        print(file=output)
 
-        print(f"💬 MCP Prompts: {mcp_info['prompts']['count']}")
+        print(f"💬 MCP Prompts: {mcp_info['prompts']['count']}", file=output)
         for prompt_name in mcp_info["prompts"]["names"]:
-            print(f"   - {prompt_name}")
-        print()
+            print(f"   - {prompt_name}", file=output)
+        print(file=output)
 
         # Connection information
-        print("🌐 Server Information:")
-        print(f"   URL: http://{host}:{port}")
-        print(f"   MCP Endpoint: http://{host}:{port}/mcp")
-        print(f"   Debug: {debug}")
-        print()
+        print("🌐 Server Information:", file=output)
+        print(f"   URL: http://{host}:{port}", file=output)
+        print(f"   MCP Endpoint: http://{host}:{port}/mcp", file=output)
+        print(f"   Debug: {debug}", file=output)
+        print(file=output)
 
         # Performance mode information
-        print("⚡ Performance Configuration:")
-        print(f"   Mode: {self.smart_performance_mode}")
-        print(f"   Workers: {self.smart_workers}")
-        print(f"   Max Connections: {self.smart_max_connections}")
-        print()
+        print("⚡ Performance Configuration:", file=output)
+        print(f"   Mode: {self.smart_performance_mode}", file=output)
+        print(f"   Workers: {self.smart_workers}", file=output)
+        print(f"   Max Connections: {self.smart_max_connections}", file=output)
+        print(file=output)
 
         # Inspector compatibility
-        print("🔍 MCP Inspector:")
-        print(f"   URL: http://{host}:{port}/mcp")
-        print("   Transport: Streamable HTTP")
-        print("=" * 60)
+        print("🔍 MCP Inspector:", file=output)
+        print(f"   URL: http://{host}:{port}/mcp", file=output)
+        print("   Transport: Streamable HTTP", file=output)
+        print("=" * 60, file=output)
 
     # ============================================================================
     # Configuration Management

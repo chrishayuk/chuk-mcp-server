@@ -4,8 +4,10 @@
 Enhanced environment detection that integrates with cloud detection.
 """
 
+import io
 import logging
 from pathlib import Path
+from typing import Any
 
 from .base import ConfigDetector
 
@@ -74,6 +76,33 @@ class EnvironmentDetector(ConfigDetector):
         # 8. Default to development
         logger.debug("Defaulting to development environment")
         return "development"
+
+    def detect_transport_mode(self) -> str:
+        """Detect the transport mode (stdio or http)."""
+        # Check for explicit transport mode env var
+        transport = self.get_env_var("MCP_TRANSPORT")
+        if transport:
+            return transport.lower()
+
+        # Check if running with stdio mode indicators
+        if self.get_env_var("MCP_STDIO") or self.get_env_var("USE_STDIO"):
+            return "stdio"
+
+        # Check if we're being piped or redirected (common for stdio)
+        # But skip this check in test environments to avoid false positives
+        import sys
+
+        try:
+            # Only check stdin/stdout if not in a test environment
+            if not hasattr(sys.stdin, "_pytest_capture") and not hasattr(sys.stdout, "_pytest_capture"):
+                if not sys.stdin.isatty() or not sys.stdout.isatty():
+                    return "stdio"
+        except (AttributeError, io.UnsupportedOperation):
+            # Handle cases where stdin/stdout might be mocked or redirected
+            pass
+
+        # Default to HTTP
+        return "http"
 
     def get_cloud_detector(self):
         """Lazy-load and return the CloudDetector."""
@@ -149,7 +178,7 @@ class EnvironmentDetector(ConfigDetector):
             logger.debug(f"Error checking development indicators: {e}")
         return False
 
-    def get_detection_info(self) -> dict:
+    def get_detection_info(self) -> dict[str, Any]:
         """Return detailed flags and values used in detection."""
         cloud_info = self.get_cloud_detector().get_detection_info()
         return {

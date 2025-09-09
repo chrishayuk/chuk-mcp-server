@@ -100,7 +100,7 @@ class AzureProvider(CloudProvider):
     def _get_azure_functions_config(self) -> dict[str, Any]:
         """Get Azure Functions specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Azure Functions runtime
             "port": int(os.environ.get("PORT", 7071)),  # Azure Functions default
             "workers": 1,  # Azure Functions is single-threaded per instance
             "max_connections": 200,  # Conservative for Azure Functions
@@ -115,7 +115,7 @@ class AzureProvider(CloudProvider):
     def _get_app_service_config(self) -> dict[str, Any]:
         """Get App Service specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Azure App Service runtime
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 4,  # Will be optimized by system detector
             "max_connections": 2000,
@@ -131,7 +131,7 @@ class AzureProvider(CloudProvider):
     def _get_container_instances_config(self) -> dict[str, Any]:
         """Get Container Instances specific configuration."""
         return {
-            "host": "0.0.0.0",
+            "host": "0.0.0.0",  # nosec B104 - Required for Azure Container Instances runtime
             "port": int(os.environ.get("PORT", 8000)),
             "workers": 2,  # Conservative for ACI
             "max_connections": 1000,

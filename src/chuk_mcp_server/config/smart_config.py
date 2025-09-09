@@ -68,6 +68,9 @@ class SmartConfig:
         debug = cloud_cfg.get("debug", base_debug)
         log_level = cloud_cfg.get("log_level", base_log)
 
+        # Detect transport mode
+        transport_mode = self.environment_detector.detect_transport_mode()
+
         # Cache only the core set of keys expected by tests
         self._cache = {
             "project_name": project_name,
@@ -80,6 +83,7 @@ class SmartConfig:
             "log_level": log_level,
             "performance_mode": performance_mode,
             "containerized": is_containerized,
+            "transport_mode": transport_mode,
         }
 
     # ------------------------------------------------------------------------
@@ -161,6 +165,11 @@ class SmartConfig:
             # ensure fallback for non-serverless
             self._cache["performance_mode"] = cfg.get("performance_mode", base)
         return self._cache["performance_mode"]
+
+    def get_transport_mode(self) -> str:
+        if "transport_mode" not in self._cache:
+            self._cache["transport_mode"] = self.environment_detector.detect_transport_mode()
+        return self._cache["transport_mode"]
 
     # ------------------------------------------------------------------------
     # Cloud-specific methods

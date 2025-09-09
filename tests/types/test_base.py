@@ -128,7 +128,7 @@ def test_versioning_imports():
 
     # Test version format
     assert isinstance(CURRENT_VERSION, str)
-    assert isinstance(SUPPORTED_VERSIONS, (list, tuple))
+    assert isinstance(SUPPORTED_VERSIONS, list | tuple)
 
 
 def test_server_info_creation():
@@ -248,7 +248,7 @@ def test_no_unexpected_dependencies():
     module_dict = vars(base)
 
     # Should not import any internal chuk_mcp_server modules except chuk_mcp
-    for name, obj in module_dict.items():
+    for _name, obj in module_dict.items():
         if hasattr(obj, "__module__"):
             module_name = obj.__module__
             if module_name and "chuk_mcp_server" in module_name:

@@ -101,7 +101,7 @@ def get_cloud_config() -> dict[str, Any]:
     return provider.get_config_overrides() if provider else {}
 
 
-def register_cloud_provider(provider: CloudProvider):
+def register_cloud_provider(provider: CloudProvider) -> None:
     """Register a cloud provider."""
     cloud_registry.register_provider(provider)
 

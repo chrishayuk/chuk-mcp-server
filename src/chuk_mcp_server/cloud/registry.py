@@ -5,6 +5,7 @@ Cloud detection registry system.
 """
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from .base import CloudProvider
@@ -15,11 +16,11 @@ logger = logging.getLogger(__name__)
 class CloudDetectionRegistry:
     """Registry for cloud provider detectors."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._providers: dict[str, CloudProvider] = {}
         self._detection_cache: CloudProvider | None = None
 
-    def register_provider(self, provider: CloudProvider):
+    def register_provider(self, provider: CloudProvider) -> None:
         """Register a cloud provider detector."""
         self._providers[provider.name] = provider
         self._detection_cache = None  # Invalidate cache
@@ -54,7 +55,7 @@ class CloudDetectionRegistry:
         """List all registered providers."""
         return list(self._providers.values())
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear detection cache."""
         self._detection_cache = None
 
@@ -77,38 +78,40 @@ class CloudDetectionRegistry:
         }
 
 
-def cloud_provider(name: str, display_name: str = None, priority: int = 100):
+def cloud_provider(
+    name: str, display_name: str | None = None, priority: int = 100
+) -> Callable[[type[CloudProvider]], type[CloudProvider]]:
     """Decorator to auto-register cloud providers."""
 
-    def decorator(cls: type[CloudProvider]):
+    def decorator(cls: type[CloudProvider]) -> type[CloudProvider]:
         # Create instance and register
         instance = cls()
 
         # Override name and display_name properties
-        instance._name = name
-        instance._display_name = display_name or name.upper()
-        instance._priority = priority
+        instance._name = name  # type: ignore[attr-defined]
+        instance._display_name = display_name or name.upper()  # type: ignore[attr-defined]
+        instance._priority = priority  # type: ignore[attr-defined]
 
         # Override the property methods to use the stored values
-        def name_property(self):
+        def name_property(self: Any) -> str:
             return self._name
 
-        def display_name_property(self):
+        def display_name_property(self: Any) -> str:
             return self._display_name
 
-        def get_priority_method(self):
+        def get_priority_method(self: Any) -> int:
             return self._priority
 
         # Monkey patch the instance
-        instance.__class__.name = property(name_property)
-        instance.__class__.display_name = property(display_name_property)
-        instance.__class__.get_priority = get_priority_method
+        instance.__class__.name = property(name_property)  # type: ignore[assignment]
+        instance.__class__.display_name = property(display_name_property)  # type: ignore[assignment]
+        instance.__class__.get_priority = get_priority_method  # type: ignore[assignment]
 
         # Register with global registry (imported by __init__.py)
         # We'll register it when the cloud module is imported
         # For now, just mark it for registration
         if not hasattr(cls, "_registry_info"):
-            cls._registry_info = (name, display_name, priority, instance)
+            cls._registry_info = (name, display_name or name.upper(), priority, instance)  # type: ignore[attr-defined]
 
         return cls
 
