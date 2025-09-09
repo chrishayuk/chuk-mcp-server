@@ -2,11 +2,15 @@
 """Test synchronous STDIO transport."""
 
 import json
+import select
 import subprocess
 import sys
 import time
 
+import pytest
 
+
+@pytest.mark.timeout(10)
 def test_sync_stdio():
     """Test synchronous stdio transport."""
     print("🧪 Testing Synchronous STDIO Transport")
@@ -58,14 +62,14 @@ if __name__ == "__main__":
         }
 
         # Send request
-        request_line = json.dumps(init_request) + "\\n"
+        request_line = json.dumps(init_request) + "\n"
         print(f"→ Sending: {request_line.strip()}")
         proc.stdin.write(request_line)
         proc.stdin.flush()
 
-        # Read response with timeout
-        proc.stdout.settimeout(5)
-        try:
+        # Read response with timeout using select
+        ready, _, _ = select.select([proc.stdout], [], [], 5)
+        if ready:
             response_line = proc.stdout.readline()
             if response_line:
                 print(f"← Received: {response_line.strip()}")
@@ -82,7 +86,7 @@ if __name__ == "__main__":
                         "params": {"name": "hello", "arguments": {"name": "STDIO"}},
                     }
 
-                    request_line = json.dumps(tool_request) + "\\n"
+                    request_line = json.dumps(tool_request) + "\n"
                     print(f"→ Sending: {request_line.strip()}")
                     proc.stdin.write(request_line)
                     proc.stdin.flush()
@@ -107,9 +111,8 @@ if __name__ == "__main__":
             else:
                 print("❌ No response")
                 return False
-
-        except Exception as e:
-            print(f"❌ Error reading response: {e}")
+        else:
+            print("❌ Timeout waiting for response")
             return False
 
     except Exception as e:
@@ -120,9 +123,11 @@ if __name__ == "__main__":
 
     finally:
         proc.terminate()
-        proc.wait()
-
-    return False
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
 
 
 if __name__ == "__main__":

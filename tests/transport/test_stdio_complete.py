@@ -29,13 +29,13 @@ if __name__ == "__main__":
         init_request = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"pytest","version":"1.0"},"protocolVersion":"2025-06-18"}}'
 
         result = subprocess.run(
-            [sys.executable, server_path], input=init_request + "\\n", text=True, capture_output=True, timeout=5
+            [sys.executable, server_path], input=init_request + "\n", text=True, capture_output=True, timeout=5
         )
 
         assert result.returncode == 0
 
         # Parse JSON response
-        json_lines = [line for line in result.stdout.split("\\n") if line.startswith("{")]
+        json_lines = [line for line in result.stdout.split("\n") if line.startswith("{")]
         assert len(json_lines) >= 1
 
         response = json.loads(json_lines[0])
@@ -83,7 +83,7 @@ if __name__ == "__main__":
             '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"add","arguments":{"x":10,"y":5}}}',
         ]
 
-        input_text = "\\n".join(requests) + "\\n"
+        input_text = "\n".join(requests) + "\n"
 
         result = subprocess.run(
             [sys.executable, server_path], input=input_text, text=True, capture_output=True, timeout=10
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         assert result.returncode == 0
 
         # Parse responses
-        json_lines = [line for line in result.stdout.split("\\n") if line.startswith("{")]
+        json_lines = [line for line in result.stdout.split("\n") if line.startswith("{")]
         assert len(json_lines) >= 3  # At least init, tools/list, and one tool call
 
         # Check tools/list response
@@ -143,7 +143,7 @@ if __name__ == "__main__":
             '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"test://config"}}',
         ]
 
-        input_text = "\\n".join(requests) + "\\n"
+        input_text = "\n".join(requests) + "\n"
 
         result = subprocess.run(
             [sys.executable, server_path], input=input_text, text=True, capture_output=True, timeout=10
@@ -152,7 +152,7 @@ if __name__ == "__main__":
         assert result.returncode == 0
 
         # Parse responses
-        json_lines = [line for line in result.stdout.split("\\n") if line.startswith("{")]
+        json_lines = [line for line in result.stdout.split("\n") if line.startswith("{")]
         assert len(json_lines) >= 2
 
         # Check resources/list response

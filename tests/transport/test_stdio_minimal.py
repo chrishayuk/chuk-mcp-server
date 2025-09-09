@@ -5,6 +5,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 # First create a minimal server script
 server_script = """#!/usr/bin/env python3
 import sys
@@ -30,6 +32,7 @@ asyncio.run(transport.run())
 """
 
 
+@pytest.mark.timeout(10)
 def test_minimal_stdio():
     """Test minimal stdio functionality."""
     print("🧪 Testing Minimal STDIO Transport")
@@ -60,7 +63,7 @@ def test_minimal_stdio():
             "params": {"clientInfo": {"name": "test-client", "version": "1.0.0"}, "protocolVersion": "2025-06-18"},
         }
 
-        request_line = json.dumps(init_request) + "\\n"
+        request_line = json.dumps(init_request) + "\n"
         print(f"→ Sending: {request_line.strip()}")
 
         proc.stdin.write(request_line)
@@ -103,7 +106,11 @@ def test_minimal_stdio():
 
     finally:
         proc.terminate()
-        proc.wait()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
 
 
 if __name__ == "__main__":

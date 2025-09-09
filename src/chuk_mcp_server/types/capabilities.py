@@ -35,9 +35,9 @@ class _FilteredServerCapabilities(ServerCapabilities):  # type: ignore[misc]
             # Only include fields we explicitly set
             if key in self._filter_kwargs or (key == "experimental" and self._experimental is not None):
                 # Special handling for empty capability objects
-                # Keep logging even if empty (it's a valid empty capability)
-                if isinstance(value, dict) and not value and key != "logging":
-                    # Skip empty capability objects (except logging)
+                # Keep logging and experimental even if empty (they're valid empty capabilities)
+                if isinstance(value, dict) and not value and key not in ("logging", "experimental"):
+                    # Skip empty capability objects (except logging and experimental)
                     # This prevents MCP Inspector UI issues
                     continue
                 filtered[key] = value
