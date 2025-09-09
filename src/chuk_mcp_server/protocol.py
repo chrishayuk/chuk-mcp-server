@@ -189,6 +189,8 @@ class MCPProtocolHandler:
                 return await self._handle_prompts_list(msg_id)
             elif method == "prompts/get":
                 return await self._handle_prompts_get(params, msg_id)
+            elif method == "logging/setLevel":
+                return await self._handle_logging_set_level(params, msg_id)
             else:
                 return self._create_error_response(msg_id, -32601, f"Method not found: {method}"), None
 
@@ -356,6 +358,43 @@ class MCPProtocolHandler:
         except Exception as e:
             logger.error(f"Prompt generation error for {prompt_name}: {e}")
             return self._create_error_response(msg_id, -32603, f"Prompt generation error: {str(e)}"), None
+
+    async def _handle_logging_set_level(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle logging/setLevel request."""
+        level = params.get("level", "INFO")
+
+        # Map MCP logging levels to Python logging levels
+        level_mapping = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL,
+        }
+
+        level_lower = level.lower()
+        if level_lower not in level_mapping:
+            return self._create_error_response(
+                msg_id, -32602, f"Invalid logging level: {level}. Must be one of: debug, info, warning, error"
+            ), None
+
+        # Set the logging level for the chuk_mcp_server logger
+        numeric_level = level_mapping[level_lower]
+        logging.getLogger("chuk_mcp_server").setLevel(numeric_level)
+
+        # Also set the level for the root logger if needed
+        if level_lower == "debug":
+            logging.getLogger().setLevel(logging.DEBUG)
+
+        logger.info(f"Logging level set to {level.upper()}")
+
+        response = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {"level": level.upper(), "message": f"Logging level set to {level.upper()}"},
+        }
+
+        return response, None
 
     def _create_error_response(self, msg_id: Any, code: int, message: str) -> dict[str, Any]:
         """Create error response."""

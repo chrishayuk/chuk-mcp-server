@@ -56,6 +56,7 @@ uvx chuk-mcp-server --help
 
 ChukMCPServer supports two transport modes:
 
+
 #### 🖥️ **Stdio Mode** (for Claude Desktop & CLI tools)
 - Direct process communication via stdin/stdout
 - Required for Claude Desktop integration
@@ -236,10 +237,36 @@ mcp.run()
 ### Complete File System Tools
 
 ```python
+# HTTP Transport (default)
 from chuk_mcp_server import ChukMCPServer
 import os
 from pathlib import Path
 
+mcp = ChukMCPServer()  # HTTP transport by default
+
+@mcp.tool
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+mcp.run()  # Starts HTTP server
+```
+
+```python
+# STDIO Transport via constructor
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer(transport="stdio")  # STDIO transport
+
+@mcp.tool
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+mcp.run()  # Starts STDIO transport automatically
+```
+
+### Class-Based API Options
+
+# ✨ Smart server with auto-detected configuration
 mcp = ChukMCPServer(name="filesystem-tools")
 
 @mcp.tool

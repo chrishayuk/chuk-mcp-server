@@ -1,70 +1,238 @@
 #!/usr/bin/env python3
 """
-Example demonstrating stdio transport mode for MCP server.
+ChukMCPServer STDIO Transport Example
 
-Usage:
-    # Run in stdio mode explicitly
-    python examples/stdio_example.py --stdio
+This example demonstrates how to run an MCP server using the STDIO transport,
+which is the standard MCP protocol for process-based communication.
 
-    # Run with environment variable
-    MCP_TRANSPORT=stdio python examples/stdio_example.py
-
-    # Pipe mode (will auto-detect stdio)
-    echo '{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo":{"name":"test"}},"id":1}' | python examples/stdio_example.py
+Perfect for:
+- MCP clients (Claude Desktop, etc.)
+- Editor plugins and integrations
+- Subprocess-based communication
+- Zero network overhead scenarios
 """
 
-import argparse
-import logging
 import sys
 
-from chuk_mcp_server import ChukMCPServer
+from chuk_mcp_server import resource, run, tool
 
-# Configure logging to stderr to keep stdout clean for stdio
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", stream=sys.stderr
-)
+# ============================================================================
+# Tools - Functions available via MCP
+# ============================================================================
 
 
-def main():
-    parser = argparse.ArgumentParser(description="MCP Server with stdio support")
-    parser.add_argument("--stdio", action="store_true", help="Run in stdio mode (reads from stdin, writes to stdout)")
-    parser.add_argument("--http", action="store_true", help="Force HTTP mode even if stdio would be auto-detected")
-    parser.add_argument("--port", type=int, default=8000, help="Port for HTTP mode (default: 8000)")
-    args = parser.parse_args()
+@tool
+def greet(name: str = "World", style: str = "friendly") -> str:
+    """
+    Greet someone with different styles.
 
-    # Create server
-    mcp = ChukMCPServer(
-        name="stdio-example", version="1.0.0", description="Example server demonstrating stdio transport"
-    )
+    Args:
+        name: The name to greet
+        style: Greeting style (friendly, formal, casual)
+    """
+    styles = {
+        "friendly": f"Hey there, {name}! Great to meet you! 😊",
+        "formal": f"Good day, {name}. It is a pleasure to make your acquaintance.",
+        "casual": f"What's up, {name}?",
+    }
+    return styles.get(style, styles["friendly"])
 
-    # Register a simple tool
-    @mcp.tool
-    def echo(message: str) -> str:
-        """Echo back the message."""
-        return f"Echo: {message}"
 
-    @mcp.tool
-    def add(a: int, b: int) -> int:
-        """Add two numbers."""
-        return a + b
+@tool
+def calculate(expression: str) -> dict:
+    """
+    Safely evaluate mathematical expressions.
 
-    @mcp.resource("example://hello")
-    def hello_resource() -> str:
-        """A simple resource."""
-        return "Hello from stdio example!"
+    Args:
+        expression: Mathematical expression to evaluate (e.g., "2 + 3 * 4")
+    """
+    try:
+        # Simple whitelist of allowed operations for safety
+        allowed_chars = set("0123456789+-*/.() ")
+        if not all(c in allowed_chars for c in expression):
+            return {"error": "Expression contains invalid characters"}
 
-    # Determine mode
-    if args.stdio:
-        print("Starting in stdio mode...", file=sys.stderr)
-        mcp.run(stdio=True)
-    elif args.http:
-        print(f"Starting in HTTP mode on port {args.port}...", file=sys.stderr)
-        mcp.run(port=args.port, stdio=False)
-    else:
-        # Let smart config auto-detect
-        print("Auto-detecting transport mode...", file=sys.stderr)
-        mcp.run(port=args.port)
+        result = eval(expression)
+        return {"expression": expression, "result": result, "type": type(result).__name__}
+    except Exception as e:
+        return {"error": f"Calculation error: {str(e)}"}
 
+
+@tool
+def system_info() -> dict:
+    """Get basic system information."""
+    import os
+    import platform
+    import sys
+
+    return {
+        "platform": {
+            "system": platform.system(),
+            "version": platform.version(),
+            "architecture": platform.architecture()[0],
+            "processor": platform.processor(),
+        },
+        "python": {
+            "version": sys.version,
+            "executable": sys.executable,
+        },
+        "environment": {
+            "cwd": os.getcwd(),
+            "user": os.getenv("USER", "unknown"),
+            "path_entries": len(os.getenv("PATH", "").split(":")),
+        },
+        "transport": "stdio",
+    }
+
+
+@tool
+def create_data_structure(data_type: str, items: list = None) -> dict:
+    """
+    Create and manipulate different data structures.
+
+    Args:
+        data_type: Type of structure (list, set, dict, tuple)
+        items: Items to include in the structure
+    """
+    if items is None:
+        items = ["apple", "banana", "cherry", "date"]
+
+    try:
+        if data_type == "list":
+            result = list(items)
+        elif data_type == "set":
+            result = list(set(items))  # Convert back to list for JSON serialization
+        elif data_type == "dict":
+            result = {f"item_{i}": item for i, item in enumerate(items)}
+        elif data_type == "tuple":
+            result = list(items)  # Convert to list for JSON serialization
+        else:
+            return {"error": f"Unsupported data type: {data_type}"}
+
+        return {
+            "data_type": data_type,
+            "input_items": items,
+            "result": result,
+            "count": len(result) if isinstance(result, list) else len(result.keys()),
+        }
+    except Exception as e:
+        return {"error": f"Error creating {data_type}: {str(e)}"}
+
+
+# ============================================================================
+# Resources - Data/content available via MCP
+# ============================================================================
+
+
+@resource("config://server")
+def get_server_config() -> dict:
+    """Server configuration and capabilities."""
+    return {
+        "name": "ChukMCPServer STDIO Example",
+        "version": "1.0.0",
+        "transport": "stdio",
+        "capabilities": {"tools": True, "resources": True, "prompts": False},
+        "features": [
+            "Zero configuration",
+            "Type-safe tools",
+            "Automatic schema generation",
+            "Standard MCP protocol",
+            "Process-based communication",
+        ],
+    }
+
+
+@resource("docs://readme")
+def get_readme() -> str:
+    """Documentation for this STDIO MCP server."""
+    return """# ChukMCPServer STDIO Example
+
+This is an example MCP server running over STDIO transport.
+
+## Available Tools
+
+- `greet`: Greet someone with different styles
+- `calculate`: Safely evaluate mathematical expressions  
+- `system_info`: Get basic system information
+- `create_data_structure`: Create and manipulate data structures
+
+## Available Resources
+
+- `config://server`: Server configuration and capabilities
+- `docs://readme`: This documentation
+
+## Usage
+
+This server communicates via JSON-RPC over stdin/stdout.
+
+### Example Requests
+
+Initialize:
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"client","version":"1.0"},"protocolVersion":"2025-06-18"}}
+```
+
+List tools:
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+```
+
+Call a tool:
+```json
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"greet","arguments":{"name":"Alice","style":"formal"}}}
+```
+
+## Transport Benefits
+
+- Zero network overhead
+- Direct process communication
+- Standard MCP protocol
+- Perfect for subprocess integration
+"""
+
+
+@resource("examples://usage")
+def get_usage_examples() -> dict:
+    """Usage examples for each tool."""
+    return {
+        "greet_examples": [
+            {"name": "Alice", "style": "friendly"},
+            {"name": "Bob", "style": "formal"},
+            {"name": "Charlie", "style": "casual"},
+        ],
+        "calculate_examples": ["2 + 3", "10 * 5 - 3", "(4 + 6) / 2", "2 ** 8"],
+        "data_structure_examples": [
+            {"data_type": "list", "items": ["red", "green", "blue"]},
+            {"data_type": "set", "items": ["a", "b", "c", "a", "b"]},
+            {"data_type": "dict", "items": ["key1", "key2", "key3"]},
+            {"data_type": "tuple", "items": [1, 2, 3, 4, 5]},
+        ],
+    }
+
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
 
 if __name__ == "__main__":
-    main()
+    print("🔌 ChukMCPServer STDIO Transport Example", file=sys.stderr)
+    print("=" * 50, file=sys.stderr)
+    print("This server uses STDIO transport for MCP communication.", file=sys.stderr)
+    print("All logs go to stderr, JSON-RPC responses to stdout.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Transport Options:", file=sys.stderr)
+    print("  1. Global: run(transport='stdio')  # Current method", file=sys.stderr)
+    print("  2. Constructor: ChukMCPServer(transport='stdio')", file=sys.stderr)
+    print("  3. Method: mcp.run_stdio()", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Available tools:", file=sys.stderr)
+    print("  - greet: Greet someone with different styles", file=sys.stderr)
+    print("  - calculate: Safely evaluate math expressions", file=sys.stderr)
+    print("  - system_info: Get system information", file=sys.stderr)
+    print("  - create_data_structure: Create data structures", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Ready for JSON-RPC messages on stdin...", file=sys.stderr)
+    print("", file=sys.stderr)
+
+    # Method 1: Run the server with STDIO transport via global run()
+    run(transport="stdio", debug=False)
