@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 class StdioSyncTransport:
     """Synchronous MCP transport over stdin/stdout."""
 
-    def __init__(self, protocol_handler):
+    def __init__(self, protocol_handler: Any) -> None:
         self.protocol = protocol_handler
         self.session_id: str | None = None
 
-    def run(self):
+    def run(self) -> None:
         """Run the STDIO transport synchronously."""
         logger.info("🔌 Starting MCP STDIO transport (sync)")
 
@@ -52,7 +52,7 @@ class StdioSyncTransport:
         finally:
             logger.info("🔌 STDIO transport stopped")
 
-    async def _handle_message(self, line: str):
+    async def _handle_message(self, line: str) -> None:
         """Handle incoming JSON-RPC message."""
         try:
             message = json.loads(line)
@@ -75,7 +75,7 @@ class StdioSyncTransport:
             logger.error(f"Message handling error: {e}")
             self._send_error(-32603, f"Internal error: {str(e)}")
 
-    def _send_response(self, response: dict[str, Any]):
+    def _send_response(self, response: dict[str, Any]) -> None:
         """Send response to stdout."""
         try:
             response_line = json.dumps(response, separators=(",", ":"))
@@ -84,7 +84,7 @@ class StdioSyncTransport:
         except Exception as e:
             logger.error(f"Error sending response: {e}")
 
-    def _send_error(self, code: int, message: str, request_id: Any = None):
+    def _send_error(self, code: int, message: str, request_id: Any = None) -> None:
         """Send error response."""
         error_response = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
         self._send_response(error_response)

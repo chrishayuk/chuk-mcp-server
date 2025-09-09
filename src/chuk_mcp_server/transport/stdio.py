@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 class StdioTransport:
     """MCP transport over stdin/stdout."""
 
-    def __init__(self, protocol_handler):
+    def __init__(self, protocol_handler: Any) -> None:
         self.protocol = protocol_handler
         self.session_id: str | None = None
         self._running = False
 
-    async def run(self):
+    async def run(self) -> None:
         """Run the STDIO transport."""
         self._running = True
         logger.info("🔌 Starting MCP STDIO transport")
@@ -44,7 +44,7 @@ class StdioTransport:
         while self._running:
             try:
                 # Read from stdin in a non-blocking way using proper readline
-                def read_line():
+                def read_line() -> str:
                     return sys.stdin.readline()
 
                 line = await loop.run_in_executor(None, read_line)
@@ -57,7 +57,7 @@ class StdioTransport:
                 logger.error(f"Error reading stdin: {e}")
                 break
 
-    async def _handle_message(self, line: str):
+    async def _handle_message(self, line: str) -> None:
         """Handle incoming JSON-RPC message."""
         try:
             message = json.loads(line)
@@ -80,7 +80,7 @@ class StdioTransport:
             logger.error(f"Message handling error: {e}")
             await self._send_error(-32603, f"Internal error: {str(e)}")
 
-    async def _send_response(self, response: dict[str, Any]):
+    async def _send_response(self, response: dict[str, Any]) -> None:
         """Send response to stdout."""
         try:
             response_line = json.dumps(response, separators=(",", ":"))
@@ -90,11 +90,11 @@ class StdioTransport:
         except Exception as e:
             logger.error(f"Error sending response: {e}")
 
-    async def _send_error(self, code: int, message: str, request_id: Any = None):
+    async def _send_error(self, code: int, message: str, request_id: Any = None) -> None:
         """Send error response."""
         error_response = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
         await self._send_response(error_response)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the transport."""
         self._running = False
