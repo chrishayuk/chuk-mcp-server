@@ -630,9 +630,9 @@ class ChukMCPServer:
             if self._server is None:
                 self._server = create_server(self.protocol)
         
-        # Show startup information
-        if getattr(self, '_should_print_config', True):
-            self._print_startup_info(final_host, final_port, final_debug)
+            # Show startup information
+            if getattr(self, '_should_print_config', True):
+                self._print_startup_info(final_host, final_port, final_debug)
 
             # Run the server
             try:
