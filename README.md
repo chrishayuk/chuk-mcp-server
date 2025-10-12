@@ -83,7 +83,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "my-tools": {
       "command": "uv",
-      "args": ["run", "python", "/absolute/path/to/my_server.py"]
+      "args": ["--directory", "/absolute/path/to/project", "run", "my_server.py"]
     }
   }
 }
@@ -279,6 +279,96 @@ uv run python server.py --http
 
 # In another terminal, test it
 curl http://localhost:8000/health
+```
+
+---
+
+## ⚙️ Configuration & Logging
+
+### Controlling Log Levels
+
+By default, ChukMCPServer uses **WARNING** level logging to minimize noise during production and benchmarking. You can control logging in three ways:
+
+#### 1. Command-Line Parameter (Recommended)
+
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def hello(name: str = "World") -> str:
+    """Say hello."""
+    return f"Hello, {name}!"
+
+if __name__ == "__main__":
+    # Suppress INFO/DEBUG logs (default)
+    run(log_level="warning")
+
+    # Or show all logs
+    run(log_level="debug")
+```
+
+#### 2. Environment Variable
+
+```bash
+# Warning level (default - quiet, only warnings/errors)
+MCP_LOG_LEVEL=warning python server.py --http --port 8000
+
+# Info level (show INFO, WARNING, ERROR)
+MCP_LOG_LEVEL=info python server.py --http --port 8000
+
+# Debug level (show everything)
+MCP_LOG_LEVEL=debug python server.py --http --port 8000
+
+# Error level (very quiet - errors only)
+MCP_LOG_LEVEL=error python server.py --http --port 8000
+```
+
+#### 3. Using the CLI
+
+```bash
+# Warning level (default - suppresses INFO/DEBUG)
+uvx chuk-mcp-server http --port 8000 --log-level warning
+
+# Debug level (show all logs)
+uvx chuk-mcp-server http --port 8000 --log-level debug
+
+# Error level (very quiet)
+uvx chuk-mcp-server http --port 8000 --log-level error
+```
+
+### Available Log Levels
+
+- **`debug`**: Show all logs (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- **`info`**: Show INFO and above (INFO, WARNING, ERROR, CRITICAL)
+- **`warning`** ⭐ (default): Show warnings and errors only (WARNING, ERROR, CRITICAL)
+- **`error`**: Show errors only (ERROR, CRITICAL)
+- **`critical`**: Show only critical errors
+
+### What Gets Suppressed
+
+With the default `warning` level, you won't see:
+
+```
+# These are hidden ✅
+INFO:     ::1:49723 - "POST /mcp HTTP/1.1" 200 OK
+DEBUG:chuk_mcp_server.endpoints.mcp:Processing ping request
+DEBUG:chuk_mcp_server.protocol:Handling ping (ID: 2)
+
+# These still show ⚠️
+WARNING:chuk_mcp_server:Connection limit reached
+ERROR:chuk_mcp_server:Failed to process request
+```
+
+### For Benchmarking
+
+When running performance tests, use `warning` or `error` level to eliminate logging overhead:
+
+```bash
+# Minimal logging for maximum performance
+python server.py --http --port 8000 --log-level warning
+
+# Or via environment
+MCP_LOG_LEVEL=warning python server.py --http --port 8000
 ```
 
 ---
@@ -622,8 +712,8 @@ Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_conf
 {
   "mcpServers": {
     "my-server": {
-      "command": "python",
-      "args": ["/full/path/to/my-server/server.py"]
+      "command": "uv",
+      "args": ["--directory", "/full/path/to/my-server", "run", "server.py"]
     }
   }
 }
@@ -837,7 +927,7 @@ COPY pyproject.toml ./
 COPY server.py ./
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.1
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.3
 
 # Expose HTTP port
 EXPOSE 8000

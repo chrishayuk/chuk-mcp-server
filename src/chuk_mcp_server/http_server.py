@@ -117,15 +117,43 @@ class HTTPServer:
         logger.error(f"Exception in {request.method} {request.url.path}: {exc}")
         return internal_error_response()
 
-    def run(self, host: str = "localhost", port: int = 8000, debug: bool = False):
-        """Run with maximum performance configuration to break bottlenecks."""
+    def run(self, host: str = "localhost", port: int = 8000, debug: bool = False, log_level: str = "warning"):
+        """Run with maximum performance configuration to break bottlenecks.
 
-        logger.info("🚀 ChukMCPServer - BOTTLENECK FIXES ACTIVE")
-        logger.info("=" * 60)
-        logger.info(f"Host: {host}:{port}")
-        logger.info("")
+        Args:
+            host: Host to bind to
+            port: Port to bind to
+            debug: Enable debug mode (more verbose logging)
+            log_level: Logging level for application logs (debug, info, warning, error, critical)
+        """
+
+        # Logging is already configured in core.py before this is called
+        # Just determine the uvicorn log level based on the passed log_level
+        import os
+
+        # Handle log_level - ensure it's a string
+        default_level = log_level if isinstance(log_level, str) else "warning"
+        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level if not debug else "debug").upper()
+
+        # Show startup info (always, using print to bypass logging)
+        import sys
+
+        print("🚀 ChukMCPServer - BOTTLENECK FIXES ACTIVE")
+        print("=" * 60)
+        print(f"Host: {host}:{port}")
+        print(f"App Log Level: {app_log_level}")
+        print("")
+        sys.stdout.flush()  # Ensure output appears before uvicorn starts
 
         # PERFORMANCE-FOCUSED uvicorn configuration
+        # Set uvicorn log level based on app log level
+        if app_log_level == "DEBUG":
+            uvicorn_log_level = "debug"
+        elif app_log_level == "INFO":
+            uvicorn_log_level = "info"
+        else:
+            uvicorn_log_level = "warning"
+
         uvicorn_config = {
             "app": self.app,
             "host": host,
@@ -135,10 +163,10 @@ class HTTPServer:
             "loop": "uvloop",  # Force uvloop
             "http": "httptools",  # Force httptools
             # Disable overhead features
-            "access_log": False,
+            "access_log": debug,  # Only show access logs in debug mode
             "server_header": False,
             "date_header": False,
-            "log_level": "error",  # Minimal logging
+            "log_level": uvicorn_log_level,  # Configurable logging
             # Connection optimizations
             "backlog": 4096,  # Increase from 2048
             "limit_concurrency": 2000,  # Increase from 1000
@@ -153,44 +181,39 @@ class HTTPServer:
         try:
             import uvloop  # noqa: F401
 
-            logger.info("✅ uvloop available and forced")
+            print("✅ uvloop available and forced")
         except ImportError:
-            logger.error("❌ uvloop not available - performance will be limited")
+            print("❌ uvloop not available - performance will be limited")
             uvicorn_config.pop("loop", None)
 
         try:
             import httptools  # noqa: F401
 
-            logger.info("✅ httptools available and forced")
+            print("✅ httptools available and forced")
         except ImportError:
-            logger.error("❌ httptools not available - performance will be limited")
+            print("❌ httptools not available - performance will be limited")
             uvicorn_config.pop("http", None)
 
-        # Debug mode adjustments
-        if debug:
-            uvicorn_config.update(
-                {
-                    "log_level": "debug",
-                    "access_log": True,
-                }
-            )
+        # No need for debug adjustments here - already handled above
 
-        logger.info("⚡ BOTTLENECK FIXES:")
-        logger.info("  ✅ Minimal middleware stack (removed GZip)")
-        logger.info("  ✅ Increased connection backlog (4096)")
-        logger.info("  ✅ Increased concurrency limit (2000)")
-        logger.info("  ✅ Removed request limit (no restarts)")
-        logger.info("  ✅ Forced uvloop + httptools")
-        logger.info("  ✅ Increased buffer sizes")
-        logger.info("  ✅ Minimal logging overhead")
-        logger.info("")
+        # Show performance info (always, using print to bypass logging)
+        print("⚡ BOTTLENECK FIXES:")
+        print("  ✅ Minimal middleware stack (removed GZip)")
+        print("  ✅ Increased connection backlog (4096)")
+        print("  ✅ Increased concurrency limit (2000)")
+        print("  ✅ Removed request limit (no restarts)")
+        print("  ✅ Forced uvloop + httptools")
+        print("  ✅ Increased buffer sizes")
+        print("  ✅ Minimal logging overhead")
+        print("")
 
-        logger.info("🎯 EXPECTED IMPROVEMENTS:")
-        logger.info("  🚀 Ping: 6,000+ RPS (from 3,570)")
-        logger.info("  🚀 Version: 6,000+ RPS (from 3,530)")
-        logger.info("  🚀 Health: 6,000+ RPS (from 3,591)")
-        logger.info("  🚀 Overall: 5,000+ RPS average")
-        logger.info("=" * 60)
+        print("🎯 EXPECTED IMPROVEMENTS:")
+        print("  🚀 Ping: 6,000+ RPS (from 3,570)")
+        print("  🚀 Version: 6,000+ RPS (from 3,530)")
+        print("  🚀 Health: 6,000+ RPS (from 3,591)")
+        print("  🚀 Overall: 5,000+ RPS average")
+        print("=" * 60)
+        sys.stdout.flush()  # Ensure output appears before uvicorn starts
 
         try:
             uvicorn.run(**uvicorn_config)

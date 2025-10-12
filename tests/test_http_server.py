@@ -329,7 +329,7 @@ class TestHTTPServer:
         mock_uvicorn.run = Mock()
 
         # Mock uvloop as available
-        with patch("chuk_mcp_server.http_server.logger") as mock_logger:
+        with patch("builtins.print") as mock_print:
             with patch("builtins.__import__") as mock_import:
                 # Make uvloop import succeed
                 mock_import.return_value = Mock()
@@ -339,8 +339,8 @@ class TestHTTPServer:
                 config = mock_uvicorn.run.call_args[1]
                 assert config["loop"] == "uvloop"
 
-                # Should have logged uvloop availability
-                mock_logger.info.assert_any_call("✅ uvloop available and forced")
+                # Should have printed uvloop availability
+                mock_print.assert_any_call("✅ uvloop available and forced")
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -372,15 +372,15 @@ class TestHTTPServer:
                 raise ImportError("uvloop not available")
             return original_import(name, *args, **kwargs)
 
-        with patch("chuk_mcp_server.http_server.logger") as mock_logger:
+        with patch("builtins.print") as mock_print:
             with patch("builtins.__import__", side_effect=mock_import):
                 server.run()
 
                 config = mock_uvicorn.run.call_args[1]
                 assert "loop" not in config
 
-                # Should have logged uvloop unavailability
-                mock_logger.error.assert_any_call("❌ uvloop not available - performance will be limited")
+                # Should have printed uvloop unavailability
+                mock_print.assert_any_call("❌ uvloop not available - performance will be limited")
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -404,14 +404,14 @@ class TestHTTPServer:
 
         mock_uvicorn.run = Mock()
 
-        with patch("chuk_mcp_server.http_server.logger") as mock_logger:
+        with patch("builtins.print") as mock_print:
             server.run()
 
             config = mock_uvicorn.run.call_args[1]
             assert config["http"] == "httptools"
 
-            # Should have logged httptools availability
-            mock_logger.info.assert_any_call("✅ httptools available and forced")
+            # Should have printed httptools availability
+            mock_print.assert_any_call("✅ httptools available and forced")
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -443,15 +443,15 @@ class TestHTTPServer:
                 raise ImportError("httptools not available")
             return original_import(name, *args, **kwargs)
 
-        with patch("chuk_mcp_server.http_server.logger") as mock_logger:
+        with patch("builtins.print") as mock_print:
             with patch("builtins.__import__", side_effect=mock_import):
                 server.run()
 
                 config = mock_uvicorn.run.call_args[1]
                 assert "http" not in config
 
-                # Should have logged httptools unavailability
-                mock_logger.error.assert_any_call("❌ httptools not available - performance will be limited")
+                # Should have printed httptools unavailability
+                mock_print.assert_any_call("❌ httptools not available - performance will be limited")
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -541,7 +541,7 @@ class TestHTTPServer:
             assert config["access_log"] is False
             assert config["server_header"] is False
             assert config["date_header"] is False
-            assert config["log_level"] == "error"
+            assert config["log_level"] == "warning"  # Default log level is warning
             assert config["backlog"] == 4096
             assert config["limit_concurrency"] == 2000
             assert config["timeout_keep_alive"] == 60
@@ -671,7 +671,7 @@ class TestEdgeCasesAndIntegration:
             server.run(debug=False)
 
             config = mock_uvicorn.run.call_args[1]
-            assert config["log_level"] == "error"
+            assert config["log_level"] == "warning"  # Default log level is warning
             assert config["access_log"] is False
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
@@ -710,7 +710,7 @@ class TestEdgeCasesAndIntegration:
             "access_log": False,
             "server_header": False,
             "date_header": False,
-            "log_level": "error",
+            "log_level": "warning",  # Default log level is warning
             "backlog": 4096,
             "limit_concurrency": 2000,
             "timeout_keep_alive": 60,

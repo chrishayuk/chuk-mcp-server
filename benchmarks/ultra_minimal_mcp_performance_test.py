@@ -32,6 +32,7 @@ class MCPResult:
     success_rate: float
     total_requests: int
     mcp_errors: int
+    available: bool = True  # Whether resource/tool exists
 
 
 class UltraMinimalMCPTest:
@@ -223,31 +224,37 @@ class UltraMinimalMCPTest:
             f"   {calc_result.rps:>8,.0f} RPS | {calc_result.avg_ms:>6.2f}ms avg | {calc_result.success_rate:>5.1f}% success"
         )
 
-        # Test 6: Settings Resource Read
-        print("⚙️  Testing Settings Resource Read...")
-        settings_result = await self._test_mcp_operation(
-            self.settings_resource_read,
-            "Settings Resource Read",
-            concurrency=min(100, self.max_concurrency),
-            duration=self.duration,
-        )
-        results.append(settings_result)
-        print(
-            f"   {settings_result.rps:>8,.0f} RPS | {settings_result.avg_ms:>6.2f}ms avg | {settings_result.success_rate:>5.1f}% success"
-        )
+        # Test 6: Settings Resource Read (check if available first)
+        print("⚙️  Testing Settings Resource Read...", end=" ")
+        if await self._check_resource_exists("config://settings"):
+            settings_result = await self._test_mcp_operation(
+                self.settings_resource_read,
+                "Settings Resource Read",
+                concurrency=min(100, self.max_concurrency),
+                duration=self.duration,
+            )
+            results.append(settings_result)
+            print(
+                f"\n   {settings_result.rps:>8,.0f} RPS | {settings_result.avg_ms:>6.2f}ms avg | {settings_result.success_rate:>5.1f}% success"
+            )
+        else:
+            print("N/A (resource not found)")
 
-        # Test 7: README Resource Read
-        print("📖 Testing README Resource Read...")
-        readme_result = await self._test_mcp_operation(
-            self.readme_resource_read,
-            "README Resource Read",
-            concurrency=min(100, self.max_concurrency),
-            duration=self.duration,
-        )
-        results.append(readme_result)
-        print(
-            f"   {readme_result.rps:>8,.0f} RPS | {readme_result.avg_ms:>6.2f}ms avg | {readme_result.success_rate:>5.1f}% success"
-        )
+        # Test 7: README Resource Read (check if available first)
+        print("📖 Testing README Resource Read...", end=" ")
+        if await self._check_resource_exists("docs://readme"):
+            readme_result = await self._test_mcp_operation(
+                self.readme_resource_read,
+                "README Resource Read",
+                concurrency=min(100, self.max_concurrency),
+                duration=self.duration,
+            )
+            results.append(readme_result)
+            print(
+                f"\n   {readme_result.rps:>8,.0f} RPS | {readme_result.avg_ms:>6.2f}ms avg | {readme_result.success_rate:>5.1f}% success"
+            )
+        else:
+            print("N/A (resource not found)")
 
         # Test 8: Concurrency scaling for MCP Ping
         print("\n⚡ Testing MCP Ping Concurrency Scaling...")
@@ -349,6 +356,31 @@ class UltraMinimalMCPTest:
             await writer.wait_closed()
         except Exception:
             pass  # Notification failures are non-critical
+
+    async def _check_resource_exists(self, uri: str) -> bool:
+        """Check if a resource exists before benchmarking it"""
+        try:
+            check_request = self._build_http_request_with_session(
+                {"jsonrpc": "2.0", "id": 999, "method": "resources/read", "params": {"uri": uri}}
+            )
+
+            reader, writer = await asyncio.open_connection(self.host, self.port)
+            writer.write(check_request)
+            await writer.drain()
+
+            response = await reader.read(8192)
+            writer.close()
+            await writer.wait_closed()
+
+            # Check if response contains an error (resource not found)
+            if b'"error"' in response:
+                return False
+            elif b'"result"' in response:
+                return True
+
+            return False
+        except Exception:
+            return False
 
     def _rebuild_requests_with_session(self):
         """Rebuild requests with session ID"""

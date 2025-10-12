@@ -147,12 +147,13 @@ class ChukMCPServer:
 
         logger.debug(f"Initialized ChukMCP Server: {name} v{version}")
 
-    def _print_smart_config(self):
+    def _print_smart_config(self, actual_log_level: str | None = None):
         """Print smart configuration summary using modular config."""
         import sys
 
         # Always use stderr for debug output to keep stdout clean
         output = sys.stderr
+        log_level_display = actual_log_level or self.smart_log_level
         print("🧠 ChukMCPServer - Modular Zero Configuration Mode", file=output)
         print("=" * 60, file=output)
         print(f"📊 Environment: {self.smart_environment}", file=output)
@@ -161,7 +162,7 @@ class ChukMCPServer:
         print(f"🔗 Max Connections: {self.smart_max_connections}", file=output)
         print(f"🐳 Container: {self.smart_containerized}", file=output)
         print(f"⚡ Performance Mode: {self.smart_performance_mode}", file=output)
-        print(f"📝 Log Level: {self.smart_log_level}", file=output)
+        print(f"📝 Log Level: {log_level_display}", file=output)
         print("=" * 60, file=output)
 
     def _register_global_functions(self):
@@ -561,7 +562,12 @@ class ChukMCPServer:
     # ============================================================================
 
     def run(
-        self, host: str | None = None, port: int | None = None, debug: bool | None = None, stdio: bool | None = None
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        debug: bool | None = None,
+        stdio: bool | None = None,
+        log_level: str = "warning",
     ):
         """
         Run the MCP server with modular smart defaults.
@@ -571,7 +577,19 @@ class ChukMCPServer:
             port: Port to bind to (uses smart default if None)
             debug: Enable debug logging (uses smart default if None)
             stdio: Run in stdio mode instead of HTTP server (auto-detects if None)
+            log_level: Logging level for application (debug, info, warning, error, critical)
         """
+        # Set logging level FIRST, before any other operations
+        import os
+
+        # Handle log_level - ensure it's a string
+        default_level = log_level if isinstance(log_level, str) else "warning"
+        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level if not debug else "debug").upper()
+
+        # Configure all loggers early
+        logging.basicConfig(level=getattr(logging, app_log_level, logging.WARNING))
+        logging.getLogger("chuk_mcp_server").setLevel(getattr(logging, app_log_level, logging.WARNING))
+
         # Check if STDIO transport was requested
         if self.smart_transport == "stdio":
             return self.run_stdio(debug)
@@ -613,29 +631,22 @@ class ChukMCPServer:
 
             run_stdio_server(self.protocol)
         else:
-            # HTTP mode - normal logging
-            if final_debug:
-                logging.basicConfig(level=logging.DEBUG)
-            else:
-                # Use the smart log level from modular config
-                log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
-                logging.basicConfig(level=log_level)
+            # HTTP mode - logging already set at start of run()
 
-            # Show the banner in debug mode for HTTP
+            # Show the banner (always, regardless of log level)
             if self.smart_debug:
-                self._print_smart_config()
+                self._print_smart_config(actual_log_level=app_log_level)
+            # Show startup information
+            if getattr(self, "_should_print_config", True):
+                self._print_startup_info(final_host, final_port, final_debug, actual_log_level=app_log_level)
 
             # Create HTTP server
             if self._server is None:
                 self._server = create_server(self.protocol)
 
-            # Show startup information
-            if getattr(self, "_should_print_config", True):
-                self._print_startup_info(final_host, final_port, final_debug)
-
             # Run the server
             try:
-                self._server.run(host=final_host, port=final_port, debug=final_debug)
+                self._server.run(host=final_host, port=final_port, debug=final_debug, log_level=log_level)
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
             except Exception as e:
@@ -675,7 +686,7 @@ class ChukMCPServer:
             logger.error(f"❌ STDIO transport error: {e}")
             raise
 
-    def _print_startup_info(self, host: str, port: int, debug: bool):
+    def _print_startup_info(self, host: str, port: int, debug: bool, actual_log_level: str | None = None):
         """Print comprehensive startup information using modular config."""
         import sys
 
@@ -691,8 +702,10 @@ class ChukMCPServer:
         print("Framework: ChukMCPServer with Modular Zero Configuration", file=output)
         print(file=output)
 
-        # Smart configuration summary from modular system
-        detection_summary = info["smart_detection_summary"]
+        # Smart configuration summary from modular system (with actual log level override)
+        detection_summary = info["smart_detection_summary"].copy()
+        if actual_log_level:
+            detection_summary["logging"] = f"{actual_log_level} level, debug={debug}"
         print("🧠 Smart Detection Summary:", file=output)
         for key, value in detection_summary.items():
             print(f"   {key.replace('_', ' ').title()}: {value}", file=output)

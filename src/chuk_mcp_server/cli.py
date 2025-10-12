@@ -128,18 +128,42 @@ def server_info() -> dict:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    # Check which transport mode to use
-    if "--stdio" in sys.argv or "--transport=stdio" in sys.argv:
-        # Stdio mode explicitly requested
-        run(transport="stdio")
-    elif "--port" in sys.argv or "--host" in sys.argv or "--http" in sys.argv or "--transport=http" in sys.argv:
-        # HTTP mode explicitly requested
-        run()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="{project_name} - MCP Server")
+    parser.add_argument("--stdio", action="store_true", help="Force STDIO transport mode")
+    parser.add_argument("--http", action="store_true", help="Force HTTP transport mode")
+    parser.add_argument("--port", type=int, default=None, help="Port for HTTP mode")
+    parser.add_argument("--host", default=None, help="Host for HTTP mode")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--log-level",
+        default="warning",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging level (default: warning)",
+    )
+    parser.add_argument("--transport", choices=["stdio", "http"], help="Transport mode")
+
+    args = parser.parse_args()
+
+    # Determine transport mode
+    if args.stdio or args.transport == "stdio":
+        # Stdio mode
+        run(transport="stdio", debug=args.debug, log_level=args.log_level)
+    elif args.http or args.port or args.host or args.transport == "http":
+        # HTTP mode
+        run(
+            transport="http",
+            host=args.host,
+            port=args.port,
+            debug=args.debug,
+            log_level=args.log_level,
+        )
     else:
         # Default to stdio mode (best for Claude Desktop)
-        run(transport="stdio")
+        run(transport="stdio", log_level=args.log_level)
 '''
 
     server_file = project_dir / "server.py"
@@ -153,7 +177,7 @@ version = "0.1.0"
 description = "MCP server built with ChukMCPServer"
 requires-python = ">=3.11"
 dependencies = [
-    "chuk-mcp-server>=0.4.1",
+    "chuk-mcp-server>=0.4.3",
 ]
 
 [project.optional-dependencies]
@@ -223,8 +247,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 {{
   "mcpServers": {{
     "{project_name}": {{
-      "command": "python",
-      "args": ["{project_dir.absolute()}/server.py"]
+      "command": "uv",
+      "args": ["--directory", "{project_dir.absolute()}", "run", "server.py"]
     }}
   }}
 }}
@@ -434,7 +458,7 @@ COPY pyproject.toml ./
 COPY server.py ./
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.1
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.3
 
 # Expose HTTP port
 EXPOSE 8000
@@ -495,8 +519,15 @@ Examples:
   # Run in HTTP mode on custom port
   uvx chuk-mcp-server http --port 9000
 
+  # Run with specific log level (suppress INFO/DEBUG logs)
+  uvx chuk-mcp-server http --log-level warning
+
   # Run with debug logging
-  uvx chuk-mcp-server stdio --debug
+  uvx chuk-mcp-server http --debug
+  uvx chuk-mcp-server http --log-level debug
+
+  # Run with minimal logging (errors only)
+  uvx chuk-mcp-server http --log-level error
 
   # Run with custom server name
   MCP_SERVER_NAME=my-server uvx chuk-mcp-server stdio
@@ -505,6 +536,7 @@ Environment Variables:
   MCP_SERVER_NAME     Server name (default: chuk-mcp-server)
   MCP_SERVER_VERSION  Server version (default: 0.2.3)
   MCP_TRANSPORT       Force transport mode (stdio|http)
+  MCP_LOG_LEVEL       Logging level (debug|info|warning|error|critical)
   MCP_STDIO          Set to 1 to force stdio mode
   USE_STDIO          Alternative to MCP_STDIO
         """,
@@ -522,12 +554,24 @@ Environment Variables:
     http_parser.add_argument("--host", default=None, help="Host to bind to (default: auto-detect)")
     http_parser.add_argument("--port", type=int, default=None, help="Port to bind to (default: auto-detect)")
     http_parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    http_parser.add_argument(
+        "--log-level",
+        default="warning",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging level (default: warning)",
+    )
 
     # Auto mode (detect from environment)
     auto_parser = subparsers.add_parser("auto", help="Auto-detect transport mode from environment")
     auto_parser.add_argument("--host", default=None, help="Host for HTTP mode (default: auto-detect)")
     auto_parser.add_argument("--port", type=int, default=None, help="Port for HTTP mode (default: auto-detect)")
     auto_parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    auto_parser.add_argument(
+        "--log-level",
+        default="warning",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging level (default: warning)",
+    )
 
     # Init mode (scaffold new project)
     init_parser = subparsers.add_parser("init", help="Create a new MCP server project")
@@ -558,12 +602,23 @@ Environment Variables:
     elif args.mode == "http":
         # Force HTTP mode
         logging.info("Starting ChukMCPServer in HTTP mode...")
-        server.run(host=args.host, port=args.port, debug=args.debug, stdio=False)
+        server.run(
+            host=args.host,
+            port=args.port,
+            debug=args.debug,
+            stdio=False,
+            log_level=getattr(args, "log_level", "warning"),
+        )
 
     else:  # auto mode
         # Let smart config detect
         logging.info("Starting ChukMCPServer in AUTO mode...")
-        server.run(host=getattr(args, "host", None), port=getattr(args, "port", None), debug=args.debug)
+        server.run(
+            host=getattr(args, "host", None),
+            port=getattr(args, "port", None),
+            debug=args.debug,
+            log_level=getattr(args, "log_level", "warning"),
+        )
 
 
 if __name__ == "__main__":
