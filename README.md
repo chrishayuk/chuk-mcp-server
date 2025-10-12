@@ -6,771 +6,904 @@
 [![Tests](https://img.shields.io/badge/tests-859%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
 [![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
-**The fastest, most intelligent MCP (Model Context Protocol) server framework.** Build LLM-integrated tools with zero configuration, blazing performance, and seamless Claude Desktop integration.
+**Build MCP servers for Claude Desktop in 30 seconds.** The fastest, simplest way to create custom tools for LLMs using Python decorators.
 
-## 🎯 Why ChukMCPServer?
+---
 
-- **🚀 Instant Setup**: Works with Claude Desktop in under 30 seconds
-- **⚡ Blazing Fast**: 39,000+ requests/second with sub-5ms latency
-- **🧠 Zero Config**: Auto-detects everything - just write your tools
-- **🔌 Dual Transport**: Native stdio for Claude Desktop + HTTP/SSE for web
-- **📦 No Dependencies**: Pure Python with optional performance boosters
-- **🎨 Clean API**: Decorator-based like FastAPI, but simpler
+## 🚀 Get Started in 30 Seconds
 
-## 📸 Quick Demo
+### Option 1: Use the Scaffolder (Easiest!)
 
-```python
-# server.py - A complete MCP server in 10 lines!
-from chuk_mcp_server import tool, resource, run
-
-@tool
-def calculate(expression: str) -> str:
-    """Evaluate a mathematical expression."""
-    return f"{expression} = {eval(expression)}"
-
-@resource("data://example")
-def get_data() -> dict:
-    """Get example data."""
-    return {"message": "Hello from ChukMCP!", "status": "ready"}
-
-if __name__ == "__main__":
-    run()  # That's it! 🎉
-```
-
-## 🚀 Quickstart
-
-### 1. Install
+Create a complete MCP server project with one command:
 
 ```bash
-# Using pip
-pip install chuk-mcp-server
+# Create a new project
+uvx chuk-mcp-server init my-awesome-server
 
-# Using uv (recommended)
-uv add chuk-mcp-server
+# Set it up
+cd my-awesome-server
+uv sync
 
-# Or run without installing (uvx)
+# Run it
+uv run python server.py
+```
+
+That's it! You now have a working MCP server with:
+- 3 example tools (hello, add_numbers, calculate)
+- 1 example resource (server info)
+- Full project structure with pyproject.toml
+- README with Claude Desktop config
+- Production-ready Dockerfile + docker-compose.yml
+- Development tools (pytest, mypy, ruff)
+
+**Connect to Claude Desktop:** Open the generated `README.md` for the exact config to add.
+
+**Or deploy with Docker:**
+```bash
+cd my-awesome-server
+docker-compose up
+```
+
+---
+
+### Option 2: Manual Setup (More Control)
+
+### Step 1: Install
+```bash
+# Using uv (recommended - fastest)
+uv pip install chuk-mcp-server
+
+# Or use uvx (no installation needed)
 uvx chuk-mcp-server --help
 ```
 
-### 2. Choose Your Transport Mode
+### Step 2: Create a server
+Create `my_server.py`:
+```python
+from chuk_mcp_server import tool, run
 
-ChukMCPServer supports two transport modes:
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
 
+@tool
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} is sunny! ☀️"
 
-#### 🖥️ **Stdio Mode** (for Claude Desktop & CLI tools)
-- Direct process communication via stdin/stdout
-- Required for Claude Desktop integration
-- Best for local tools and scripts
+if __name__ == "__main__":
+    run()
+```
 
-#### 🌐 **HTTP Mode** (for web apps & remote access)
-- RESTful HTTP with SSE streaming
-- WebSocket-like real-time updates
-- Perfect for web integrations and APIs
-
-### 3. Configure Claude Desktop (Stdio Mode)
-
-Add to your Claude Desktop config:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-#### Option A: Run your custom server
+### Step 3: Connect to Claude Desktop
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 ```json
 {
   "mcpServers": {
     "my-tools": {
-      "command": "python",
-      "args": ["/path/to/server.py", "--stdio"],
-      "env": {}
+      "command": "uv",
+      "args": ["run", "python", "/absolute/path/to/my_server.py"]
     }
   }
 }
 ```
 
-#### Option B: Use uvx (no installation needed)
-```json
-{
-  "mcpServers": {
-    "chuk-tools": {
-      "command": "uvx",
-      "args": ["chuk-mcp-server", "stdio"]
-    }
-  }
-}
+**That's it!** Restart Claude Desktop and your tools will appear. Claude can now add numbers and check the weather.
+
+---
+
+## 🎯 Why ChukMCPServer?
+
+- **Dead Simple**: Just add `@tool` decorator and you're done
+- **Claude Desktop Ready**: Works out of the box, no configuration needed
+- **Type Safe**: Automatic schema generation from Python type hints
+- **Fast**: 39,000+ requests/second (but you won't notice because it "just works")
+- **Flexible**: Supports both Claude Desktop (stdio) and web apps (HTTP)
+
+---
+
+## 📚 Building Real Tools
+
+### File System Tools
+```python
+from chuk_mcp_server import tool, run
+from pathlib import Path
+
+@tool
+def read_file(filepath: str) -> str:
+    """Read the contents of a file."""
+    return Path(filepath).read_text()
+
+@tool
+def list_files(directory: str = ".") -> list[str]:
+    """List all files in a directory."""
+    return [f.name for f in Path(directory).iterdir() if f.is_file()]
+
+@tool
+def write_file(filepath: str, content: str) -> str:
+    """Write content to a file."""
+    Path(filepath).write_text(content)
+    return f"Wrote {len(content)} characters to {filepath}"
+
+if __name__ == "__main__":
+    run()
 ```
 
-#### Option C: Use installed package
+### API Integration Tools
+```python
+from chuk_mcp_server import tool, run
+import httpx
+
+@tool
+async def fetch_url(url: str) -> dict:
+    """Fetch data from a URL and return status and preview."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return {
+            "status": response.status_code,
+            "preview": response.text[:200],
+            "size": len(response.content)
+        }
+
+@tool
+def search_github(query: str, limit: int = 5) -> list[dict]:
+    """Search GitHub repositories."""
+    response = httpx.get(
+        "https://api.github.com/search/repositories",
+        params={"q": query, "per_page": limit}
+    )
+    repos = response.json()["items"]
+    return [{
+        "name": r["full_name"],
+        "stars": r["stargazers_count"],
+        "url": r["html_url"]
+    } for r in repos]
+
+if __name__ == "__main__":
+    run()
+```
+
+### Data Processing Tools
+```python
+from chuk_mcp_server import tool, run
+import json
+
+@tool
+def json_to_csv(json_data: str) -> str:
+    """Convert JSON array to CSV format."""
+    data = json.loads(json_data)
+    if not data:
+        return ""
+
+    # Get headers from first item
+    headers = ",".join(data[0].keys())
+    rows = [",".join(str(item[k]) for k in data[0].keys()) for item in data]
+
+    return headers + "\n" + "\n".join(rows)
+
+@tool
+def count_words(text: str) -> dict:
+    """Count words, characters, and lines in text."""
+    return {
+        "words": len(text.split()),
+        "characters": len(text),
+        "lines": len(text.split("\n"))
+    }
+
+if __name__ == "__main__":
+    run()
+```
+
+---
+
+## 🧩 Resources (Optional)
+
+Resources provide data that Claude can read. They're like tools, but for fetching information instead of performing actions:
+
+```python
+from chuk_mcp_server import resource, run
+
+@resource("config://app")
+def get_config() -> dict:
+    """Application configuration."""
+    return {
+        "version": "1.0.0",
+        "environment": "production",
+        "features": ["search", "export"]
+    }
+
+@resource("docs://readme", mime_type="text/markdown")
+def get_readme() -> str:
+    """Project documentation."""
+    return "# My Project\n\nThis is the readme..."
+
+if __name__ == "__main__":
+    run()
+```
+
+---
+
+## ⚙️ Advanced: HTTP Mode (For Web Apps)
+
+Want to call your MCP server from a web app or API? Use HTTP mode:
+
+```python
+# Create server.py
+from chuk_mcp_server import tool, run
+
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+if __name__ == "__main__":
+    # Start HTTP server on port 8000
+    run(host="0.0.0.0", port=8000)
+```
+
+Run the server:
+```bash
+uv run python server.py
+```
+
+Test it:
+```bash
+# List available tools
+curl http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# Call a tool
+curl http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"add_numbers","arguments":{"a":5,"b":3}},"id":2}'
+```
+
+---
+
+## 🔧 Testing Your Server
+
+### Test Stdio Mode (Claude Desktop)
+```bash
+# Test that your server responds correctly
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | uv run python my_server.py
+
+# You should see a JSON response listing your tools
+```
+
+### Test HTTP Mode
+```bash
+# Start server
+uv run python server.py --http
+
+# In another terminal, test it
+curl http://localhost:8000/health
+```
+
+---
+
+## 💡 More Examples
+
+### Calculator with Error Handling
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def calculate(expression: str) -> str:
+    """Safely evaluate a mathematical expression."""
+    try:
+        # Only allow safe operations
+        allowed = {'+', '-', '*', '/', '(', ')', '.', ' '} | set('0123456789')
+        if not all(c in allowed for c in expression):
+            return "Error: Invalid characters in expression"
+
+        result = eval(expression)
+        return f"{expression} = {result}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+if __name__ == "__main__":
+    run()
+```
+
+### System Information
+```python
+from chuk_mcp_server import tool, resource, run
+import platform
+import psutil
+
+@tool
+def get_system_info() -> dict:
+    """Get current system information."""
+    return {
+        "platform": platform.system(),
+        "platform_version": platform.version(),
+        "python_version": platform.python_version(),
+        "cpu_count": psutil.cpu_count(),
+        "memory_gb": round(psutil.virtual_memory().total / (1024**3), 2)
+    }
+
+@resource("system://status")
+def system_status() -> dict:
+    """Real-time system status."""
+    return {
+        "cpu_percent": psutil.cpu_percent(interval=1),
+        "memory_percent": psutil.virtual_memory().percent,
+        "disk_percent": psutil.disk_usage('/').percent
+    }
+
+if __name__ == "__main__":
+    run()
+```
+
+---
+
+## ⚡ Performance Benchmarks
+
+Want to see how fast your MCP server is? ChukMCPServer includes built-in benchmarks:
+
+### Quick Benchmark
+
+```bash
+# Start your server in one terminal
+uv run python my_server.py --port 8000
+
+# Run the quick benchmark in another terminal
+uv run python benchmarks/quick_benchmark.py http://localhost:8000/mcp
+```
+
+**Sample Output:**
+```
+⚡ Quick MCP Benchmark: MCP Server
+🔗 URL: http://localhost:8000/mcp
+==================================================
+✅ Session initialized: a3f4b2c1...
+🔧 Tools discovered: 5
+   - hello
+   - calculate
+   - add_numbers
+
+📊 QUICK BENCHMARK RESULTS
+==================================================
+Test                      Avg(ms)  Min(ms)  Max(ms)  RPS   Count
+------------------------------------------------------------
+Connection                   2.3      1.8      3.1    434   5
+Tools List                   3.5      2.9      4.2    285   8
+Tool Call (hello)            5.2      4.1      6.8    192   3
+
+📈 SUMMARY
+Total RPS (across all tests): 911.2
+Average Response Time: 3.7ms
+Performance Rating: 🚀 Excellent
+```
+
+### Ultra-Minimal Performance Test
+
+This test measures raw MCP protocol performance with zero client overhead:
+
+```bash
+# Default test (localhost:8000)
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py
+
+# Custom port
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py 8001
+
+# Custom host and port
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py localhost:8001
+
+# With options
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py --duration 10 --concurrency 500
+
+# Quick test
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py --quick
+```
+
+**Sample Output:**
+```
+🚀 ChukMCPServer Ultra-Minimal MCP Protocol Test
+============================================================
+ZERO client overhead - raw sockets + pre-built MCP requests
+Target: Measure true MCP JSON-RPC performance
+
+✅ MCP session initialized: a3f4b2c1...
+
+🎯 Testing MCP Ping (JSON-RPC)...
+      39,651 RPS |   2.54ms avg |  98.7% success
+🔧 Testing MCP Tools List...
+      28,342 RPS |   3.53ms avg |  99.1% success
+👋 Testing Hello Tool Call...
+      15,234 RPS |   6.56ms avg |  99.8% success
+
+============================================================
+📊 ULTRA-MINIMAL MCP PROTOCOL RESULTS
+============================================================
+🚀 Maximum MCP Performance:
+   Peak RPS:       39,651
+   Avg Latency:      2.54ms
+   Success Rate:     98.7%
+   Operation: MCP Ping
+
+🔍 MCP Performance Analysis:
+   🏆 EXCEPTIONAL MCP performance!
+   🚀 Your ChukMCPServer is world-class
+```
+
+### What the Numbers Mean
+
+- **RPS (Requests Per Second)**: How many operations the server can handle
+  - `> 30,000 RPS`: Exceptional (world-class performance)
+  - `> 10,000 RPS`: Excellent (production-ready)
+  - `> 5,000 RPS`: Good (suitable for most applications)
+
+- **Latency (ms)**: How long each operation takes
+  - `< 5ms`: Excellent (sub-millisecond response)
+  - `< 10ms`: Very Good (instant user experience)
+  - `< 50ms`: Good (acceptable for most use cases)
+
+### Creating Your Own Benchmark
+
+```python
+# benchmark_my_server.py
+import asyncio
+import time
+from chuk_mcp_server import tool, run
+
+@tool
+def my_fast_tool(value: int) -> int:
+    """A simple, fast tool for benchmarking."""
+    return value * 2
+
+async def run_benchmark():
+    """Simple DIY benchmark."""
+    import httpx
+
+    # Make 100 rapid-fire requests
+    start = time.time()
+    async with httpx.AsyncClient() as client:
+        tasks = []
+        for i in range(100):
+            task = client.post(
+                "http://localhost:8000/mcp",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": i,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "my_fast_tool",
+                        "arguments": {"value": i}
+                    }
+                }
+            )
+            tasks.append(task)
+
+        responses = await asyncio.gather(*tasks)
+
+    duration = time.time() - start
+    rps = len(responses) / duration
+
+    print(f"✅ {len(responses)} requests in {duration:.2f}s")
+    print(f"⚡ {rps:.0f} requests/second")
+    print(f"📊 {duration/len(responses)*1000:.2f}ms average latency")
+
+if __name__ == "__main__":
+    # Start server in background or separate terminal first
+    # Then run: asyncio.run(run_benchmark())
+    run()
+```
+
+---
+
+## 🎓 Understanding Transport Modes
+
+ChukMCPServer supports two ways to communicate:
+
+### Stdio Mode (Default for Claude Desktop)
+- **What it is**: Communicates via stdin/stdout (like piping commands)
+- **Use for**: Claude Desktop, command-line tools, subprocess integration
+- **Benefits**: Most secure, zero network configuration, lowest latency
+
+### HTTP Mode (For Web Apps)
+- **What it is**: RESTful HTTP server with Server-Sent Events (SSE)
+- **Use for**: Web apps, APIs, remote access, browser integration
+- **Benefits**: Multiple clients, network accessible, built-in endpoints
+
+**The framework auto-detects the right mode**, but you can also specify explicitly:
+
+```python
+# Force stdio mode
+run(transport="stdio")
+
+# Force HTTP mode
+run(transport="http", port=8000)
+```
+
+---
+
+## 🏗️ Project Scaffolder
+
+The fastest way to start a new MCP server project:
+
+### Create a New Project
+
+```bash
+# Basic usage
+uvx chuk-mcp-server init my-server
+
+# Custom directory
+uvx chuk-mcp-server init my-server --dir /path/to/projects
+```
+
+### What Gets Created
+
+```
+my-server/
+├── server.py           # Your MCP server with 3 example tools
+├── pyproject.toml      # Dependencies & project config (uv-compatible)
+├── README.md           # Complete docs (local + Docker setup)
+├── Dockerfile          # Production-ready HTTP server
+├── docker-compose.yml  # One-command Docker deployment
+└── .gitignore          # Standard Python gitignore
+```
+
+### Generated server.py
+
+The scaffolder creates a fully functional server with:
+
+```python
+from chuk_mcp_server import tool, resource, run
+
+@tool
+def hello(name: str = "World") -> str:
+    """Say hello to someone."""
+    return f"Hello, {name}!"
+
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+@tool
+def calculate(expression: str) -> str:
+    """Safely evaluate a mathematical expression."""
+    # ... implementation
+
+@resource("config://info")
+def server_info() -> dict:
+    """Get server information."""
+    return {"name": "my-server", "version": "0.1.0"}
+
+if __name__ == "__main__":
+    run()
+```
+
+### Next Steps After Scaffolding
+
+#### Option 1: Local Development (Claude Desktop)
+
+```bash
+cd my-server
+
+# Install dependencies
+uv pip install --system chuk-mcp-server
+
+# Test it works (stdio mode)
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py
+
+# Add to Claude Desktop config
+# See generated README.md for exact config
+```
+
+Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 ```json
 {
   "mcpServers": {
     "my-server": {
-      "command": "chuk-mcp-server",
-      "args": ["stdio"]
+      "command": "python",
+      "args": ["/full/path/to/my-server/server.py"]
     }
   }
 }
 ```
 
-### 4. Run HTTP Server (for Web Clients)
+#### Option 2: Docker Deployment (Production)
 
 ```bash
-# Using your script
-python server.py --http --port 8000
+cd my-server
 
-# Using CLI
-chuk-mcp-server http --port 8000
+# One-command deployment
+docker-compose up
 
-# Using uvx
-uvx chuk-mcp-server http --host 0.0.0.0 --port 8080
-```
+# Or manually
+docker build -t my-server .
+docker run -p 8000:8000 my-server
 
-#### Connect from a web client:
-```javascript
-// JavaScript/TypeScript client example
-const response = await fetch('http://localhost:8000/mcp', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'tools/list',
-    id: 1
-  })
-});
-
-// Server-Sent Events for streaming
-const events = new EventSource('http://localhost:8000/mcp');
-events.onmessage = (event) => {
-  console.log('Received:', JSON.parse(event.data));
-};
-```
-
-### 5. Test Your Setup
-
-```bash
-# Test stdio mode
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
-
-# Test HTTP mode
-curl -X POST http://localhost:8000/mcp \
+# Test it
+curl http://localhost:8000/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-
-# Get server info (HTTP mode)
-curl http://localhost:8000/health
 ```
 
-## 🔄 Transport Modes Explained
+The Docker version runs in **HTTP mode** on port 8000, perfect for:
+- Cloud deployments (AWS, GCP, Azure)
+- Kubernetes clusters
+- API integrations
+- Remote access
 
-ChukMCPServer intelligently auto-detects the best transport mode, or you can explicitly choose:
+### Scaffolder Performance
 
-### When to Use Each Mode
+The scaffolded server delivers **production-ready performance** out of the box.
 
-| Feature | Stdio Mode | HTTP Mode |
-|---------|-----------|-----------|
-| **Use Case** | Claude Desktop, CLI tools | Web apps, APIs, remote access |
-| **Communication** | Process pipes (stdin/stdout) | Network (HTTP/SSE) |
-| **Security** | Most secure (local only) | Network security needed |
-| **Performance** | Lowest latency | < 5ms latency |
-| **Setup** | No ports needed | Requires port |
-| **Debugging** | Logs to stderr | Browser DevTools |
-| **Scaling** | Single client | Multiple clients |
-| **Claude Desktop** | ✅ Required | ❌ Not supported |
-| **Web Integration** | ❌ Not supported | ✅ Full support |
+**Real benchmark results from a freshly scaffolded server:**
 
-### Stdio Transport (Process Communication)
-Perfect for Claude Desktop and command-line tools:
-- ✅ Direct integration with Claude Desktop
-- ✅ Minimal overhead, maximum security
-- ✅ No network ports needed
-- ✅ Ideal for local tools and scripts
-
-```python
-# Auto-detects stdio when piped or when MCP_STDIO env is set
-mcp.run()  
-
-# Or explicitly use stdio
-mcp.run(stdio=True)
-
-# In your script, handle stdio mode properly:
-import sys
-import logging
-
-# IMPORTANT: Logs must go to stderr in stdio mode
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-```
-
-### HTTP Transport (Network Communication)
-Perfect for web apps and remote access:
-- ✅ RESTful API with SSE streaming
-- ✅ Cross-platform web clients
-- ✅ Remote access capability
-- ✅ Built-in health checks and monitoring
-
-```python
-# Auto-detects HTTP when not in stdio mode
-mcp.run()  
-
-# Or explicitly configure HTTP
-mcp.run(host="0.0.0.0", port=8080, stdio=False)
-
-# Access endpoints:
-# POST http://localhost:8080/mcp    - MCP protocol endpoint
-# GET  http://localhost:8080/health - Health check
-# GET  http://localhost:8080/tools  - List available tools
-```
-
-### Smart Auto-Detection
-The framework automatically chooses the right mode:
-```python
-# Just call run() - it figures out the rest!
-mcp.run()
-
-# Detection logic:
-# 1. If stdin is piped → stdio mode
-# 2. If MCP_STDIO env var → stdio mode  
-# 3. If MCP_TRANSPORT env var → use that mode
-# 4. Otherwise → HTTP mode
-```
-
-## 🎨 Real-World Examples
-
-### Complete File System Tools
-
-```python
-# HTTP Transport (default)
-from chuk_mcp_server import ChukMCPServer
-import os
-from pathlib import Path
-
-mcp = ChukMCPServer()  # HTTP transport by default
-
-@mcp.tool
-def hello(name: str) -> str:
-    return f"Hello, {name}!"
-
-mcp.run()  # Starts HTTP server
-```
-
-```python
-# STDIO Transport via constructor
-from chuk_mcp_server import ChukMCPServer
-
-mcp = ChukMCPServer(transport="stdio")  # STDIO transport
-
-@mcp.tool
-def hello(name: str) -> str:
-    return f"Hello, {name}!"
-
-mcp.run()  # Starts STDIO transport automatically
-```
-
-### Class-Based API Options
-
-# ✨ Smart server with auto-detected configuration
-mcp = ChukMCPServer(name="filesystem-tools")
-
-@mcp.tool
-def list_files(directory: str = ".", pattern: str = "*") -> list[str]:
-    """List files in a directory matching a pattern."""
-    path = Path(directory)
-    if not path.exists():
-        return [f"Error: {directory} does not exist"]
-    
-    files = []
-    for item in path.glob(pattern):
-        if item.is_file():
-            size = item.stat().st_size
-            files.append(f"{item.name} ({size:,} bytes)")
-    return files
-
-@mcp.tool
-def read_file(filepath: str, lines: int = None) -> str:
-    """Read contents of a file."""
-    try:
-        with open(filepath, 'r') as f:
-            if lines:
-                return ''.join(f.readlines()[:lines])
-            return f.read()
-    except Exception as e:
-        return f"Error reading file: {e}"
-
-@mcp.tool  
-def write_file(filepath: str, content: str, append: bool = False) -> str:
-    """Write content to a file."""
-    mode = 'a' if append else 'w'
-    try:
-        with open(filepath, mode) as f:
-            f.write(content)
-        return f"Successfully wrote to {filepath}"
-    except Exception as e:
-        return f"Error writing file: {e}"
-
-@mcp.resource("fs://current-dir")
-def current_directory() -> dict:
-    """Get current directory information."""
-    cwd = os.getcwd()
-    return {
-        "path": cwd,
-        "files": len([f for f in os.listdir(cwd) if os.path.isfile(f)]),
-        "directories": len([d for d in os.listdir(cwd) if os.path.isdir(d)]),
-        "readable": os.access(cwd, os.R_OK),
-        "writable": os.access(cwd, os.W_OK)
-    }
-
-if __name__ == "__main__":
-    # Run with smart auto-detection
-    mcp.run()
-    
-    # Or explicitly choose transport:
-    # mcp.run(stdio=True)  # For Claude Desktop
-    # mcp.run(port=8080)   # For HTTP clients
-```
-
-### API Integration Tools
-
-```python
-from chuk_mcp_server import ChukMCPServer
-import httpx
-import asyncio
-
-mcp = ChukMCPServer(name="api-tools")
-
-@mcp.tool
-async def fetch_url(url: str, method: str = "GET", headers: dict = None) -> dict:
-    """Fetch data from a URL."""
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.request(method, url, headers=headers)
-            return {
-                "status": response.status_code,
-                "headers": dict(response.headers),
-                "body": response.text[:1000],  # First 1000 chars
-                "size": len(response.content)
-            }
-        except Exception as e:
-            return {"error": str(e)}
-
-@mcp.tool
-async def parallel_fetch(urls: list[str]) -> list[dict]:
-    """Fetch multiple URLs in parallel."""
-    async with httpx.AsyncClient() as client:
-        tasks = [client.get(url) for url in urls]
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        results = []
-        for url, resp in zip(urls, responses):
-            if isinstance(resp, Exception):
-                results.append({"url": url, "error": str(resp)})
-            else:
-                results.append({
-                    "url": url,
-                    "status": resp.status_code,
-                    "size": len(resp.content)
-                })
-        return results
-
-@mcp.resource("api://status")
-async def api_status() -> dict:
-    """Check status of common APIs."""
-    endpoints = [
-        "https://api.github.com",
-        "https://api.openai.com/v1/models",
-        "https://www.googleapis.com/discovery/v1/apis"
-    ]
-    
-    statuses = {}
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        for endpoint in endpoints:
-            try:
-                resp = await client.get(endpoint)
-                statuses[endpoint] = "✅ Online" if resp.status_code < 500 else "⚠️ Issues"
-            except:
-                statuses[endpoint] = "❌ Offline"
-    
-    return statuses
-
-if __name__ == "__main__":
-    mcp.run()
-```
-
-### Data Processing Tools
-
-```python
-from chuk_mcp_server import ChukMCPServer
-import json
-import csv
-from io import StringIO
-
-mcp = ChukMCPServer(name="data-tools")
-
-@mcp.tool
-def json_to_csv(json_data: str | list | dict) -> str:
-    """Convert JSON data to CSV format."""
-    if isinstance(json_data, str):
-        data = json.loads(json_data)
-    else:
-        data = json_data
-    
-    if not isinstance(data, list):
-        data = [data]
-    
-    if not data:
-        return "No data to convert"
-    
-    output = StringIO()
-    writer = csv.DictWriter(output, fieldnames=data[0].keys())
-    writer.writeheader()
-    writer.writerows(data)
-    return output.getvalue()
-
-@mcp.tool
-def analyze_json(json_data: str | dict) -> dict:
-    """Analyze JSON structure and statistics."""
-    if isinstance(json_data, str):
-        data = json.loads(json_data)
-    else:
-        data = json_data
-    
-    def analyze_value(value, path="root"):
-        stats = {"path": path, "type": type(value).__name__}
-        
-        if isinstance(value, dict):
-            stats["keys"] = len(value)
-            stats["nested"] = {}
-            for k, v in value.items():
-                stats["nested"][k] = analyze_value(v, f"{path}.{k}")
-        elif isinstance(value, list):
-            stats["length"] = len(value)
-            if value:
-                stats["item_types"] = list(set(type(v).__name__ for v in value))
-        elif isinstance(value, str):
-            stats["length"] = len(value)
-        elif isinstance(value, (int, float)):
-            stats["value"] = value
-            
-        return stats
-    
-    return analyze_value(data)
-
-@mcp.tool
-def transform_data(
-    data: list[dict],
-    operations: list[str]
-) -> list[dict]:
-    """
-    Apply transformations to data.
-    Operations: 'uppercase', 'lowercase', 'trim', 'remove_nulls'
-    """
-    result = data.copy()
-    
-    for op in operations:
-        if op == "uppercase":
-            result = [{k: v.upper() if isinstance(v, str) else v 
-                      for k, v in item.items()} for item in result]
-        elif op == "lowercase":
-            result = [{k: v.lower() if isinstance(v, str) else v 
-                      for k, v in item.items()} for item in result]
-        elif op == "trim":
-            result = [{k: v.strip() if isinstance(v, str) else v 
-                      for k, v in item.items()} for item in result]
-        elif op == "remove_nulls":
-            result = [{k: v for k, v in item.items() if v is not None} 
-                     for item in result]
-    
-    return result
-
-if __name__ == "__main__":
-    mcp.run()
-```
-
-## 🖥️ CLI Usage
-
-ChukMCPServer includes a powerful CLI for both development and production:
+<details>
+<summary>📊 How these benchmarks were generated</summary>
 
 ```bash
-# Install the CLI
-pip install chuk-mcp-server
+# Create a scaffolded server
+uvx chuk-mcp-server init benchmark-server
+cd benchmark-server
 
-# Or use without installing (uvx)
+# Deploy with Docker (HTTP mode)
+docker-compose up -d
+
+# Clone the repo to access benchmarks (from another directory)
+git clone https://github.com/chrishayuk/chuk-mcp-server
+cd chuk-mcp-server
+
+# Run benchmarks against the scaffolded server
+uv run python benchmarks/quick_benchmark.py http://localhost:8000/mcp
+uv run python benchmarks/ultra_minimal_mcp_performance_test.py localhost:8000 --quick
+```
+
+</details>
+
+**Results:**
+
+```
+📊 QUICK BENCHMARK RESULTS
+============================================================
+Server: benchmark-server (scaffolded with 3 tools)
+Tools Found: 3 (hello, add_numbers, calculate)
+Resources Found: 1 (config://info)
+
+Test                      Avg(ms)  Min(ms)  Max(ms)  RPS    Count
+------------------------------------------------------------
+Connection                  15.1   14.5   15.9 66.1   5
+Tools List                  15.5   14.3   20.3 64.7   8
+Tool Call (hello)           16.4   14.5   19.9 61.0   3
+Resource Read               14.5   14.1   14.9 69.1   3
+
+📈 SUMMARY
+Total RPS: 459.8
+Average Response Time: 15.2ms
+Performance Rating: 🚀 Excellent
+```
+
+**Ultra-minimal test (max throughput):**
+```
+🚀 Maximum MCP Performance:
+   Peak RPS:       31,353
+   Avg Latency:      1.7ms
+   Success Rate:    100.0%
+
+🔧 Tool Performance (scaffolded tools):
+   MCP Ping:        29,525 RPS |  1.7ms
+   Tools List:      28,527 RPS |  1.7ms
+   Hello Tool:      26,555 RPS |  1.9ms
+   Calculate Tool:  24,484 RPS |  2.0ms
+
+📂 Resource Performance (scaffolded resources):
+   Resources List:  29,366 RPS |  1.7ms
+   Config Resource: 29,856 RPS |  1.7ms
+
+🏆 EXCEPTIONAL performance - world-class MCP server!
+   All operations: 100% success rate
+   Average: 26,000+ RPS per operation
+```
+
+**What this means:**
+- ✅ Your scaffolded server handles **31,000+ requests/second**
+- ✅ Sub-2ms latency for most operations
+- ✅ Zero configuration required
+- ✅ Production-ready out of the box
+
+---
+
+## 📦 CLI Usage (Optional)
+
+ChukMCPServer includes a CLI if you want to test without writing Python:
+
+```bash
+# Run with uvx (no installation)
 uvx chuk-mcp-server --help
+
+# Test stdio mode
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | uvx chuk-mcp-server
+
+# Start HTTP server
+uvx chuk-mcp-server --http --port 8000
 ```
 
-### CLI Commands
-
-#### Stdio Mode (for Claude Desktop)
-```bash
-# Basic stdio server
-chuk-mcp-server stdio
-
-# With debug output (logs to stderr)
-chuk-mcp-server stdio --debug
-
-# Test with a simple command
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | chuk-mcp-server stdio
-```
-
-#### HTTP Mode (for Web Clients)
-```bash
-# Basic HTTP server
-chuk-mcp-server http
-
-# Custom host and port
-chuk-mcp-server http --host 0.0.0.0 --port 8080
-
-# With debug mode
-chuk-mcp-server http --debug --port 3000
-```
-
-#### Auto Mode (Smart Detection)
-```bash
-# Let the server decide based on environment
-chuk-mcp-server auto
-
-# It will choose:
-# - stdio: if stdin is piped or MCP_STDIO is set
-# - http: otherwise
-```
-
-### Environment Variables
-
-Control behavior through environment variables:
-
-```bash
-# Force stdio mode
-MCP_STDIO=1 python server.py
-
-# Force HTTP mode
-MCP_TRANSPORT=http python server.py
-
-# Set performance mode
-MCP_PERFORMANCE_MODE=high python server.py
-
-# Configure HTTP settings
-MCP_HOST=0.0.0.0 MCP_PORT=8080 python server.py
-```
-
-## ⚡ Performance
-
-ChukMCPServer is the fastest MCP implementation available:
-
-| Metric | Performance | Conditions |
-|--------|------------|------------|
-| **Throughput** | 39,651 RPS | Ping endpoint, local |
-| **Latency** | < 5ms p99 | Tool execution |
-| **Concurrency** | 1,000+ connections | HTTP/SSE mode |
-| **Memory** | < 50MB | 1000 tools registered |
-| **Startup** | < 100ms | Full initialization |
-
-### Performance Tips
-
-```python
-# Enable performance mode
-mcp = ChukMCPServer(performance_mode="high")
-
-# Or via environment
-os.environ["MCP_PERFORMANCE_MODE"] = "high_performance"
-```
-
-## 🧠 Smart Configuration
-
-ChukMCPServer auto-detects everything:
-
-- **Project name** from package.json, pyproject.toml, or directory
-- **Environment** (development/production/serverless)
-- **Network settings** (host, port, available ports)
-- **Transport mode** (stdio vs HTTP)
-- **Performance settings** based on system resources
-- **Cloud environment** (AWS, GCP, Azure, Vercel, etc.)
-
-Override anything you need:
-
-```python
-mcp = ChukMCPServer(
-    name="my-server",           # Auto-detected if not set
-    port=3000,                  # Auto-detected if not set
-    host="0.0.0.0",            # Auto-detected if not set
-    performance_mode="high"     # Auto-detected if not set
-)
-```
+---
 
 ## 📚 API Reference
 
 ### Tools
-
+Define functions that Claude can call:
 ```python
-@mcp.tool
-def my_tool(param: str, optional: int = 10) -> dict:
-    """Tool description for LLM."""
-    return {"result": param, "count": optional}
+from chuk_mcp_server import tool
 
-# Async tools
-@mcp.tool
-async def async_tool(data: str) -> str:
-    await asyncio.sleep(1)
-    return f"Processed: {data}"
-
-# Renamed tools
-@mcp.tool("custom-name")
-def another_tool() -> str:
-    return "result"
+@tool
+def my_function(param: str, count: int = 1) -> str:
+    """This docstring explains what the tool does."""
+    return f"Result: {param} x {count}"
 ```
 
 ### Resources
-
+Provide data that Claude can read:
 ```python
-@mcp.resource("protocol://path")
-def my_resource() -> dict:
-    """Resource description."""
-    return {"data": "value"}
+from chuk_mcp_server import resource
 
-# Async resources
-@mcp.resource("async://data")
-async def async_resource() -> dict:
-    await fetch_data()
-    return {"data": "value"}
-
-# Markdown resources
-@mcp.resource("docs://readme", mime_type="text/markdown")
-def get_docs() -> str:
-    return "# Documentation\nContent here..."
+@resource("mydata://info")
+def get_info() -> dict:
+    """This docstring explains what data is available."""
+    return {"key": "value"}
 ```
 
-### Prompts
-
+### Async Support
+Both tools and resources can be async:
 ```python
-@mcp.prompt
-def my_prompt(context: str) -> str:
-    """Generate a prompt based on context."""
-    return f"Based on {context}, please..."
+import httpx
 
-# With arguments
-@mcp.prompt("code-review")
-def code_review_prompt(language: str, code: str) -> str:
-    return f"Review this {language} code:\n{code}"
+@tool
+async def fetch_data(url: str) -> dict:
+    """Fetch data from a URL."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
 ```
+
+---
 
 ## 🔍 Troubleshooting
 
-### Claude Desktop Integration
+### Claude Desktop not showing tools?
+1. **Check your config path is absolute**: `/full/path/to/my_server.py` not `~/my_server.py`
+2. **Test your server manually**:
+   ```bash
+   echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | uv run python my_server.py
+   ```
+3. **Check Claude Desktop logs** (Help → Show Logs in Claude Desktop)
+4. **Restart Claude Desktop** after changing the config
 
-**Issue: "Server not found" in Claude Desktop**
-```json
-// Make sure the path is absolute and the file exists
-{
-  "mcpServers": {
-    "my-tools": {
-      "command": "python",
-      "args": ["/absolute/path/to/server.py", "--stdio"]
-    }
-  }
-}
-```
-
-**Issue: "Connection failed"**
-```bash
-# Test your server standalone first
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py --stdio
-
-# Should return a JSON response with your tools
-```
-
-**Issue: Logs cluttering output**
-```python
-# Ensure logs go to stderr, not stdout
-import sys
-import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-```
-
-### HTTP Mode Issues
-
-**Issue: Port already in use**
+### Port already in use?
 ```bash
 # Use a different port
-chuk-mcp-server http --port 8081
+uv run python server.py --port 8001
 
-# Or find what's using the port
+# Or find what's using it
 lsof -i :8000  # macOS/Linux
-netstat -ano | findstr :8000  # Windows
 ```
 
-**Issue: Can't connect from another machine**
-```bash
-# Bind to all interfaces (not just localhost)
-chuk-mcp-server http --host 0.0.0.0 --port 8000
+### Need to see what's happening?
+The framework uses stderr for logs (stdout is reserved for MCP protocol):
+```python
+import sys
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 ```
 
-### Debug Mode
-
-Enable debug output to see what's happening:
-```bash
-# Stdio mode (logs to stderr)
-chuk-mcp-server stdio --debug
-
-# HTTP mode
-chuk-mcp-server http --debug
-
-# Or via environment
-DEBUG=1 python server.py
-```
+---
 
 ## 🐳 Docker Support
 
+The scaffolder automatically creates production-ready Docker files:
+
+**Dockerfile** (HTTP mode, optimized with uv):
 ```dockerfile
 FROM python:3.11-slim
-RUN pip install chuk-mcp-server
-COPY server.py .
 
-# For stdio mode
-CMD ["python", "server.py"]
+WORKDIR /app
 
-# For HTTP mode
-# EXPOSE 8000
-# CMD ["chuk-mcp-server", "http", "--host", "0.0.0.0"]
+# Install uv for fast dependency management
+RUN pip install uv
+
+# Copy project files
+COPY pyproject.toml ./
+COPY server.py ./
+
+# Install dependencies with uv
+RUN uv pip install --system --no-cache -r pyproject.toml
+
+# Expose HTTP port
+EXPOSE 8000
+
+# Run server in HTTP mode
+CMD ["python", "server.py", "--port", "8000", "--host", "0.0.0.0"]
 ```
 
-## 🧪 Testing
+**docker-compose.yml**:
+```yaml
+version: '3.8'
+
+services:
+  my-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MCP_TRANSPORT=http
+    restart: unless-stopped
+```
+
+**Deploy in seconds:**
+```bash
+docker-compose up
+# Server running at http://localhost:8000
+```
+
+**Or manually:**
+```bash
+# Build
+docker build -t my-server .
+
+# Run
+docker run -p 8000:8000 my-server
+
+# Test
+curl http://localhost:8000/health
+```
+
+---
+
+## 🧪 Testing Your Tools
 
 ```python
 # test_server.py
 from chuk_mcp_server import ChukMCPServer
-import pytest
 
-@pytest.fixture
-def mcp():
-    server = ChukMCPServer()
-    
-    @server.tool
-    def test_tool(value: int) -> int:
-        return value * 2
-    
-    return server
+def test_my_tool():
+    mcp = ChukMCPServer()
 
-def test_tool_execution(mcp):
-    # Tools are automatically executable
-    result = mcp.get_tools()[0]
-    assert result["name"] == "test_tool"
+    @mcp.tool
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    # Get tool metadata
+    tools = mcp.get_tools()
+    assert len(tools) == 1
+    assert tools[0]["name"] == "add"
 ```
+
+Run tests:
+```bash
+uv run pytest
+```
+
+---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
+Contributions welcome!
 
 ```bash
 # Setup development environment
 git clone https://github.com/chrishayuk/chuk-mcp-server
 cd chuk-mcp-server
-pip install -e ".[dev]"
+uv sync --dev
 
 # Run tests
-pytest
+uv run pytest
 
 # Run with coverage
-pytest --cov
+uv run pytest --cov
 
 # Type checking
-mypy src
+uv run mypy src
 ```
+
+---
 
 ## 📄 License
 
