@@ -592,7 +592,7 @@ class ChukMCPServer:
 
         # Check if STDIO transport was requested
         if self.smart_transport == "stdio":
-            return self.run_stdio(debug)
+            return self.run_stdio(debug, log_level=log_level)
 
         # Use smart defaults if not overridden
         final_host = host or self.smart_host
@@ -653,12 +653,13 @@ class ChukMCPServer:
                 logger.error(f"❌ Server error: {e}")
                 raise
 
-    def run_stdio(self, debug: bool | None = None):
+    def run_stdio(self, debug: bool | None = None, log_level: str = "warning"):
         """
         Run the MCP server over STDIO transport.
 
         Args:
             debug: Enable debug logging (uses smart default if None)
+            log_level: Logging level for application (debug, info, warning, error, critical)
         """
         final_debug = debug if debug is not None else self.smart_debug
 
@@ -666,9 +667,13 @@ class ChukMCPServer:
         if final_debug:
             logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
         else:
-            # Use the smart log level from modular config, always to stderr
-            log_level = getattr(logging, self.smart_log_level.upper(), logging.INFO)
-            logging.basicConfig(level=log_level, stream=sys.stderr)
+            # Use provided log_level or smart log level from modular config, always to stderr
+            import os
+
+            default_level = log_level if isinstance(log_level, str) else "warning"
+            app_log_level = os.getenv("MCP_LOG_LEVEL", default_level).upper()
+            log_level_int = getattr(logging, app_log_level, logging.WARNING)
+            logging.basicConfig(level=log_level_int, stream=sys.stderr)
 
         # Suppress smart config output for stdio transport
         self._should_print_config = False

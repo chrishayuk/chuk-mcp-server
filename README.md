@@ -927,7 +927,7 @@ COPY pyproject.toml ./
 COPY server.py ./
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.3
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.4
 
 # Expose HTTP port
 EXPOSE 8000

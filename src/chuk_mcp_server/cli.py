@@ -177,7 +177,7 @@ version = "0.1.0"
 description = "MCP server built with ChukMCPServer"
 requires-python = ">=3.11"
 dependencies = [
-    "chuk-mcp-server>=0.4.3",
+    "chuk-mcp-server>=0.4.4",
 ]
 
 [project.optional-dependencies]
@@ -458,7 +458,7 @@ COPY pyproject.toml ./
 COPY server.py ./
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.3
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.4
 
 # Expose HTTP port
 EXPOSE 8000
@@ -548,6 +548,12 @@ Environment Variables:
     # Stdio mode
     stdio_parser = subparsers.add_parser("stdio", help="Run in stdio mode for MCP clients")
     stdio_parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    stdio_parser.add_argument(
+        "--log-level",
+        default="warning",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging level (default: warning)",
+    )
 
     # HTTP mode
     http_parser = subparsers.add_parser("http", help="Run in HTTP mode with SSE streaming")
@@ -597,7 +603,7 @@ Environment Variables:
     if args.mode == "stdio":
         # Force stdio mode
         logging.info("Starting ChukMCPServer in STDIO mode...")
-        server.run(stdio=True, debug=args.debug)
+        server.run(stdio=True, debug=args.debug, log_level=getattr(args, "log_level", "warning"))
 
     elif args.mode == "http":
         # Force HTTP mode

@@ -117,7 +117,7 @@ class TestMainFunction:
 
         # Verify server creation and run
         mock_create_server.assert_called_once()
-        mock_server.run.assert_called_once_with(stdio=True, debug=False)
+        mock_server.run.assert_called_once_with(stdio=True, debug=False, log_level="warning")
 
     @patch("chuk_mcp_server.cli.create_example_server")
     @patch("chuk_mcp_server.cli.setup_logging")
@@ -132,7 +132,7 @@ class TestMainFunction:
 
         # Verify debug logging
         mock_setup_logging.assert_called_once_with(debug=True, stderr=True)
-        mock_server.run.assert_called_once_with(stdio=True, debug=True)
+        mock_server.run.assert_called_once_with(stdio=True, debug=True, log_level="warning")
 
     @patch("chuk_mcp_server.cli.create_example_server")
     @patch("chuk_mcp_server.cli.setup_logging")
