@@ -128,9 +128,18 @@ def server_info() -> dict:
 
 
 if __name__ == "__main__":
-    # Default to stdio mode (best for Claude Desktop)
-    # Automatically switches to HTTP if --port or --host is specified
-    run()
+    import sys
+
+    # Check which transport mode to use
+    if "--stdio" in sys.argv or "--transport=stdio" in sys.argv:
+        # Stdio mode explicitly requested
+        run(transport="stdio")
+    elif "--port" in sys.argv or "--host" in sys.argv or "--http" in sys.argv or "--transport=http" in sys.argv:
+        # HTTP mode explicitly requested
+        run()
+    else:
+        # Default to stdio mode (best for Claude Desktop)
+        run(transport="stdio")
 '''
 
     server_file = project_dir / "server.py"
@@ -144,7 +153,7 @@ version = "0.1.0"
 description = "MCP server built with ChukMCPServer"
 requires-python = ">=3.11"
 dependencies = [
-    "chuk-mcp-server>=0.2.0",
+    "chuk-mcp-server>=0.4.1",
 ]
 
 [project.optional-dependencies]
@@ -178,29 +187,37 @@ disallow_untyped_defs = true
 
 MCP server built with [ChukMCPServer](https://github.com/chrishayuk/chuk-mcp-server).
 
+## Transport Modes
+
+This server supports two transport modes:
+
+- **STDIO (default)**: For Claude Desktop and MCP clients. Communication via stdin/stdout.
+- **HTTP**: For web applications, APIs, and cloud deployment. RESTful endpoints with streaming support.
+
 ## Quick Start
 
-### Option 1: Local Development
+### Option 1: Claude Desktop (STDIO mode)
 
-#### Install dependencies
+#### 1. Install dependencies
 ```bash
 # Install globally
 uv pip install --system chuk-mcp-server
 
-# Or create a virtual environment
+# Or in a virtual environment (recommended)
 uv venv
 source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
 uv pip install chuk-mcp-server
 ```
 
-#### Run the server
-
-**For Claude Desktop (stdio mode):**
+#### 2. Test the server
 ```bash
-python server.py
+# Default mode is stdio - perfect for Claude Desktop
+echo '{{"jsonrpc":"2.0","method":"tools/list","id":1}}' | python server.py
 ```
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+#### 3. Configure Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {{
@@ -213,42 +230,53 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }}
 ```
 
-**For Web/API (HTTP mode):**
+Restart Claude Desktop and your server will be available!
+
+### Option 2: Web/API (HTTP mode)
+
+Perfect for web applications and cloud deployment.
+
 ```bash
+# Start HTTP server on port 8000
+python server.py --http
+
+# Or specify custom port/host
 python server.py --port 8000 --host 0.0.0.0
 ```
 
-Then test with:
+Test with curl:
 ```bash
 curl http://localhost:8000/mcp \\
   -H "Content-Type: application/json" \\
   -d '{{"jsonrpc":"2.0","method":"tools/list","id":1}}'
 ```
 
-### Option 2: Docker (Recommended for Production)
+### Option 3: Docker (Production Deployment)
 
-#### Build and run
+Docker automatically runs the server in HTTP mode, perfect for production deployments.
+
+#### Using docker-compose (easiest)
 ```bash
 docker-compose up
 ```
 
-Or manually:
+#### Or build manually
 ```bash
-# Build
+# Build the image
 docker build -t {project_name} .
 
-# Run
+# Run the container
 docker run -p 8000:8000 {project_name}
 ```
 
-#### Test Docker deployment
+#### Test the deployment
 ```bash
 curl http://localhost:8000/mcp \\
   -H "Content-Type: application/json" \\
   -d '{{"jsonrpc":"2.0","method":"tools/list","id":1}}'
 ```
 
-Expected response:
+You should see:
 ```json
 {{
   "jsonrpc": "2.0",
@@ -262,6 +290,8 @@ Expected response:
   }}
 }}
 ```
+
+Perfect for deploying to cloud platforms like AWS, GCP, Azure, or Kubernetes!
 
 ## Available Tools
 
@@ -290,22 +320,44 @@ uv run mypy server.py
 uv run ruff check .
 ```
 
-## Deployment
+## Command-Line Options
 
-### Docker
-The included Dockerfile runs the server in HTTP mode on port 8000. Perfect for:
-- Cloud deployments (AWS, GCP, Azure)
-- Kubernetes
-- Container orchestration
+The server automatically detects the best transport mode, but you can override:
 
-### Environment Variables
-- `MCP_TRANSPORT`: Force transport mode (`stdio` or `http`)
-- `MCP_HOST`: HTTP server host (default: `localhost`)
-- `MCP_PORT`: HTTP server port (default: `8000`)
+```bash
+# Force STDIO mode (default)
+python server.py --stdio
+python server.py --transport=stdio
+
+# Force HTTP mode
+python server.py --http
+python server.py --port 8000
+python server.py --host 0.0.0.0
+python server.py --transport=http
+```
 
 ## Customization
 
-Edit `server.py` to add your own tools and resources. See the [ChukMCPServer documentation](https://github.com/chrishayuk/chuk-mcp-server) for more examples.
+Edit `server.py` to add your own tools and resources:
+
+```python
+from chuk_mcp_server import tool, resource, run
+
+@tool
+def my_custom_tool(param: str) -> str:
+    """Your custom tool description."""
+    return f"Result: {{param}}"
+
+@resource("custom://data")
+def my_resource() -> dict:
+    """Your custom resource."""
+    return {{"data": "value"}}
+
+if __name__ == "__main__":
+    run(transport="stdio")  # or just run() for auto-detection
+```
+
+See the [ChukMCPServer documentation](https://github.com/chrishayuk/chuk-mcp-server) for more examples and advanced features.
 '''
 
     readme_file = project_dir / "README.md"
@@ -381,13 +433,13 @@ RUN pip install uv
 COPY pyproject.toml ./
 COPY server.py ./
 
-# Install dependencies
-RUN uv pip install --system --no-cache -r pyproject.toml
+# Install dependencies using uv
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.1
 
 # Expose HTTP port
 EXPOSE 8000
 
-# Run server in HTTP mode (streamable)
+# Run server in HTTP mode for web/API access
 CMD ["python", "server.py", "--port", "8000", "--host", "0.0.0.0"]
 """
 

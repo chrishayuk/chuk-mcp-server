@@ -548,7 +548,7 @@ my-server/
 
 ### Generated server.py
 
-The scaffolder creates a fully functional server with:
+The scaffolder creates a fully functional server that **defaults to stdio mode** for Claude Desktop:
 
 ```python
 from chuk_mcp_server import tool, resource, run
@@ -574,7 +574,30 @@ def server_info() -> dict:
     return {"name": "my-server", "version": "0.1.0"}
 
 if __name__ == "__main__":
-    run()
+    import sys
+
+    # Support explicit transport selection
+    if "--stdio" in sys.argv or "--transport=stdio" in sys.argv:
+        run(transport="stdio")
+    elif "--port" in sys.argv or "--host" in sys.argv or "--http" in sys.argv:
+        run()  # HTTP mode
+    else:
+        run(transport="stdio")  # Default: stdio for Claude Desktop
+```
+
+**Usage:**
+```bash
+# Default: stdio mode (Claude Desktop)
+python server.py
+
+# Explicit stdio mode
+python server.py --stdio
+python server.py --transport=stdio
+
+# HTTP mode
+python server.py --http
+python server.py --port 8000
+python server.py --transport=http
 ```
 
 ### Next Steps After Scaffolding
@@ -587,11 +610,11 @@ cd my-server
 # Install dependencies
 uv pip install --system chuk-mcp-server
 
-# Test it works (stdio mode)
+# Test stdio mode (default behavior)
 echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py
 
-# Add to Claude Desktop config
-# See generated README.md for exact config
+# The server defaults to stdio mode for Claude Desktop
+# No flags needed!
 ```
 
 Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
@@ -813,13 +836,13 @@ RUN pip install uv
 COPY pyproject.toml ./
 COPY server.py ./
 
-# Install dependencies with uv
-RUN uv pip install --system --no-cache -r pyproject.toml
+# Install dependencies using uv
+RUN uv pip install --system --no-cache chuk-mcp-server>=0.4.1
 
 # Expose HTTP port
 EXPOSE 8000
 
-# Run server in HTTP mode
+# Run server in HTTP mode for web/API access
 CMD ["python", "server.py", "--port", "8000", "--host", "0.0.0.0"]
 ```
 
