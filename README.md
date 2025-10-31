@@ -8,6 +8,66 @@
 
 **Build MCP servers for Claude Desktop in 30 seconds.** The fastest, simplest way to create custom tools for LLMs using Python decorators.
 
+## What is this?
+
+The **Model Context Protocol (MCP)** is an open standard that enables AI assistants like Claude to securely connect to external data sources and tools. Think of it as a universal adapter that lets LLMs interact with your APIs, databases, file systems, and custom business logic.
+
+**ChukMCPServer** makes it trivially easy to build high-performance MCP servers in Python. Whether you're:
+- 🤖 **Building tools for Claude Desktop** - Add custom capabilities to your AI assistant
+- 🌐 **Creating APIs for LLM integrations** - Expose your services to any MCP-compatible client
+- ⚡ **Building production systems** - Deploy world-class performance (36,000+ RPS) with zero configuration
+- 🔐 **Integrating with OAuth services** - Built-in OAuth 2.1 support for LinkedIn, GitHub, etc.
+
+Just add a `@tool` decorator to any Python function and you're done. No complex setup, no boilerplate, no configuration files.
+
+---
+
+## 📚 Table of Contents
+
+- [Prerequisites & Compatibility](#-prerequisites--compatibility)
+- [Get Started in 30 Seconds](#-get-started-in-30-seconds)
+- [Why ChukMCPServer?](#-why-chukmcpserver)
+- [All Decorators Explained](#-all-decorators-explained)
+- [Building Real Tools](#-building-real-tools)
+- [OAuth & Authentication](#-oauth--authentication)
+- [HTTP Mode (For Web Apps)](#️-advanced-http-mode-for-web-apps)
+- [Testing Your Server](#-testing-your-server)
+- [Configuration & Logging](#️-configuration--logging)
+- [Performance Benchmarks](#-performance-benchmarks)
+- [Understanding Transport Modes](#-understanding-transport-modes)
+- [Project Scaffolder](#️-project-scaffolder)
+- [More Examples](#-more-examples)
+- [API Reference](#-api-reference)
+- [Cloud Deployment](#️-cloud-deployment)
+- [Docker Support](#-docker-support)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
+- [Release Notes](#-release-notes)
+- [License](#-license)
+
+---
+
+## 📋 Prerequisites & Compatibility
+
+**Requirements:**
+- **Python 3.11 or higher** (tested on 3.11, 3.12, 3.13)
+- **uv** (recommended) or pip for package management
+- **Operating Systems:** macOS, Linux, Windows (WSL recommended)
+
+**Claude Desktop Compatibility:**
+- Tested with Claude Desktop 1.0+
+- Uses standard MCP protocol (stdio transport)
+- Works with any MCP-compatible client
+
+**Installation:**
+```bash
+# Install uv (if not already installed) - recommended for speed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or use pip
+pip install chuk-mcp-server
+```
+
 ---
 
 ## 🚀 Get Started in 30 Seconds
@@ -17,14 +77,17 @@
 Create a complete MCP server project with one command:
 
 ```bash
-# Create a new project
+# Prerequisites: Install uv if not already installed
+# curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a new project (no installation needed with uvx!)
 uvx chuk-mcp-server init my-awesome-server
 
 # Set it up
 cd my-awesome-server
 uv sync
 
-# Run it
+# Run it (defaults to stdio mode for Claude Desktop)
 uv run python server.py
 ```
 
@@ -378,6 +441,181 @@ if __name__ == "__main__":
 
 ---
 
+## 🌐 Real-World Use Cases
+
+### Use Case 1: Web Application Integration
+
+Build an MCP server that integrates with your web application backend:
+
+```python
+# app_integration_server.py
+from chuk_mcp_server import tool, resource, run
+import httpx
+import os
+
+@tool
+async def create_user(username: str, email: str) -> dict:
+    """Create a new user in the application database."""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{os.getenv('APP_API_URL')}/api/users",
+            json={"username": username, "email": email},
+            headers={"Authorization": f"Bearer {os.getenv('API_TOKEN')}"}
+        )
+        return response.json()
+
+@tool
+async def get_analytics(date_range: str = "7d") -> dict:
+    """Fetch application analytics for the specified date range."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{os.getenv('APP_API_URL')}/api/analytics",
+            params={"range": date_range},
+            headers={"Authorization": f"Bearer {os.getenv('API_TOKEN')}"}
+        )
+        return response.json()
+
+@resource("config://app-settings")
+def app_settings() -> dict:
+    """Get current application configuration."""
+    return {
+        "environment": os.getenv("ENV", "production"),
+        "api_url": os.getenv("APP_API_URL"),
+        "features": ["analytics", "user_management", "reporting"]
+    }
+
+if __name__ == "__main__":
+    # Run in HTTP mode for web integration
+    run(host="0.0.0.0", port=8000, log_level="info")
+```
+
+**Deploy with Docker:**
+```bash
+docker build -t my-app-mcp .
+docker run -p 8000:8000 \
+  -e APP_API_URL=https://api.myapp.com \
+  -e API_TOKEN=secret \
+  my-app-mcp
+```
+
+### Use Case 2: Data Pipeline & ETL
+
+Create tools for data processing workflows:
+
+```python
+# data_pipeline_server.py
+from chuk_mcp_server import tool, run
+import pandas as pd
+from pathlib import Path
+
+@tool
+async def process_csv(filepath: str, operation: str = "summary") -> dict:
+    """Process a CSV file and return insights."""
+    df = pd.read_csv(filepath)
+
+    if operation == "summary":
+        return {
+            "rows": len(df),
+            "columns": list(df.columns),
+            "dtypes": df.dtypes.astype(str).to_dict(),
+            "missing": df.isnull().sum().to_dict()
+        }
+    elif operation == "describe":
+        return df.describe().to_dict()
+    else:
+        return {"error": f"Unknown operation: {operation}"}
+
+@tool
+def transform_data(input_path: str, output_path: str, operation: str) -> str:
+    """Transform data file (deduplicate, filter, aggregate)."""
+    df = pd.read_csv(input_path)
+
+    if operation == "deduplicate":
+        df = df.drop_duplicates()
+    elif operation == "filter_nulls":
+        df = df.dropna()
+
+    df.to_csv(output_path, index=False)
+    return f"Processed {len(df)} rows to {output_path}"
+
+if __name__ == "__main__":
+    run()  # Stdio mode for command-line usage
+```
+
+### Use Case 3: DevOps & Infrastructure Management
+
+Build tools for managing infrastructure:
+
+```python
+# devops_tools_server.py
+from chuk_mcp_server import tool, run
+import subprocess
+import json
+
+@tool
+def check_service_status(service_name: str) -> dict:
+    """Check if a systemd service is running."""
+    result = subprocess.run(
+        ["systemctl", "status", service_name],
+        capture_output=True,
+        text=True
+    )
+    return {
+        "service": service_name,
+        "running": result.returncode == 0,
+        "output": result.stdout[:200]  # First 200 chars
+    }
+
+@tool
+def deploy_container(image: str, port: int, env_vars: dict = {}) -> dict:
+    """Deploy a Docker container with specified configuration."""
+    env_args = [f"-e {k}={v}" for k, v in env_vars.items()]
+    cmd = [
+        "docker", "run", "-d",
+        "-p", f"{port}:{port}",
+        *env_args,
+        image
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    return {
+        "success": result.returncode == 0,
+        "container_id": result.stdout.strip() if result.returncode == 0 else None,
+        "error": result.stderr if result.returncode != 0 else None
+    }
+
+@tool
+async def get_cluster_health() -> dict:
+    """Check Kubernetes cluster health."""
+    result = subprocess.run(
+        ["kubectl", "get", "nodes", "-o", "json"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0:
+        nodes = json.loads(result.stdout)
+        return {
+            "total_nodes": len(nodes.get("items", [])),
+            "healthy": sum(1 for n in nodes.get("items", [])
+                          if n["status"]["conditions"][-1]["type"] == "Ready")
+        }
+    return {"error": "Failed to get cluster status"}
+
+if __name__ == "__main__":
+    # HTTP mode for dashboard integration
+    run(port=8000, host="0.0.0.0")
+```
+
+**What makes these real-world examples?**
+- ✅ Async operations for I/O-bound tasks
+- ✅ Environment variable configuration
+- ✅ Error handling and validation
+- ✅ Integration with external systems (APIs, databases, containers)
+- ✅ Both stdio and HTTP transport modes
+- ✅ Production deployment considerations
+
+---
+
 ## 🔐 OAuth & Authentication
 
 ChukMCPServer provides full OAuth 2.1 support with PKCE for building authenticated MCP servers. Perfect for integrating with external APIs like LinkedIn, GitHub, Google, etc.
@@ -660,6 +898,37 @@ curl http://localhost:8000/health
 ---
 
 ## ⚙️ Configuration & Logging
+
+### Quick Reference: Configuration Options
+
+| Option | Method | Values/Example | Description |
+|--------|--------|----------------|-------------|
+| **Log Level** | `run(log_level=...)` | `debug`, `info`, `warning` (default), `error` | Control logging verbosity |
+| **Transport** | `run(transport=...)` | `stdio` (default), `http` | Communication mode |
+| **Host** | `run(host=...)` | `"0.0.0.0"`, `"localhost"` | HTTP server bind address |
+| **Port** | `run(port=...)` | `8000`, `8001`, etc. | HTTP server port |
+| **Workers** | Auto-detected | Based on CPU cores | Async worker threads |
+| **Max Connections** | Auto-detected | `1000` (default) | Maximum concurrent connections |
+| **Environment Variable** | `MCP_LOG_LEVEL` | `warning`, `debug`, etc. | Alternative to `log_level` parameter |
+| **OAuth Support** | `post_register_hook` | OAuth middleware function | Enable OAuth 2.1 authentication |
+
+**Common Configurations:**
+
+```python
+# Claude Desktop (stdio, default)
+run()  # or run(transport="stdio")
+
+# Web API (HTTP, production)
+run(host="0.0.0.0", port=8000, log_level="warning")
+
+# Development (HTTP, verbose)
+run(port=8000, log_level="debug")
+
+# Environment variable alternative
+# MCP_LOG_LEVEL=debug python server.py
+```
+
+---
 
 ### Controlling Log Levels
 
@@ -1525,8 +1794,47 @@ from chuk_mcp_server import (
 
 ## 📚 API Reference
 
-### Tools
-Define functions that Claude can call:
+### Core Decorators
+
+| Decorator | Purpose | Required Parameters | Optional Parameters | Example |
+|-----------|---------|-------------------|---------------------|---------|
+| `@tool` | Define a callable tool/function for Claude | None | `name`, `description` | `@tool`<br/>`def add(a: int, b: int) -> int:` |
+| `@resource(uri)` | Define a data resource Claude can read | `uri` (e.g., `"config://app"`) | `name`, `description`, `mime_type` | `@resource("config://app")`<br/>`def get_config() -> dict:` |
+| `@prompt` | Define a reusable prompt template | None | `name`, `description` | `@prompt`<br/>`def review(code: str) -> str:` |
+| `@requires_auth()` | Mark a tool as requiring OAuth | None | `scopes` (list of strings) | `@tool`<br/>`@requires_auth()`<br/>`async def publish(...):` |
+
+### Main Functions
+
+| Function | Purpose | Parameters | Example |
+|----------|---------|------------|---------|
+| `run()` | Start the MCP server | `transport` ("stdio"/"http"), `host`, `port`, `log_level`, `post_register_hook` | `run()` or `run(port=8000)` |
+| `ChukMCPServer()` | Create server instance (class-based API) | `name` (optional) | `mcp = ChukMCPServer("my-server")` |
+
+### Context Functions
+
+| Function | Purpose | Returns | Use Case |
+|----------|---------|---------|----------|
+| `get_session_id()` | Get current MCP session ID | `str \| None` | Track requests per session |
+| `get_user_id()` | Get current OAuth user ID | `str \| None` | Check if user is authenticated |
+| `require_user_id()` | Get user ID or raise error | `str` (raises `PermissionError` if not authenticated) | Enforce authentication |
+| `set_session_id(id)` | Set session context | None | Testing, manual control |
+| `set_user_id(id)` | Set user context | None | Testing, manual control |
+| `RequestContext()` | Context manager for request context | Context manager | Testing, background tasks |
+
+### Cloud Helpers
+
+| Function | Purpose | Returns | Example |
+|----------|---------|---------|---------|
+| `is_cloud()` | Check if running in any cloud environment | `bool` | `if is_cloud(): ...` |
+| `is_gcf()` | Check if running in Google Cloud Functions | `bool` | `if is_gcf(): ...` |
+| `is_lambda()` | Check if running in AWS Lambda | `bool` | `if is_lambda(): ...` |
+| `is_azure()` | Check if running in Azure Functions | `bool` | `if is_azure(): ...` |
+| `get_deployment_info()` | Get detailed deployment information | `dict` | `info = get_deployment_info()` |
+| `get_cloud_handler()` | Get cloud-specific handler | Handler function | `handler = get_cloud_handler()` |
+
+### Quick Examples
+
+**Basic Tool:**
 ```python
 from chuk_mcp_server import tool
 
@@ -1536,8 +1844,7 @@ def my_function(param: str, count: int = 1) -> str:
     return f"Result: {param} x {count}"
 ```
 
-### Resources
-Provide data that Claude can read:
+**Resource:**
 ```python
 from chuk_mcp_server import resource
 
@@ -1547,10 +1854,10 @@ def get_info() -> dict:
     return {"key": "value"}
 ```
 
-### Async Support
-Both tools and resources can be async:
+**Async Support:**
 ```python
 import httpx
+from chuk_mcp_server import tool
 
 @tool
 async def fetch_data(url: str) -> dict:
@@ -1560,35 +1867,226 @@ async def fetch_data(url: str) -> dict:
         return response.json()
 ```
 
+**Full Import Reference:**
+```python
+# Decorators
+from chuk_mcp_server import (
+    tool,              # Define tools
+    resource,          # Define resources
+    prompt,            # Define prompts
+    requires_auth,     # Require OAuth
+    run,               # Run global server
+)
+
+# Server class
+from chuk_mcp_server import ChukMCPServer
+
+# Context management
+from chuk_mcp_server import (
+    get_session_id, get_user_id, require_user_id,
+    set_session_id, set_user_id, RequestContext,
+)
+
+# Cloud deployment
+from chuk_mcp_server import (
+    is_cloud, is_gcf, is_lambda, is_azure,
+    get_deployment_info, get_cloud_handler,
+)
+
+# OAuth (server-based only)
+from chuk_mcp_server.oauth import (
+    OAuthMiddleware, BaseOAuthProvider, TokenStore,
+)
+```
+
 ---
 
-## 🔍 Troubleshooting
+## 🔍 Troubleshooting & FAQ
 
-### Claude Desktop not showing tools?
-1. **Check your config path is absolute**: `/full/path/to/my_server.py` not `~/my_server.py`
-2. **Test your server manually**:
+### Common Issues
+
+#### ❓ Claude Desktop not showing my tools?
+
+**Symptoms:** Tools don't appear in Claude Desktop after configuration.
+
+**Solutions:**
+1. **Use absolute paths** (not relative or `~`):
+   ```json
+   "command": "uv",
+   "args": ["--directory", "/Users/yourname/projects/my-server", "run", "server.py"]
+   ```
+
+2. **Test server manually**:
    ```bash
    echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | uv run python my_server.py
+   # Should output JSON with your tools
    ```
-3. **Check Claude Desktop logs** (Help → Show Logs in Claude Desktop)
-4. **Restart Claude Desktop** after changing the config
 
-### Port already in use?
+3. **Check Claude Desktop logs** (Help → Show Logs in Claude Desktop)
+4. **Verify your server runs in stdio mode** (default behavior)
+5. **Restart Claude Desktop** after config changes
+6. **Ensure uv is installed**: `which uv` should show a path
+
+#### ❓ Port already in use error?
+
+**Error:** `OSError: [Errno 48] Address already in use`
+
+**Solutions:**
 ```bash
-# Use a different port
+# Option 1: Use a different port
 uv run python server.py --port 8001
 
-# Or find what's using it
-lsof -i :8000  # macOS/Linux
+# Option 2: Find and kill the process using the port
+lsof -i :8000         # macOS/Linux - shows process using port 8000
+kill -9 <PID>         # Kill the process
+
+# Windows
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
 ```
 
-### Need to see what's happening?
-The framework uses stderr for logs (stdout is reserved for MCP protocol):
+#### ❓ Server running but no response?
+
+**Check transport mode:**
 ```python
-import sys
-import logging
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+# For Claude Desktop - use stdio (default)
+run()  # or run(transport="stdio")
+
+# For web apps - use HTTP
+run(transport="http", port=8000)
 ```
+
+**Test HTTP mode:**
+```bash
+curl http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+#### ❓ ModuleNotFoundError when importing?
+
+**Error:** `ModuleNotFoundError: No module named 'chuk_mcp_server'`
+
+**Solutions:**
+```bash
+# Ensure package is installed
+uv pip install chuk-mcp-server
+
+# Or install from source
+cd chuk-mcp-server
+uv pip install -e .
+
+# Check installation
+python -c "import chuk_mcp_server; print(chuk_mcp_server.__version__)"
+```
+
+#### ❓ Tools not receiving correct parameters?
+
+**Issue:** Type mismatches or missing parameters.
+
+**Solution:** Add proper type hints:
+```python
+@tool
+def my_tool(name: str, count: int = 1) -> dict:  # ✅ Good - type hints
+    """Detailed description of what this does."""
+    return {"name": name, "count": count}
+
+# Not recommended:
+@tool
+def bad_tool(name, count):  # ❌ No type hints
+    return {"name": name, "count": count}
+```
+
+#### ❓ OAuth authentication not working?
+
+**Check these:**
+1. **Verify OAuth middleware is registered**:
+   ```python
+   mcp.run(post_register_hook=setup_oauth)
+   ```
+
+2. **Check environment variables**:
+   ```bash
+   export SESSION_PROVIDER=redis
+   export SESSION_REDIS_URL=redis://localhost:6379/0
+   ```
+
+3. **Verify token injection** in your tool:
+   ```python
+   @tool
+   @requires_auth()
+   async def my_tool(_external_access_token: str | None = None) -> dict:
+       print(f"Token: {_external_access_token}")  # Debug
+   ```
+
+### Debugging Tips
+
+#### Enable Debug Logging
+
+```python
+# In your server code
+run(log_level="debug")
+
+# Or via environment variable
+MCP_LOG_LEVEL=debug python server.py
+```
+
+#### Test Individual Components
+
+```python
+# Test a tool directly
+from my_server import my_tool
+result = my_tool("test")
+print(result)
+
+# Test with async tools
+import asyncio
+result = asyncio.run(my_async_tool("test"))
+```
+
+#### Check Server Health
+
+```bash
+# HTTP mode - health endpoint
+curl http://localhost:8000/health
+
+# stdio mode - list tools
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python server.py
+```
+
+### Performance Issues
+
+#### ❓ Server is slow under load?
+
+**Optimize for production:**
+```python
+# Use minimal logging
+run(log_level="warning")  # or "error"
+
+# Ensure async tools for I/O
+@tool
+async def fetch_data(url: str) -> dict:  # ✅ Async for I/O
+    async with httpx.AsyncClient() as client:
+        return await client.get(url)
+```
+
+**Check concurrency limits:**
+- Default: 1000 concurrent connections
+- Adjust if needed (auto-detected based on CPU cores)
+
+### Getting Help
+
+**Still stuck?**
+
+1. 📖 **Check the docs**: [Full Documentation](https://github.com/chrishayuk/chuk-mcp-server/docs)
+2. 🔍 **Search issues**: [GitHub Issues](https://github.com/chrishayuk/chuk-mcp-server/issues)
+3. 💬 **Ask questions**: [GitHub Discussions](https://github.com/chrishayuk/chuk-mcp-server/discussions)
+4. 🐛 **Report bugs**: Include:
+   - Python version (`python --version`)
+   - ChukMCPServer version (`pip show chuk-mcp-server`)
+   - OS and architecture
+   - Minimal reproducible example
+   - Full error traceback
 
 ---
 
@@ -1848,23 +2346,170 @@ uv run pytest
 
 ## 🤝 Contributing
 
-Contributions welcome!
+We welcome contributions! Whether it's bug reports, feature requests, documentation improvements, or code contributions.
+
+### Getting Started
 
 ```bash
-# Setup development environment
-git clone https://github.com/chrishayuk/chuk-mcp-server
+# 1. Fork and clone the repository
+git clone https://github.com/YOUR_USERNAME/chuk-mcp-server
 cd chuk-mcp-server
-uv sync --dev
 
-# Run tests
-uv run pytest
+# 2. Set up development environment
+uv sync --dev  # Install all dependencies including dev tools
 
-# Run with coverage
-uv run pytest --cov
+# 3. Create a feature branch
+git checkout -b feature/my-awesome-feature
+```
+
+### Development Workflow
+
+**Before submitting a PR, ensure all checks pass:**
+
+```bash
+# Run all quality checks (recommended)
+make check  # Runs lint + typecheck + tests
+
+# Individual checks
+make lint       # Run ruff linter
+make format     # Format code with ruff
+make typecheck  # Run mypy type checking
+make test       # Run tests
+make test-cov   # Run tests with coverage report
+```
+
+### Contribution Guidelines
+
+1. **Code Quality Standards:**
+   - All code must pass `ruff check` (linting)
+   - All code must pass `mypy src` (type checking)
+   - Maintain or improve test coverage (currently 86%)
+   - Use `ruff format` for consistent formatting
+
+2. **Testing Requirements:**
+   - Add tests for new features
+   - Ensure existing tests pass: `uv run pytest`
+   - Aim for >80% code coverage
+   - Test both stdio and HTTP transport modes
+
+3. **Documentation:**
+   - Update README.md for new features
+   - Add docstrings to all public functions
+   - Include type hints for all parameters and return values
+   - Add examples for new functionality
+
+4. **Commit Messages:**
+   - Use clear, descriptive commit messages
+   - Reference issue numbers when applicable
+   - Follow conventional commits format (optional but appreciated)
+
+5. **Pull Request Process:**
+   - Ensure all CI checks pass
+   - Provide a clear description of changes
+   - Link related issues
+   - Request review from maintainers
+   - Be responsive to feedback
+
+### Development Tools
+
+```bash
+# Quick development cycle
+uv run pytest -k "test_name"  # Run specific test
+uv run pytest --lf            # Run last failed tests
+uv run pytest -x              # Stop on first failure
+
+# Code formatting
+uv run ruff format .          # Format all files
+uv run ruff check --fix .     # Auto-fix linting issues
 
 # Type checking
-uv run mypy src
+uv run mypy src --strict      # Strict type checking
 ```
+
+### Reporting Issues
+
+**Before opening an issue:**
+- Check if the issue already exists
+- Include Python version, OS, and ChukMCPServer version
+- Provide minimal reproducible example
+- Include relevant error messages and stack traces
+
+**Use issue labels:**
+- `bug` - Something isn't working
+- `feature` - New feature request
+- `documentation` - Documentation improvements
+- `question` - Questions about usage
+
+### Code of Conduct
+
+Please be respectful and constructive. We're all here to build something great together.
+
+### Need Help?
+
+- 📖 Check the [Documentation](https://github.com/chrishayuk/chuk-mcp-server/docs)
+- 💬 Open a [Discussion](https://github.com/chrishayuk/chuk-mcp-server/discussions)
+- 🐛 Report bugs via [Issues](https://github.com/chrishayuk/chuk-mcp-server/issues)
+- 📧 Contact maintainer: [@chrishayuk](https://github.com/chrishayuk)
+
+---
+
+## 📦 Release Notes
+
+### Current Version: 0.4.4
+
+**Latest Features:**
+- ✅ 885 tests passing with 86% coverage
+- ⚡ World-class performance: 36,000+ RPS
+- 🔐 Full OAuth 2.1 support with PKCE
+- 🧠 Zero-configuration smart defaults
+- 🌐 Dual transport: stdio (Claude Desktop) + HTTP (Web APIs)
+- ☁️ Auto-detection for GCP, AWS, Azure cloud platforms
+- 📝 Built-in prompts support
+
+**Recent Changes:**
+
+#### v0.4.4 (Current)
+- Added async tool and resource support for non-blocking I/O
+- Improved HTTP mode performance (36,348 RPS peak)
+- Enhanced OAuth middleware with token refresh
+- Added context management (`get_user_id()`, `get_session_id()`)
+- Better error messages and debugging support
+- Comprehensive documentation updates
+
+#### v0.4.3
+- Fixed logging configuration issues
+- Added environment variable support for all config options
+- Improved stdio transport reliability
+- Updated dependencies for security
+
+#### v0.4.2
+- Added project scaffolder (`init` command)
+- Docker and docker-compose support
+- Cloud platform auto-detection
+- OAuth 2.1 PKCE implementation
+
+#### v0.4.1
+- Initial public release
+- Core MCP protocol implementation
+- Basic tool and resource decorators
+- stdio and HTTP transports
+
+**Roadmap:**
+
+- 🔜 Built-in rate limiting and throttling
+- 🔜 WebSocket transport support
+- 🔜 Prometheus metrics export
+- 🔜 Additional OAuth providers (GitHub, Google, Microsoft)
+- 🔜 Plugin system for extensions
+
+**Versioning:**
+
+We follow [Semantic Versioning](https://semver.org/):
+- **Major** (X.0.0): Breaking API changes
+- **Minor** (0.X.0): New features, backwards compatible
+- **Patch** (0.0.X): Bug fixes, improvements
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release history (coming soon).
 
 ---
 

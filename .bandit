@@ -6,7 +6,12 @@
 # require binding to 0.0.0.0 to accept traffic from the platform's load balancer.
 # This is a standard and secure practice for containerized and serverless deployments.
 
-skips: ['B104']
+# B608: hardcoded_sql_expressions
+# Justification: False positive on README.md template string in cli.py scaffolder.
+# The flagged f-string contains JSON examples and markdown formatting, not SQL.
+# This is a documentation template, not a SQL query.
+
+skips: ['B104', 'B608']
 exclude_dirs: ['tests', 'examples', 'benchmarks']
 confidence: medium
 severity: medium
