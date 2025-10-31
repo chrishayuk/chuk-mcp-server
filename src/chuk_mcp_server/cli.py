@@ -84,11 +84,22 @@ def scaffold_project(project_name: str, directory: str | None = None) -> None:
 {project_name} - MCP Server
 
 A custom MCP server built with ChukMCPServer.
+
+Features demonstrated:
+- Tools: Actions Claude can perform
+- Resources: Data Claude can read
+- Prompts: Reusable prompt templates
+- Async support: For I/O operations
+- Context: Session and user tracking (optional)
+- OAuth: Authentication support (optional)
 """
 
-import sys
-from chuk_mcp_server import tool, resource, run
+from chuk_mcp_server import tool, resource, prompt, run
 
+
+# ============================================================================
+# Tools - Actions Claude Can Perform
+# ============================================================================
 
 @tool
 def hello(name: str = "World") -> str:
@@ -117,14 +128,105 @@ def calculate(expression: str) -> str:
         return f"Error: {{str(e)}}"
 
 
+# Example async tool (commented out - uncomment to use)
+# @tool
+# async def fetch_data(url: str) -> dict:
+#     """Fetch data from a URL asynchronously."""
+#     import httpx
+#     async with httpx.AsyncClient() as client:
+#         response = await client.get(url)
+#         return {{"status": response.status_code, "data": response.json()}}
+
+
+# ============================================================================
+# Resources - Data Claude Can Read
+# ============================================================================
+
 @resource("config://info")
 def server_info() -> dict:
     """Get server information."""
     return {{
         "name": "{project_name}",
         "version": "0.1.0",
-        "description": "Custom MCP server"
+        "description": "Custom MCP server built with ChukMCPServer"
     }}
+
+
+@resource("config://capabilities")
+def server_capabilities() -> dict:
+    """Get server capabilities and features."""
+    return {{
+        "features": ["tools", "resources", "prompts"],
+        "transport": "stdio/http",
+        "async_support": True,
+        "oauth_support": False,  # Set to True if using OAuth
+    }}
+
+
+# ============================================================================
+# Prompts - Reusable Prompt Templates
+# ============================================================================
+
+@prompt
+def code_review(code: str, language: str = "python") -> str:
+    """Generate a code review prompt."""
+    return f"""Please review this {{language}} code:
+
+```{{language}}
+{{code}}
+```
+
+Provide feedback on:
+1. Code quality and readability
+2. Potential bugs or issues
+3. Best practices
+4. Performance improvements
+5. Security considerations
+"""
+
+
+@prompt
+def explain_code(code: str, language: str = "python") -> str:
+    """Generate a prompt to explain code."""
+    return f"""Please explain what this {{language}} code does:
+
+```{{language}}
+{{code}}
+```
+
+Include:
+- Overall purpose
+- Step-by-step breakdown
+- Key concepts used
+- Potential use cases
+"""
+
+
+# ============================================================================
+# OAuth & Context Example (commented out - uncomment to use)
+# ============================================================================
+
+# from chuk_mcp_server import requires_auth, get_user_id
+#
+# @tool
+# @requires_auth()
+# async def create_user_resource(
+#     name: str,
+#     _external_access_token: str | None = None
+# ) -> dict:
+#     """Create a user-specific resource (requires OAuth)."""
+#     # Get authenticated user ID
+#     from chuk_mcp_server import require_user_id
+#     user_id = require_user_id()
+#
+#     # Use the access token to call external API
+#     # headers = {{"Authorization": f"Bearer {{_external_access_token}}"}}
+#
+#     return {{
+#         "created": name,
+#         "owner": user_id,
+#         "status": "success"
+#     }}
 
 
 if __name__ == "__main__":
@@ -326,6 +428,41 @@ Perfect for deploying to cloud platforms like AWS, GCP, Azure, or Kubernetes!
 ## Available Resources
 
 - **config://info**: Get server information
+- **config://capabilities**: Get server capabilities and features
+
+## Available Prompts
+
+- **code_review**: Generate a code review prompt for any language
+- **explain_code**: Generate a prompt to explain code
+
+## Features
+
+This scaffolded server demonstrates:
+
+- ✅ **Tools**: Sync and async functions Claude can call
+- ✅ **Resources**: Static and dynamic data Claude can read
+- ✅ **Prompts**: Reusable prompt templates
+- ✅ **Type Safety**: Automatic schema generation from type hints
+- ✅ **Dual Transport**: STDIO for Claude Desktop, HTTP for web/APIs
+- ⚠️ **OAuth** (commented): Authentication example included (uncomment to use)
+- ⚠️ **Context** (commented): Session and user tracking example (uncomment to use)
+
+### Adding OAuth Authentication
+
+To add OAuth support:
+
+1. Uncomment the OAuth example in `server.py`
+2. Implement your OAuth provider (see [OAuth docs](https://github.com/chrishayuk/chuk-mcp-server/blob/main/docs/OAUTH.md))
+3. Update `server_capabilities()` to set `"oauth_support": True`
+
+### Using Context Management
+
+To use context management (sessions, user tracking):
+
+1. Uncomment the context example in `server.py`
+2. Use `get_user_id()` to check authentication (optional)
+3. Use `require_user_id()` to enforce authentication (raises error if not authenticated)
+4. Use `get_session_id()` to track MCP sessions
 
 ## Development
 
@@ -362,26 +499,50 @@ python server.py --transport=http
 
 ## Customization
 
-Edit `server.py` to add your own tools and resources:
+Edit `server.py` to add your own tools, resources, and prompts:
 
 ```python
-from chuk_mcp_server import tool, resource, run
+from chuk_mcp_server import tool, resource, prompt, run
 
+# Add your custom tool
 @tool
 def my_custom_tool(param: str) -> str:
     """Your custom tool description."""
     return f"Result: {{param}}"
 
+# Add your custom resource
 @resource("custom://data")
 def my_resource() -> dict:
     """Your custom resource."""
     return {{"data": "value"}}
 
+# Add your custom prompt
+@prompt
+def my_prompt_template(topic: str) -> str:
+    """Custom prompt template."""
+    return f"Please write about: {{topic}}"
+
+# Add async tools for I/O operations
+@tool
+async def fetch_api(url: str) -> dict:
+    """Fetch data from API asynchronously."""
+    import httpx
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
+
 if __name__ == "__main__":
     run(transport="stdio")  # or just run() for auto-detection
 ```
 
-See the [ChukMCPServer documentation](https://github.com/chrishayuk/chuk-mcp-server) for more examples and advanced features.
+### Advanced Features
+
+For OAuth authentication, context management, and more advanced features, see:
+
+- [ChukMCPServer Documentation](https://github.com/chrishayuk/chuk-mcp-server)
+- [OAuth Guide](https://github.com/chrishayuk/chuk-mcp-server/blob/main/docs/OAUTH.md)
+- [Context Architecture](https://github.com/chrishayuk/chuk-mcp-server/blob/main/docs/CONTEXT_ARCHITECTURE.md)
+- [Example: LinkedIn OAuth Integration](https://github.com/chrishayuk/chuk-mcp-linkedin)
 '''
 
     readme_file = project_dir / "README.md"

@@ -329,18 +329,14 @@ class TestHTTPServer:
         mock_uvicorn.run = Mock()
 
         # Mock uvloop as available
-        with patch("builtins.print") as mock_print:
-            with patch("builtins.__import__") as mock_import:
-                # Make uvloop import succeed
-                mock_import.return_value = Mock()
+        with patch("builtins.__import__") as mock_import:
+            # Make uvloop import succeed
+            mock_import.return_value = Mock()
 
-                server.run()
+            server.run()
 
-                config = mock_uvicorn.run.call_args[1]
-                assert config["loop"] == "uvloop"
-
-                # Should have printed uvloop availability
-                mock_print.assert_any_call("✅ uvloop available and forced")
+            config = mock_uvicorn.run.call_args[1]
+            assert config["loop"] == "uvloop"
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -372,15 +368,11 @@ class TestHTTPServer:
                 raise ImportError("uvloop not available")
             return original_import(name, *args, **kwargs)
 
-        with patch("builtins.print") as mock_print:
-            with patch("builtins.__import__", side_effect=mock_import):
-                server.run()
+        with patch("builtins.__import__", side_effect=mock_import):
+            server.run()
 
-                config = mock_uvicorn.run.call_args[1]
-                assert "loop" not in config
-
-                # Should have printed uvloop unavailability
-                mock_print.assert_any_call("❌ uvloop not available - performance will be limited")
+            config = mock_uvicorn.run.call_args[1]
+            assert "loop" not in config
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -404,14 +396,10 @@ class TestHTTPServer:
 
         mock_uvicorn.run = Mock()
 
-        with patch("builtins.print") as mock_print:
-            server.run()
+        server.run()
 
-            config = mock_uvicorn.run.call_args[1]
-            assert config["http"] == "httptools"
-
-            # Should have printed httptools availability
-            mock_print.assert_any_call("✅ httptools available and forced")
+        config = mock_uvicorn.run.call_args[1]
+        assert config["http"] == "httptools"
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")
@@ -443,15 +431,11 @@ class TestHTTPServer:
                 raise ImportError("httptools not available")
             return original_import(name, *args, **kwargs)
 
-        with patch("builtins.print") as mock_print:
-            with patch("builtins.__import__", side_effect=mock_import):
-                server.run()
+        with patch("builtins.__import__", side_effect=mock_import):
+            server.run()
 
-                config = mock_uvicorn.run.call_args[1]
-                assert "http" not in config
-
-                # Should have printed httptools unavailability
-                mock_print.assert_any_call("❌ httptools not available - performance will be limited")
+            config = mock_uvicorn.run.call_args[1]
+            assert "http" not in config
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")

@@ -36,9 +36,21 @@ def internal_error_response() -> Response:
 class HTTPServer:
     """HTTP server optimized to break through performance bottlenecks."""
 
-    def __init__(self, protocol_handler: MCPProtocolHandler):
+    def __init__(self, protocol_handler: MCPProtocolHandler, post_register_hook=None):
+        """
+        Initialize HTTP server.
+
+        Args:
+            protocol_handler: MCP protocol handler
+            post_register_hook: Optional callback to register additional endpoints after default endpoints are registered
+        """
         self.protocol = protocol_handler
         self._register_endpoints()
+
+        # Call post-register hook if provided (for custom endpoints like OAuth)
+        if post_register_hook:
+            post_register_hook()
+
         self.app = self._create_app()
         logger.info("🚀 HTTP server initialized with bottleneck fixes")
 
@@ -131,21 +143,14 @@ class HTTPServer:
         # Just determine the uvicorn log level based on the passed log_level
         import os
 
+        # If debug is explicitly set to True, override log_level
+        if debug is True:
+            log_level = "debug"
+
         # Handle log_level - ensure it's a string
         default_level = log_level if isinstance(log_level, str) else "warning"
-        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level if not debug else "debug").upper()
+        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level).upper()
 
-        # Show startup info (always, using print to bypass logging)
-        import sys
-
-        print("🚀 ChukMCPServer - BOTTLENECK FIXES ACTIVE")
-        print("=" * 60)
-        print(f"Host: {host}:{port}")
-        print(f"App Log Level: {app_log_level}")
-        print("")
-        sys.stdout.flush()  # Ensure output appears before uvicorn starts
-
-        # PERFORMANCE-FOCUSED uvicorn configuration
         # Set uvicorn log level based on app log level
         if app_log_level == "DEBUG":
             uvicorn_log_level = "debug"
@@ -154,6 +159,7 @@ class HTTPServer:
         else:
             uvicorn_log_level = "warning"
 
+        # PERFORMANCE-FOCUSED uvicorn configuration
         uvicorn_config = {
             "app": self.app,
             "host": host,
@@ -171,49 +177,20 @@ class HTTPServer:
             "backlog": 4096,  # Increase from 2048
             "limit_concurrency": 2000,  # Increase from 1000
             "timeout_keep_alive": 60,  # Longer keep-alive
-            # REMOVE request limit that was causing restarts
-            # "limit_max_requests": 10000,  # REMOVED
             # Buffer optimizations
             "h11_max_incomplete_event_size": 16384,  # Increase buffer
         }
 
-        # Verify performance libraries are available
+        # Verify performance libraries are available (silently)
         try:
             import uvloop  # noqa: F401
-
-            print("✅ uvloop available and forced")
         except ImportError:
-            print("❌ uvloop not available - performance will be limited")
             uvicorn_config.pop("loop", None)
 
         try:
             import httptools  # noqa: F401
-
-            print("✅ httptools available and forced")
         except ImportError:
-            print("❌ httptools not available - performance will be limited")
             uvicorn_config.pop("http", None)
-
-        # No need for debug adjustments here - already handled above
-
-        # Show performance info (always, using print to bypass logging)
-        print("⚡ BOTTLENECK FIXES:")
-        print("  ✅ Minimal middleware stack (removed GZip)")
-        print("  ✅ Increased connection backlog (4096)")
-        print("  ✅ Increased concurrency limit (2000)")
-        print("  ✅ Removed request limit (no restarts)")
-        print("  ✅ Forced uvloop + httptools")
-        print("  ✅ Increased buffer sizes")
-        print("  ✅ Minimal logging overhead")
-        print("")
-
-        print("🎯 EXPECTED IMPROVEMENTS:")
-        print("  🚀 Ping: 6,000+ RPS (from 3,570)")
-        print("  🚀 Version: 6,000+ RPS (from 3,530)")
-        print("  🚀 Health: 6,000+ RPS (from 3,591)")
-        print("  🚀 Overall: 5,000+ RPS average")
-        print("=" * 60)
-        sys.stdout.flush()  # Ensure output appears before uvicorn starts
 
         try:
             uvicorn.run(**uvicorn_config)
@@ -225,6 +202,12 @@ class HTTPServer:
 
 
 # Factory function
-def create_server(protocol_handler: MCPProtocolHandler) -> HTTPServer:
-    """Create HTTP server with bottleneck fixes."""
-    return HTTPServer(protocol_handler)
+def create_server(protocol_handler: MCPProtocolHandler, post_register_hook=None) -> HTTPServer:
+    """
+    Create HTTP server with bottleneck fixes.
+
+    Args:
+        protocol_handler: MCP protocol handler
+        post_register_hook: Optional callback to register additional endpoints after default endpoints
+    """
+    return HTTPServer(protocol_handler, post_register_hook=post_register_hook)

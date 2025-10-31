@@ -4,6 +4,7 @@
 Simple decorators for tools and resources
 """
 
+import inspect
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
@@ -180,6 +181,68 @@ def prompt(
         return decorator(func)
     else:
         # @prompt() or @prompt(name="...") usage
+        return decorator
+
+
+# ============================================================================
+# Authorization Decorator
+# ============================================================================
+
+
+def requires_auth(scopes: list[str] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """
+    Decorator to mark a tool as requiring OAuth authorization.
+
+    The protocol handler will validate the OAuth token before executing
+    the tool and inject the external provider's access token.
+
+    Usage:
+        @requires_auth()
+        async def linkedin_publish(
+            visibility: str = "PUBLIC",
+            _external_access_token: Optional[str] = None,
+        ) -> str:
+            # Use _external_access_token to call external API
+            pass
+
+        @requires_auth(scopes=["posts.write", "profile.read"])
+        async def advanced_tool(_external_access_token: Optional[str] = None) -> str:
+            pass
+
+    Args:
+        scopes: Optional list of required OAuth scopes
+
+    Returns:
+        Decorator function
+    """
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        # Set authorization metadata on the function
+        func._requires_auth = True  # type: ignore[attr-defined]
+        func._auth_scopes = scopes  # type: ignore[attr-defined]
+
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Just pass through - actual auth check happens in protocol handler
+            if inspect.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+        # Copy metadata to wrapper
+        wrapper._requires_auth = True  # type: ignore[attr-defined]
+        wrapper._auth_scopes = scopes  # type: ignore[attr-defined]
+
+        return wrapper
+
+    # Handle both @requires_auth and @requires_auth() usage
+    if callable(scopes):
+        # @requires_auth usage (no parentheses)
+        func = scopes
+        scopes = None
+        return decorator(func)
+    else:
+        # @requires_auth() or @requires_auth(scopes=[...]) usage
         return decorator
 
 

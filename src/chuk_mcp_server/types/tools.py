@@ -32,6 +32,8 @@ class ToolHandler:
     parameters: list[ToolParameter]
     _cached_mcp_format: dict[str, Any] | None = None  # Cache the MCP format dict
     _cached_mcp_bytes: bytes | None = None  # 🚀 Cache orjson-serialized bytes
+    requires_auth: bool = False  # Whether this tool requires OAuth authorization
+    auth_scopes: list[str] | None = None  # Optional list of required scopes
 
     @classmethod
     def from_function(
@@ -41,12 +43,20 @@ class ToolHandler:
         tool_name = name or func.__name__
         tool_description = description or func.__doc__ or f"Execute {tool_name}"
 
+        # Check for authorization metadata (set by @requires_auth decorator)
+        requires_auth = getattr(func, "_requires_auth", False)
+        auth_scopes = getattr(func, "_auth_scopes", None)
+
         # Extract parameters from function signature
         sig = inspect.signature(func)
         parameters: list[ToolParameter] = []
 
         for param_name, param in sig.parameters.items():
             if param_name == "self":  # Skip self parameter for methods
+                continue
+
+            # Skip internal OAuth parameter (injected by protocol handler)
+            if param_name == "_external_access_token":
                 continue
 
             tool_param = ToolParameter.from_annotation(
@@ -80,6 +90,8 @@ class ToolHandler:
             parameters=parameters,
             _cached_mcp_format=None,  # Will be computed immediately
             _cached_mcp_bytes=None,  # Will be computed immediately
+            requires_auth=requires_auth,
+            auth_scopes=auth_scopes,
         )
 
         # Pre-compute and cache both formats during creation for maximum performance

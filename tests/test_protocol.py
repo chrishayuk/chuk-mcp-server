@@ -267,6 +267,7 @@ class TestMCPProtocolHandler:
 
         tool = AsyncMock(spec=ToolHandler)
         tool.name = "add"
+        tool.requires_auth = False  # Tool does not require OAuth
         tool.execute.return_value = {"result": 5}
         handler.register_tool(tool)
 
@@ -430,6 +431,7 @@ class TestMCPProtocolHandler:
         # Register a tool that will raise an error
         tool = AsyncMock(spec=ToolHandler)
         tool.name = "error_tool"
+        tool.requires_auth = False  # Tool does not require OAuth
         tool.execute.side_effect = Exception("Tool execution failed")
         handler.register_tool(tool)
 

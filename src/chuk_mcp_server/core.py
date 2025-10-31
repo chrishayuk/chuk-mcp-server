@@ -21,7 +21,7 @@ from .endpoint_registry import http_endpoint_registry
 from .http_server import create_server
 from .mcp_registry import mcp_registry
 from .protocol import MCPProtocolHandler
-from .transport.stdio_sync import StdioSyncTransport
+from .stdio_transport import StdioSyncTransport
 
 # Updated imports for clean types API
 from .types import (
@@ -367,7 +367,9 @@ class ChukMCPServer:
     # HTTP Endpoint Registration
     # ============================================================================
 
-    def endpoint(self, path: str, methods: list[str] = None, **kwargs):
+    def endpoint(
+        self, path: str, methods: list[str] | None = None, **kwargs: Any
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """
         Decorator to register a custom HTTP endpoint.
 
@@ -377,7 +379,7 @@ class ChukMCPServer:
                 return Response('{"data": "example"}')
         """
 
-        def decorator(handler: Callable):
+        def decorator(handler: Callable[..., Any]) -> Callable[..., Any]:
             http_endpoint_registry.register_endpoint(path, handler, methods=methods, **kwargs)
             logger.debug(f"Registered endpoint: {path}")
             return handler
@@ -568,6 +570,7 @@ class ChukMCPServer:
         debug: bool | None = None,
         stdio: bool | None = None,
         log_level: str = "warning",
+        post_register_hook=None,
     ):
         """
         Run the MCP server with modular smart defaults.
@@ -578,13 +581,18 @@ class ChukMCPServer:
             debug: Enable debug logging (uses smart default if None)
             stdio: Run in stdio mode instead of HTTP server (auto-detects if None)
             log_level: Logging level for application (debug, info, warning, error, critical)
+            post_register_hook: Optional callback to register additional endpoints after default endpoints
         """
         # Set logging level FIRST, before any other operations
         import os
 
+        # If debug is explicitly set to True, override log_level
+        if debug is True:
+            log_level = "debug"
+
         # Handle log_level - ensure it's a string
         default_level = log_level if isinstance(log_level, str) else "warning"
-        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level if not debug else "debug").upper()
+        app_log_level = os.getenv("MCP_LOG_LEVEL", default_level).upper()
 
         # Configure all loggers early
         logging.basicConfig(level=getattr(logging, app_log_level, logging.WARNING))
@@ -642,7 +650,7 @@ class ChukMCPServer:
 
             # Create HTTP server
             if self._server is None:
-                self._server = create_server(self.protocol)
+                self._server = create_server(self.protocol, post_register_hook=post_register_hook)
 
             # Run the server
             try:
