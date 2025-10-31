@@ -76,6 +76,28 @@ class MCPEndpoint:
         accept_header = request.headers.get("accept", "")
         session_id = request.headers.get("mcp-session-id")
 
+        # Extract OAuth token from Authorization header (case-insensitive)
+        auth_header = request.headers.get("authorization", "")
+        oauth_token = None
+
+        # Check for Bearer token (case-insensitive)
+        if auth_header.lower().startswith("bearer "):
+            # Find where "bearer " ends (handle any casing)
+            bearer_prefix_len = len("bearer ")
+            oauth_token = auth_header[bearer_prefix_len:]  # Remove first "Bearer " prefix
+
+            # Handle double-Bearer bug in some MCP clients (e.g., "Bearer Bearer token")
+            # This happens when clients incorrectly store "Bearer token" as the access_token value
+            if oauth_token.lower().startswith("bearer "):
+                logger.warning("⚠️  Double-Bearer prefix detected in Authorization header, stripping again")
+                oauth_token = oauth_token[len("bearer ") :]  # Strip second "Bearer " prefix
+
+            logger.info(
+                f"📋 Extracted OAuth token: {oauth_token[:16] if oauth_token else 'None'}... (original header: {auth_header[:30]}...)"
+            )
+        elif auth_header:
+            logger.warning(f"⚠️  Authorization header present but doesn't start with 'Bearer ': {auth_header[:30]}...")
+
         try:
             # Parse request body
             body = await request.body()
@@ -87,10 +109,10 @@ class MCPEndpoint:
             # Route based on Accept header
             if "text/event-stream" in accept_header:
                 # SSE streaming
-                return await self._handle_sse_request(request_data, session_id)
+                return await self._handle_sse_request(request_data, session_id, oauth_token)
             else:
                 # Regular JSON-RPC request
-                return await self._handle_json_request(request_data, session_id, method)
+                return await self._handle_json_request(request_data, session_id, method, oauth_token)
 
         except orjson.JSONDecodeError as e:
             logger.error(f"JSON decode error: {e}")
@@ -99,7 +121,9 @@ class MCPEndpoint:
             logger.error(f"Request processing error: {e}")
             return self._error_response(None, -32603, f"Internal error: {str(e)}")
 
-    async def _handle_json_request(self, request_data: dict[str, Any], session_id: str | None, method: str) -> Response:
+    async def _handle_json_request(
+        self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
+    ) -> Response:
         """Handle regular JSON-RPC request."""
 
         # Validate session ID for non-initialize requests
@@ -109,7 +133,7 @@ class MCPEndpoint:
             )
 
         # Process the request through protocol handler
-        response, new_session_id = await self.protocol.handle_request(request_data, session_id)
+        response, new_session_id = await self.protocol.handle_request(request_data, session_id, oauth_token)
 
         # Handle notifications (no response)
         if response is None:
@@ -122,7 +146,9 @@ class MCPEndpoint:
 
         return Response(orjson.dumps(response), media_type="application/json", headers=headers)
 
-    async def _handle_sse_request(self, request_data: dict[str, Any], session_id: str | None) -> StreamingResponse:
+    async def _handle_sse_request(
+        self, request_data: dict[str, Any], session_id: str | None, oauth_token: str | None = None
+    ) -> StreamingResponse:
         """Handle SSE request for Inspector compatibility."""
 
         created_session_id = None
@@ -136,16 +162,18 @@ class MCPEndpoint:
             logger.info(f"🔑 Created SSE session: {created_session_id[:8]}...")
 
         return StreamingResponse(
-            self._sse_stream_generator(request_data, created_session_id or session_id, method),
+            self._sse_stream_generator(request_data, created_session_id or session_id, method, oauth_token),
             media_type="text/event-stream",
             headers=self._sse_headers(created_session_id),
         )
 
-    async def _sse_stream_generator(self, request_data: dict[str, Any], session_id: str | None, method: str):
+    async def _sse_stream_generator(
+        self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
+    ):
         """Generate SSE stream response."""
         try:
             # Process the request through protocol handler
-            response, _ = await self.protocol.handle_request(request_data, session_id)
+            response, _ = await self.protocol.handle_request(request_data, session_id, oauth_token)
 
             if response:
                 logger.debug(f"📡 Streaming SSE response for {method}")

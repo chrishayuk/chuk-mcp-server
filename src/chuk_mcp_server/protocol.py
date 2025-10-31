@@ -73,7 +73,7 @@ class SessionManager:
 class MCPProtocolHandler:
     """Core MCP protocol handler powered by chuk_mcp."""
 
-    def __init__(self, server_info: ServerInfo, capabilities: ServerCapabilities):
+    def __init__(self, server_info: ServerInfo, capabilities: ServerCapabilities, oauth_provider_getter=None):
         # Use chuk_mcp types directly - no conversion needed
         self.server_info = server_info
         self.capabilities = capabilities
@@ -83,6 +83,9 @@ class MCPProtocolHandler:
         self.tools: dict[str, ToolHandler] = {}
         self.resources: dict[str, ResourceHandler] = {}
         self.prompts: dict[str, PromptHandler] = {}
+
+        # OAuth provider getter function (optional)
+        self.oauth_provider_getter = oauth_provider_getter
 
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
@@ -155,7 +158,7 @@ class MCPProtocolHandler:
         }
 
     async def handle_request(
-        self, message: dict[str, Any], session_id: str | None = None
+        self, message: dict[str, Any], session_id: str | None = None, oauth_token: str | None = None
     ) -> tuple[dict[str, Any] | None, str | None]:
         """Handle an MCP request."""
         try:
@@ -165,8 +168,11 @@ class MCPProtocolHandler:
 
             logger.debug(f"Handling {method} (ID: {msg_id})")
 
-            # Update session activity
+            # Set session context for this request
             if session_id:
+                from .context import set_session_id
+
+                set_session_id(session_id)
                 self.session_manager.update_activity(session_id)
 
             # Route to appropriate handler
@@ -180,7 +186,7 @@ class MCPProtocolHandler:
             elif method == "tools/list":
                 return await self._handle_tools_list(msg_id)
             elif method == "tools/call":
-                return await self._handle_tools_call(params, msg_id)
+                return await self._handle_tools_call(params, msg_id, oauth_token)
             elif method == "resources/list":
                 return await self._handle_resources_list(msg_id)
             elif method == "resources/read":
@@ -233,7 +239,9 @@ class MCPProtocolHandler:
         logger.info(f"📋 Returning {len(tools_list)} tools")
         return response, None
 
-    async def _handle_tools_call(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+    async def _handle_tools_call(
+        self, params: dict[str, Any], msg_id: Any, oauth_token: str | None = None
+    ) -> tuple[dict[str, Any], None]:
         """Handle tools/call request."""
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
@@ -243,6 +251,54 @@ class MCPProtocolHandler:
 
         try:
             tool_handler = self.tools[tool_name]
+
+            # Check if tool requires OAuth authorization
+            if tool_handler.requires_auth:
+                # Tool requires auth - validate OAuth token
+                if not oauth_token:
+                    return self._create_error_response(
+                        msg_id, -32603, f"Tool '{tool_name}' requires OAuth authorization. Please authenticate first."
+                    ), None
+
+                if not self.oauth_provider_getter:
+                    return self._create_error_response(
+                        msg_id, -32603, f"Tool '{tool_name}' requires OAuth but OAuth is not configured on this server."
+                    ), None
+
+                # Validate OAuth token and get external provider token
+                try:
+                    provider = self.oauth_provider_getter()
+                    if not provider:
+                        return self._create_error_response(msg_id, -32603, "OAuth provider not available."), None
+
+                    token_data = await provider.validate_access_token(oauth_token)
+                    external_token = token_data.get("external_access_token")
+                    user_id = token_data.get("user_id")
+
+                    if not external_token:
+                        return self._create_error_response(
+                            msg_id, -32603, "OAuth token is valid but external provider token is missing."
+                        ), None
+
+                    # Inject external provider token and user_id into arguments
+                    arguments["_external_access_token"] = external_token
+                    if user_id:
+                        arguments["_user_id"] = user_id
+
+                        # Also set user_id in context for application code to access
+                        # This allows apps to use get_current_user_id() instead of passing _user_id everywhere
+                        from .context import set_user_id
+
+                        set_user_id(user_id)
+
+                    logger.debug(f"OAuth token validated for tool {tool_name}, user_id: {user_id}")
+
+                except Exception as e:
+                    # OAuth validation failed for a tool that requires it
+                    logger.error(f"OAuth validation failed for {tool_name}: {e}")
+                    return self._create_error_response(msg_id, -32603, f"OAuth validation failed: {str(e)}"), None
+
+            # Execute the tool
             result = await tool_handler.execute(arguments)
 
             # Format response content using chuk_mcp content formatting

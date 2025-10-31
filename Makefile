@@ -192,9 +192,9 @@ typecheck:
 security:
 	@echo "Running security checks..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv run bandit -r src/ -ll --skip B104 || true; \
+		uv run bandit -r src/ -ll --skip B104 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
 	elif command -v bandit >/dev/null 2>&1; then \
-		bandit -r src/ -ll --skip B104 || true; \
+		bandit -r src/ -ll --skip B104 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
 	else \
 		echo "  ⚠ Bandit not found. Install with: pip install bandit"; \
 		exit 1; \

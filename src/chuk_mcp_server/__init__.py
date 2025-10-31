@@ -66,10 +66,20 @@ from typing import Any
 
 # Import cloud functionality
 from .cloud import detect_cloud_provider, is_cloud_environment
+
+# Import context management
+from .context import (
+    RequestContext,
+    get_session_id,
+    get_user_id,
+    require_user_id,
+    set_session_id,
+    set_user_id,
+)
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
-from .decorators import prompt, resource, tool
+from .decorators import prompt, requires_auth, resource, tool
 from .types import (
     MCPPrompt,
     ServerInfo,
@@ -298,6 +308,7 @@ __all__ = [
     "tool",
     "resource",
     "prompt",
+    "requires_auth",
     "run",
     # 🏭 FACTORY FUNCTIONS
     "create_mcp_server",
@@ -321,6 +332,13 @@ __all__ = [
     "ToolParameter",
     "ServerInfo",
     "Capabilities",
+    # 🔐 CONTEXT MANAGEMENT
+    "RequestContext",  # Context manager
+    "get_session_id",  # Get current session
+    "get_user_id",  # Get current user
+    "require_user_id",  # Require authenticated user
+    "set_session_id",  # Set session context
+    "set_user_id",  # Set user context
 ]
 
 # ============================================================================

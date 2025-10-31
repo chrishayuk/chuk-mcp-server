@@ -10,10 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "chuk-mcp>=0.5.1",
+    "chuk-sessions>=0.4.2",
     "httptools>=0.6.4",
     "orjson>=3.10.18",
     "psutil>=7.0.0",
-    "pydantic>=2.11.7",
+    "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
     "uvloop>=0.21.0",
@@ -165,6 +166,11 @@ module = "chuk_mcp_server.types.*"
 strict = true
 warn_return_any = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "chuk_mcp_server.oauth.*"
+# OAuth module uses dynamic decorators which mypy can't fully infer
+disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]
 module = [

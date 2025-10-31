@@ -121,8 +121,8 @@ class TestMCPEndpoint:
         body = orjson.loads(response.body)
         assert body == mock_response
 
-        # Verify protocol handler was called correctly
-        self.mock_protocol.handle_request.assert_called_once_with(request_data, "test-session")
+        # Verify protocol handler was called correctly (with oauth_token=None)
+        self.mock_protocol.handle_request.assert_called_once_with(request_data, "test-session", None)
 
     @pytest.mark.asyncio
     async def test_handle_post_json_request_notification(self):
@@ -197,8 +197,8 @@ class TestMCPEndpoint:
 
         await self.endpoint.handle_request(request)
 
-        # Should process empty body as {}
-        self.mock_protocol.handle_request.assert_called_once_with({}, "test-session")
+        # Should process empty body as {} (with oauth_token=None)
+        self.mock_protocol.handle_request.assert_called_once_with({}, "test-session", None)
 
     @pytest.mark.asyncio
     async def test_handle_post_protocol_exception(self):

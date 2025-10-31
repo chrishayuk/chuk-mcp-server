@@ -342,8 +342,9 @@ class TestChukMCPServerComprehensive:
                     server.run(host="custom.host", port=9999, debug=True)
 
                 # Should have used overridden values (with actual_log_level parameter)
+                # When debug=True, log_level is automatically set to 'debug'
                 mock_print.assert_called_with("custom.host", 9999, True, actual_log_level="DEBUG")
-                mock_http_server.run.assert_called_with(host="custom.host", port=9999, debug=True, log_level="warning")
+                mock_http_server.run.assert_called_with(host="custom.host", port=9999, debug=True, log_level="debug")
 
     def test_run_method_with_exception(self):
         """Test run method with server exception."""
