@@ -156,6 +156,13 @@ class ToolHandler:
                 except (ValueError, TypeError) as e:
                     raise ParameterValidationError(param.name, param.type, value) from e
 
+        # Pass through internal parameters (like _external_access_token, _user_id) if the function accepts them
+        # These are injected by the protocol handler and not part of the tool schema
+        sig = inspect.signature(self.handler)
+        for key, value in arguments.items():
+            if key.startswith("_") and key not in validated_args and key in sig.parameters:
+                validated_args[key] = value
+
         return validated_args
 
     def _convert_type(self, value: Any, param: ToolParameter) -> Any:

@@ -44,7 +44,7 @@ class SessionManager:
             "created_at": time.time(),
             "last_activity": time.time(),
         }
-        logger.info(f"Created session {session_id[:8]}... for {client_info.get('name', 'unknown')}")
+        logger.debug(f"Created session {session_id[:8]}... for {client_info.get('name', 'unknown')}")
         return session_id
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:
@@ -62,7 +62,7 @@ class SessionManager:
         expired = [sid for sid, session in self.sessions.items() if now - session["last_activity"] > max_age]
         for sid in expired:
             del self.sessions[sid]
-            logger.info(f"Cleaned up expired session {sid[:8]}...")
+            logger.debug(f"Cleaned up expired session {sid[:8]}...")
 
 
 # ============================================================================
@@ -179,7 +179,7 @@ class MCPProtocolHandler:
             if method == "initialize":
                 return await self._handle_initialize(params, msg_id)
             elif method == "notifications/initialized":
-                logger.info("✅ Initialized notification received")
+                logger.debug("✅ Initialized notification received")
                 return None, None  # Notifications don't return responses
             elif method == "ping":
                 return await self._handle_ping(msg_id)
@@ -222,7 +222,7 @@ class MCPProtocolHandler:
         response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
         client_name = client_info.get("name", "unknown")
-        logger.info(f"🤝 Initialized session {session_id[:8]}... for {client_name} (v{protocol_version})")
+        logger.debug(f"🤝 Initialized session {session_id[:8]}... for {client_name} (v{protocol_version})")
         return response, session_id
 
     async def _handle_ping(self, msg_id: Any) -> tuple[dict[str, Any], None]:
@@ -236,7 +236,7 @@ class MCPProtocolHandler:
 
         response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
-        logger.info(f"📋 Returning {len(tools_list)} tools")
+        logger.debug(f"📋 Returning {len(tools_list)} tools")
         return response, None
 
     async def _handle_tools_call(
@@ -272,8 +272,13 @@ class MCPProtocolHandler:
                         return self._create_error_response(msg_id, -32603, "OAuth provider not available."), None
 
                     token_data = await provider.validate_access_token(oauth_token)
+                    logger.debug(f"📦 Token data received for {tool_name}: {list(token_data.keys())}")
                     external_token = token_data.get("external_access_token")
                     user_id = token_data.get("user_id")
+
+                    logger.debug(
+                        f"🔑 Token data for {tool_name}: external_token={'present' if external_token else 'NONE'}, user_id={user_id}"
+                    )
 
                     if not external_token:
                         return self._create_error_response(
@@ -282,6 +287,7 @@ class MCPProtocolHandler:
 
                     # Inject external provider token and user_id into arguments
                     arguments["_external_access_token"] = external_token
+                    logger.debug(f"✅ Injected OAuth token into {tool_name} arguments")
                     if user_id:
                         arguments["_user_id"] = user_id
 
@@ -306,7 +312,7 @@ class MCPProtocolHandler:
 
             response = {"jsonrpc": "2.0", "id": msg_id, "result": {"content": content}}
 
-            logger.info(f"🔧 Executed tool {tool_name}")
+            logger.debug(f"🔧 Executed tool {tool_name}")
             return response, None
 
         except Exception as e:
@@ -320,7 +326,7 @@ class MCPProtocolHandler:
 
         response = {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
-        logger.info(f"📂 Returning {len(resources_list)} resources")
+        logger.debug(f"📂 Returning {len(resources_list)} resources")
         return response, None
 
     async def _handle_resources_read(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
@@ -339,7 +345,7 @@ class MCPProtocolHandler:
 
             response = {"jsonrpc": "2.0", "id": msg_id, "result": {"contents": [resource_content]}}
 
-            logger.info(f"📖 Read resource {uri}")
+            logger.debug(f"📖 Read resource {uri}")
             return response, None
 
         except Exception as e:
@@ -407,8 +413,8 @@ class MCPProtocolHandler:
                 },
             }
 
-            logger.info(f"💬 Generated prompt {prompt_name}")
-            logger.info(f"🔍 DEBUG Response messages: {messages}")
+            logger.debug(f"💬 Generated prompt {prompt_name}")
+            logger.debug(f"🔍 DEBUG Response messages: {messages}")
             return response, None
 
         except Exception as e:
@@ -442,7 +448,7 @@ class MCPProtocolHandler:
         if level_lower == "debug":
             logging.getLogger().setLevel(logging.DEBUG)
 
-        logger.info(f"Logging level set to {level.upper()}")
+        logger.debug(f"Logging level set to {level.upper()}")
 
         response = {
             "jsonrpc": "2.0",
