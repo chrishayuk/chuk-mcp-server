@@ -276,7 +276,9 @@ class MCPProtocolHandler:
                     external_token = token_data.get("external_access_token")
                     user_id = token_data.get("user_id")
 
-                    logger.debug(f"🔑 Token data for {tool_name}: external_token={'present' if external_token else 'NONE'}, user_id={user_id}")
+                    logger.debug(
+                        f"🔑 Token data for {tool_name}: external_token={'present' if external_token else 'NONE'}, user_id={user_id}"
+                    )
 
                     if not external_token:
                         return self._create_error_response(
