@@ -12,8 +12,8 @@ Optimized for Claude agents, real-time tool calling, and high-throughput applica
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-885%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://img.shields.io/badge/tests-1182%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
 ---
 
