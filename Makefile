@@ -1,26 +1,33 @@
-.PHONY: clean clean-pyc clean-build clean-test clean-all test run build publish help install dev-install
+.PHONY: clean clean-pyc clean-build clean-test clean-all test run build publish publish-test publish-manual help install dev-install bump-patch bump-minor bump-major
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  clean       - Remove Python bytecode and basic artifacts"
-	@echo "  clean-all   - Deep clean everything (pyc, build, test, cache)"
-	@echo "  clean-pyc   - Remove Python bytecode files"
-	@echo "  clean-build - Remove build artifacts"
-	@echo "  clean-test  - Remove test artifacts"
-	@echo "  install     - Install package in current environment"
-	@echo "  dev-install - Install package in dev mode with uv sync --dev"
-	@echo "  lint        - Run ruff linter and formatter check"
-	@echo "  format      - Auto-format code with ruff"
-	@echo "  typecheck   - Run mypy type checker on src/"
-	@echo "  security    - Run bandit security checks on src/"
-	@echo "  test        - Run tests"
-	@echo "  test-cov    - Run tests with coverage report"
-	@echo "  check       - Run all CI checks (lint, typecheck, test-cov, security)"
-	@echo "  check-ci    - CI-friendly check (quiet output)"
-	@echo "  run         - Run the server"
-	@echo "  build       - Build the project"
-	@echo "  publish     - Build and publish to PyPI"
+	@echo "  clean        - Remove Python bytecode and basic artifacts"
+	@echo "  clean-all    - Deep clean everything (pyc, build, test, cache)"
+	@echo "  clean-pyc    - Remove Python bytecode files"
+	@echo "  clean-build  - Remove build artifacts"
+	@echo "  clean-test   - Remove test artifacts"
+	@echo "  install      - Install package in current environment"
+	@echo "  dev-install  - Install package in dev mode with uv sync --dev"
+	@echo "  lint         - Run ruff linter and formatter check"
+	@echo "  format       - Auto-format code with ruff"
+	@echo "  typecheck    - Run mypy type checker on src/"
+	@echo "  security     - Run bandit security checks on src/"
+	@echo "  test         - Run tests"
+	@echo "  test-cov     - Run tests with coverage report"
+	@echo "  check        - Run all CI checks (lint, typecheck, test-cov, security)"
+	@echo "  check-ci     - CI-friendly check (quiet output)"
+	@echo "  run          - Run the server"
+	@echo "  build        - Build the project"
+	@echo ""
+	@echo "Release & Publishing:"
+	@echo "  bump-patch       - Bump patch version (0.0.X)"
+	@echo "  bump-minor       - Bump minor version (0.X.0)"
+	@echo "  bump-major       - Bump major version (X.0.0)"
+	@echo "  publish          - Tag and push to trigger automated release (RECOMMENDED)"
+	@echo "  publish-test     - Build and publish to TestPyPI (manual)"
+	@echo "  publish-manual   - Build and publish to PyPI (manual, use with caution)"
 
 # Basic clean - Python bytecode and common artifacts
 clean: clean-pyc clean-build
@@ -118,32 +125,152 @@ build: clean-build
 	fi
 	@echo "Build complete. Distributions are in the 'dist' folder."
 
-# Publish the package to PyPI using twine
-publish: build
-	@echo "Publishing package..."
-	@if [ ! -d "dist" ] || [ -z "$$(ls -A dist 2>/dev/null)" ]; then \
-		echo "Error: No distribution files found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	@last_build=$$(ls -t dist/*.tar.gz dist/*.whl 2>/dev/null | head -n 2); \
-	if [ -z "$$last_build" ]; then \
-		echo "Error: No valid distribution files found."; \
-		exit 1; \
-	fi; \
-	echo "Uploading: $$last_build"; \
-	twine upload $$last_build
-	@echo "Publish complete."
+# ============================================
+# VERSION BUMPING
+# ============================================
 
-# Publish to test PyPI
-publish-test: build
-	@echo "Publishing to test PyPI..."
-	@last_build=$$(ls -t dist/*.tar.gz dist/*.whl 2>/dev/null | head -n 2); \
-	if [ -z "$$last_build" ]; then \
-		echo "Error: No valid distribution files found."; \
+# Get current version from pyproject.toml
+CURRENT_VERSION := $(shell grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+
+# Bump patch version (0.0.X)
+bump-patch:
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{ \
+		if (NF == 2) { print $$1"."$$2".1" } \
+		else if (NF == 3) { print $$1"."$$2"."($$3+1) } \
+		else { print $$0 } \
+	}'); \
+	echo "New version: $$NEW_VERSION"; \
+	sed -i.bak "s/^version = \"$(CURRENT_VERSION)\"/version = \"$$NEW_VERSION\"/" pyproject.toml && rm pyproject.toml.bak; \
+	echo "✓ Version bumped to $$NEW_VERSION"
+
+# Bump minor version (0.X.0)
+bump-minor:
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{ \
+		if (NF == 2) { print $$1"."($$2+1)".0" } \
+		else if (NF == 3) { print $$1"."($$2+1)".0" } \
+		else { print $$0 } \
+	}'); \
+	echo "New version: $$NEW_VERSION"; \
+	sed -i.bak "s/^version = \"$(CURRENT_VERSION)\"/version = \"$$NEW_VERSION\"/" pyproject.toml && rm pyproject.toml.bak; \
+	echo "✓ Version bumped to $$NEW_VERSION"
+
+# Bump major version (X.0.0)
+bump-major:
+	@echo "Current version: $(CURRENT_VERSION)"
+	@NEW_VERSION=$$(echo $(CURRENT_VERSION) | awk -F. '{ \
+		if (NF == 2) { print ($$1+1)".0.0" } \
+		else if (NF == 3) { print ($$1+1)".0.0" } \
+		else { print $$0 } \
+	}'); \
+	echo "New version: $$NEW_VERSION"; \
+	sed -i.bak "s/^version = \"$(CURRENT_VERSION)\"/version = \"$$NEW_VERSION\"/" pyproject.toml && rm pyproject.toml.bak; \
+	echo "✓ Version bumped to $$NEW_VERSION"
+
+# ============================================
+# PUBLISHING & RELEASE
+# ============================================
+
+# Automated publish via GitHub Actions (RECOMMENDED)
+publish:
+	@echo "=========================================="
+	@echo "Automated Release via GitHub Actions"
+	@echo "=========================================="
+	@VERSION=$$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
+	echo "Current version: $$VERSION"; \
+	echo ""; \
+	echo "Pre-flight checks:"; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "❌ Error: Working directory is not clean"; \
+		echo "   Please commit or stash your changes first."; \
 		exit 1; \
 	fi; \
-	echo "Uploading to test PyPI: $$last_build"; \
-	twine upload --repository testpypi $$last_build
+	echo "✓ Working directory is clean"; \
+	if git rev-parse "v$$VERSION" >/dev/null 2>&1; then \
+		echo "❌ Error: Tag v$$VERSION already exists"; \
+		exit 1; \
+	fi; \
+	echo "✓ Tag v$$VERSION does not exist"; \
+	echo "✓ Current branch: $$(git branch --show-current)"; \
+	echo ""; \
+	read -p "Create and push tag v$$VERSION? [y/N] " -n 1 -r; \
+	echo ""; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		git tag -a "v$$VERSION" -m "Release v$$VERSION"; \
+		git push origin "v$$VERSION"; \
+		echo ""; \
+		echo "✓ Tag v$$VERSION created and pushed"; \
+		echo ""; \
+		echo "GitHub Actions will now:"; \
+		echo "  1. Run tests"; \
+		echo "  2. Create GitHub release"; \
+		echo "  3. Publish to PyPI"; \
+		echo ""; \
+		echo "Monitor progress at:"; \
+		echo "  https://github.com/chrishayuk/chuk-mcp-server/actions"; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+# Publish to test PyPI (manual)
+publish-test: build
+	@echo "=========================================="
+	@echo "Publishing to TestPyPI"
+	@echo "=========================================="
+	@VERSION=$$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
+	echo "Version: $$VERSION"; \
+	echo ""; \
+	read -p "Upload to TestPyPI? [y/N] " -n 1 -r; \
+	echo ""; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		if command -v uv >/dev/null 2>&1; then \
+			uv build; \
+		else \
+			python -m build; \
+		fi; \
+		twine upload --repository testpypi dist/*; \
+		echo ""; \
+		echo "✓ Published to TestPyPI"; \
+		echo ""; \
+		echo "Test installation:"; \
+		echo "  pip install --index-url https://test.pypi.org/simple/ chuk-mcp-server"; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+# Manual publish to PyPI (use with caution - prefer 'make publish')
+publish-manual: build
+	@echo "=========================================="
+	@echo "⚠️  MANUAL PUBLISH TO PyPI"
+	@echo "=========================================="
+	@echo "WARNING: This will permanently publish to PyPI."
+	@echo "         Published versions cannot be deleted."
+	@echo ""
+	@echo "RECOMMENDED: Use 'make publish' instead for automated workflow."
+	@echo ""
+	@VERSION=$$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
+	echo "Version: $$VERSION"; \
+	echo ""; \
+	read -p "Are you SURE you want to manually publish? [yes/N] " -r; \
+	echo ""; \
+	if [ "$$REPLY" = "yes" ]; then \
+		if command -v uv >/dev/null 2>&1; then \
+			uv build; \
+		else \
+			python -m build; \
+		fi; \
+		twine upload dist/*; \
+		echo ""; \
+		echo "✓ Published to PyPI"; \
+		echo ""; \
+		echo "IMPORTANT: Don't forget to:"; \
+		echo "  1. Create git tag: git tag -a v$$VERSION -m 'Release v$$VERSION'"; \
+		echo "  2. Push tag: git push origin v$$VERSION"; \
+		echo "  3. Create GitHub release"; \
+	else \
+		echo "Cancelled. Use 'make publish' for automated workflow."; \
+	fi
 
 # Check code quality (matches CI)
 lint:
