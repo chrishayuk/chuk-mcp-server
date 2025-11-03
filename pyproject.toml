@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.5.3"
+version = "0.6"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
-    "chuk-mcp>=0.5.1",
+    "chuk-mcp>=0.8.1",
     "chuk-sessions>=0.4.2",
     "httptools>=0.6.4",
     "orjson>=3.10.18",

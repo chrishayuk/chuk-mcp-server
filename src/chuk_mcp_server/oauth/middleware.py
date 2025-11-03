@@ -2,7 +2,8 @@
 Generic OAuth middleware for ChukMCPServer.
 
 Adds OAuth endpoints to any MCP server:
-- OAuth discovery (/.well-known/oauth-authorization-server)
+- OAuth Authorization Server discovery (/.well-known/oauth-authorization-server) - RFC 8414
+- OAuth Protected Resource metadata (/.well-known/oauth-protected-resource) - RFC 9728
 - Authorization endpoint (/oauth/authorize)
 - Token endpoint (/oauth/token)
 - External provider callback (/oauth/callback)
@@ -73,6 +74,12 @@ class OAuthMiddleware:
             """OAuth Authorization Server Metadata endpoint."""
             return await self._metadata_endpoint(request)
 
+        # Protected Resource Metadata (RFC 9728)
+        @self.mcp.endpoint("/.well-known/oauth-protected-resource", methods=["GET"])
+        async def protected_resource_metadata(request: Request) -> JSONResponse:
+            """OAuth Protected Resource Metadata endpoint."""
+            return await self._protected_resource_endpoint(request)
+
         # OAuth authorize endpoint
         @self.mcp.endpoint("/oauth/authorize", methods=["GET"])
         async def oauth_authorize(request: Request) -> Any:
@@ -130,6 +137,29 @@ class OAuthMiddleware:
             metadata["service_documentation"] = self.service_documentation
 
         return JSONResponse(metadata)
+
+    async def _protected_resource_endpoint(self, request: Request) -> JSONResponse:
+        """
+        OAuth Protected Resource Metadata endpoint (RFC 9728).
+
+        Returns information about this protected resource, including
+        which authorization servers can issue tokens for it.
+        """
+        metadata = {
+            "resource": self.oauth_server_url,
+            "authorization_servers": [self.oauth_server_url],
+            "bearer_methods_supported": ["header"],
+            "resource_signing_alg_values_supported": ["RS256"],
+        }
+
+        # Add optional metadata
+        if self.scopes_supported:
+            metadata["scopes_supported"] = self.scopes_supported
+
+        if self.service_documentation:
+            metadata["resource_documentation"] = self.service_documentation
+
+        return JSONResponse(metadata, headers={"Access-Control-Allow-Origin": "*"})
 
     async def _authorize_endpoint(self, request: Request) -> Any:
         """
