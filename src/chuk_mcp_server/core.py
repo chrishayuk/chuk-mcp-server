@@ -21,6 +21,7 @@ from .endpoint_registry import http_endpoint_registry
 from .http_server import create_server
 from .mcp_registry import mcp_registry
 from .protocol import MCPProtocolHandler
+from .proxy import ProxyManager
 from .stdio_transport import StdioSyncTransport
 
 # Updated imports for clean types API
@@ -74,6 +75,8 @@ class ChukMCPServer:
         port: int | None = None,
         debug: bool | None = None,
         transport: str | None = None,  # Added transport parameter
+        # Proxy configuration
+        proxy_config: dict[str, Any] | None = None,
         **kwargs,  # noqa: ARG002
     ):
         """
@@ -140,6 +143,11 @@ class ChukMCPServer:
 
         # HTTP server will be created when needed
         self._server = None
+
+        # Proxy manager for multi-server support
+        self.proxy_manager: ProxyManager | None = None
+        if proxy_config:
+            self.proxy_manager = ProxyManager(proxy_config, self.protocol)
 
         # Don't print banner during init - will be done in run() if needed
         # This avoids cluttering stdio mode
@@ -563,6 +571,18 @@ class ChukMCPServer:
     # Smart Server Management with Modular Configuration
     # ============================================================================
 
+    async def _start_proxy_if_enabled(self):
+        """Start proxy manager if configured."""
+        if self.proxy_manager:
+            await self.proxy_manager.start_servers()
+            logger.info(f"Proxy manager started: {self.proxy_manager.get_stats()}")
+
+    async def _stop_proxy_if_enabled(self):
+        """Stop proxy manager if running."""
+        if self.proxy_manager:
+            await self.proxy_manager.stop_servers()
+            logger.info("Proxy manager stopped")
+
     def run(
         self,
         host: str | None = None,
@@ -644,7 +664,25 @@ class ChukMCPServer:
             # Show the banner (always, regardless of log level)
             if self.smart_debug:
                 self._print_smart_config(actual_log_level=app_log_level)
-            # Show startup information
+
+            # Start proxy manager if configured (BEFORE showing startup info)
+            import asyncio
+
+            if self.proxy_manager:
+                try:
+                    logger.info("Starting proxy manager...")
+                    asyncio.run(self._start_proxy_if_enabled())
+                    stats = self.proxy_manager.get_stats()
+                    logger.info(f"Proxy manager started successfully: {stats}")
+
+                    # Log registered tools
+                    tool_count = len(self.protocol.tools)
+                    logger.info(f"Total tools after proxy: {tool_count}")
+                    logger.debug(f"Tools: {list(self.protocol.tools.keys())}")
+                except Exception as e:
+                    logger.error(f"Failed to start proxy manager: {e}", exc_info=True)
+
+            # Show startup information AFTER proxy initialization
             if getattr(self, "_should_print_config", True):
                 self._print_startup_info(final_host, final_port, final_debug, actual_log_level=app_log_level)
 
@@ -657,8 +695,14 @@ class ChukMCPServer:
                 self._server.run(host=final_host, port=final_port, debug=final_debug, log_level=log_level)
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
+                # Stop proxy servers on shutdown
+                if self.proxy_manager:
+                    asyncio.run(self._stop_proxy_if_enabled())
             except Exception as e:
                 logger.error(f"❌ Server error: {e}")
+                # Stop proxy servers on error
+                if self.proxy_manager:
+                    asyncio.run(self._stop_proxy_if_enabled())
                 raise
 
     def run_stdio(self, debug: bool | None = None, log_level: str = "warning"):
@@ -787,6 +831,41 @@ class ChukMCPServer:
         self.smart_containerized = smart_defaults["containerized"]
 
         logger.info("🔄 Smart configuration refreshed")
+
+    # ============================================================================
+    # Proxy Management
+    # ============================================================================
+
+    def enable_proxy(self, config: dict[str, Any]) -> None:
+        """
+        Enable proxy mode with the given configuration.
+
+        Args:
+            config: Proxy configuration dictionary
+        """
+        self.proxy_manager = ProxyManager(config, self.protocol)
+        logger.info("Proxy mode enabled")
+
+    def get_proxy_stats(self) -> dict[str, Any] | None:
+        """Get proxy manager statistics."""
+        if self.proxy_manager:
+            return self.proxy_manager.get_stats()
+        return None
+
+    async def call_proxied_tool(self, name: str, **kwargs: Any) -> Any:
+        """
+        Call a proxied tool.
+
+        Args:
+            name: Full tool name (e.g., "proxy.time.get_current_time")
+            **kwargs: Tool arguments
+
+        Returns:
+            Tool result
+        """
+        if not self.proxy_manager:
+            raise RuntimeError("Proxy mode not enabled")
+        return await self.proxy_manager.call_tool(name, **kwargs)
 
     # ============================================================================
     # Context Manager Support

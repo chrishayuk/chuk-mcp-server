@@ -80,6 +80,9 @@ from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
 from .decorators import prompt, requires_auth, resource, tool
+
+# Import proxy functionality
+from .proxy import ProxyManager, create_proxy_tool
 from .types import (
     MCPPrompt,
     ServerInfo,
@@ -339,6 +342,9 @@ __all__ = [
     "require_user_id",  # Require authenticated user
     "set_session_id",  # Set session context
     "set_user_id",  # Set user context
+    # 🌐 PROXY FUNCTIONALITY
+    "ProxyManager",  # Multi-server proxy manager
+    "create_proxy_tool",  # Create proxy tool wrapper
 ]
 
 # ============================================================================

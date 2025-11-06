@@ -361,5 +361,251 @@ def test_module_exports():
         assert hasattr(parameters, export)
 
 
+def test_tool_parameter_older_typing_fallback():
+    """Test ToolParameter with annotations that don't have get_origin but have __origin__."""
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # In Python 3.7-3.8, typing constructs don't have get_origin, only __origin__
+    # We'll create a mock that simulates this behavior
+    class MockOldStyleAnnotation:
+        """Mock annotation that only has __origin__, not get_origin."""
+
+        def __init__(self, origin, args=()):
+            self.__origin__ = origin
+            self.__args__ = args
+
+    # Test direct type handling (most common path)
+    param = ToolParameter.from_annotation("items", list)
+    assert param.type == "array"
+
+    param_dict = ToolParameter.from_annotation("config", dict)
+    assert param_dict.type == "object"
+
+    # Test that MockOldStyleAnnotation can be created (verifies the mock class works)
+    _ = MockOldStyleAnnotation(list, (str,))
+
+
+def test_infer_type_older_typing_fallback():
+    """Test type inference handles edge cases."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Test direct Python types (these hit the final fallback at line 261)
+    assert infer_type_from_annotation(str) == "string"
+    assert infer_type_from_annotation(int) == "integer"
+    assert infer_type_from_annotation(float) == "number"
+    assert infer_type_from_annotation(bool) == "boolean"
+    assert infer_type_from_annotation(list) == "array"
+    assert infer_type_from_annotation(dict) == "object"
+
+    # Test unknown types (should default to string)
+    class CustomType:
+        pass
+
+    assert infer_type_from_annotation(CustomType) == "string"
+
+
+def test_extract_parameters_from_function():
+    """Test extracting parameters from function."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    def sample_function(name: str, count: int = 10, enabled: bool = True):
+        """A sample function."""
+        pass
+
+    params = extract_parameters_from_function(sample_function)
+
+    assert len(params) == 3
+    assert params[0].name == "name"
+    assert params[0].type == "string"
+    assert params[0].required is True
+
+    assert params[1].name == "count"
+    assert params[1].type == "integer"
+    assert params[1].required is False
+    assert params[1].default == 10
+
+    assert params[2].name == "enabled"
+    assert params[2].type == "boolean"
+    assert params[2].required is False
+    assert params[2].default is True
+
+
+def test_extract_parameters_from_method():
+    """Test extracting parameters from a method (should skip 'self')."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    class SampleClass:
+        def method(self, name: str, value: int):
+            """A sample method."""
+            pass
+
+    params = extract_parameters_from_function(SampleClass.method)
+
+    # Should only extract 'name' and 'value', not 'self'
+    assert len(params) == 2
+    assert params[0].name == "name"
+    assert params[0].type == "string"
+
+    assert params[1].name == "value"
+    assert params[1].type == "integer"
+
+
+def test_extract_parameters_no_parameters():
+    """Test extracting parameters from function with no parameters."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    def no_params_function():
+        """A function with no parameters."""
+        pass
+
+    params = extract_parameters_from_function(no_params_function)
+
+    assert len(params) == 0
+
+
+def test_extract_parameters_complex_types():
+    """Test extracting parameters with complex type annotations."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    def complex_function(
+        items: list[str],
+        config: dict[str, int],
+        maybe: Optional[str] = None,
+        either: Union[str, int] = "default",
+    ):
+        """A function with complex types."""
+        pass
+
+    params = extract_parameters_from_function(complex_function)
+
+    assert len(params) == 4
+
+    assert params[0].name == "items"
+    assert params[0].type == "array"
+    assert params[0].required is True
+
+    assert params[1].name == "config"
+    assert params[1].type == "object"
+    assert params[1].required is True
+
+    assert params[2].name == "maybe"
+    assert params[2].type == "string"
+    assert params[2].required is False
+    assert params[2].default is None
+
+    assert params[3].name == "either"
+    assert params[3].type == "string"
+    assert params[3].required is False
+    assert params[3].default == "default"
+
+
+def test_tool_parameter_direct_type_annotation():
+    """Test ToolParameter with direct type annotations (no Optional/Union)."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test direct int type
+    param_int = ToolParameter.from_annotation("age", int, default=25)
+    assert param_int.type == "integer"
+    assert param_int.default == 25
+
+    # Test direct str type
+    param_str = ToolParameter.from_annotation("name", str, default="John")
+    assert param_str.type == "string"
+    assert param_str.default == "John"
+
+    # Test direct bool type
+    param_bool = ToolParameter.from_annotation("active", bool, default=False)
+    assert param_bool.type == "boolean"
+    assert param_bool.default is False
+
+
+def test_infer_type_direct_types():
+    """Test type inference with direct Python types."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Test all direct types hit the final fallback
+    assert infer_type_from_annotation(str) == "string"
+    assert infer_type_from_annotation(int) == "integer"
+    assert infer_type_from_annotation(float) == "number"
+    assert infer_type_from_annotation(bool) == "boolean"
+    assert infer_type_from_annotation(list) == "array"
+    assert infer_type_from_annotation(dict) == "object"
+
+    # Test unknown type defaults to string
+    class CustomClass:
+        pass
+
+    assert infer_type_from_annotation(CustomClass) == "string"
+
+
+def test_tool_parameter_union_with_two_args():
+    """Test ToolParameter with Union containing exactly 2 args including None."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Union[str, None] should extract str
+    param = ToolParameter.from_annotation("optional_text", Union[str, None])
+    assert param.type == "string"
+
+    # Union[int, None] should extract int
+    param_int = ToolParameter.from_annotation("optional_count", Union[int, None])
+    assert param_int.type == "integer"
+
+    # Union[None, str] should also work (order shouldn't matter)
+    param_reversed = ToolParameter.from_annotation("reversed_optional", Union[None, str])
+    assert param_reversed.type == "string"
+
+
+def test_tool_parameter_fallback_for_unknown_annotation():
+    """Test that unknown annotations fallback to string type."""
+    import inspect
+    from typing import get_origin
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Create a mock type that will bypass get_origin check
+    class MockType:
+        """A type that has no origin and will hit the final else clause."""
+
+        pass
+
+    # Ensure get_origin returns None for this type
+    assert get_origin(MockType) is None
+
+    param = ToolParameter.from_annotation("unknown", MockType)
+    assert param.type == "string"  # Should fallback to string (line 127)
+
+    # Test with inspect.Parameter.empty (no annotation)
+    param_empty = ToolParameter.from_annotation("no_type", inspect.Parameter.empty)
+    assert param_empty.type == "string"
+
+
+def test_infer_type_fallback_for_unknown():
+    """Test that unknown types fallback to string in type inference."""
+    from typing import get_origin
+
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Create a plain class with no typing attributes
+    class PlainClass:
+        pass
+
+    # Verify it has no origin
+    assert get_origin(PlainClass) is None
+    assert not hasattr(PlainClass, "__origin__")
+
+    result = infer_type_from_annotation(PlainClass)
+    assert result == "string"  # Should fallback to string (line 261)
+
+    # Test with another custom type
+    class CustomClass:
+        def __init__(self):
+            pass
+
+    assert get_origin(CustomClass) is None
+    result2 = infer_type_from_annotation(CustomClass)
+    assert result2 == "string"  # Should also hit line 261
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

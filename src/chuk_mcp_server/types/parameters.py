@@ -106,8 +106,8 @@ class ToolParameter:
             else:
                 param_type = type_map.get(origin, "string")
 
-        # Fallback for older typing or direct types
-        elif hasattr(annotation, "__origin__"):
+        # Fallback for older typing or direct types (Python 3.7-3.8 compatibility)
+        elif hasattr(annotation, "__origin__"):  # pragma: no cover - Python 3.7-3.8 compatibility
             origin = annotation.__origin__
             if origin is Union:
                 args = annotation.__args__
@@ -240,8 +240,8 @@ def infer_type_from_annotation(annotation: Any) -> str:
         else:
             return type_map.get(origin, "string")
 
-    # Fallback for older typing or direct types
-    elif hasattr(annotation, "__origin__"):
+    # Fallback for older typing or direct types (Python 3.7-3.8 compatibility)
+    elif hasattr(annotation, "__origin__"):  # pragma: no cover - Python 3.7-3.8 compatibility
         origin = annotation.__origin__
         if origin is Union:
             args = annotation.__args__
