@@ -92,9 +92,7 @@ class CompositionManager:
                     "enabled": True,
                     "namespace": prefix or "",  # Use prefix as namespace
                 },
-                "servers": {
-                    server_name: config
-                }
+                "servers": {server_name: config},
             }
 
             # Initialize and start proxy manager
@@ -102,7 +100,7 @@ class CompositionManager:
             await proxy_manager.start_servers()
 
             # Store proxy manager reference for cleanup later
-            if not hasattr(self, '_proxy_managers'):
+            if not hasattr(self, "_proxy_managers"):
                 self._proxy_managers = []
             self._proxy_managers.append(proxy_manager)
 
