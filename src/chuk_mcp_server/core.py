@@ -77,6 +77,8 @@ class ChukMCPServer:
         transport: str | None = None,  # Added transport parameter
         # Proxy configuration
         proxy_config: dict[str, Any] | None = None,
+        # Tool modules configuration
+        tool_modules_config: dict[str, Any] | None = None,
         **kwargs,  # noqa: ARG002
     ):
         """
@@ -97,6 +99,8 @@ class ChukMCPServer:
             port: Port to bind to (auto-detected if None)
             debug: Debug mode (auto-detected if None)
             transport: Transport mode ('http' or 'stdio') (auto-detected if None)
+            proxy_config: Configuration for multi-server proxy
+            tool_modules_config: Configuration for loading tool modules
             **kwargs: Additional keyword arguments
         """
         # Initialize the modular smart configuration system
@@ -148,6 +152,20 @@ class ChukMCPServer:
         self.proxy_manager: ProxyManager | None = None
         if proxy_config:
             self.proxy_manager = ProxyManager(proxy_config, self.protocol)
+
+        # Module loader for hosting multiple tool collections
+        self.module_loader: Any = None
+        if tool_modules_config:
+            from .modules import ModuleLoader
+
+            # Wrap config in proper structure (ModuleLoader expects {"tool_modules": {...}})
+            config = {"tool_modules": tool_modules_config}
+            self.module_loader = ModuleLoader(config, self)
+
+        # Composition manager for unified server composition
+        from .composition import CompositionManager
+
+        self.composition = CompositionManager(self)
 
         # Don't print banner during init - will be done in run() if needed
         # This avoids cluttering stdio mode
@@ -370,6 +388,104 @@ class ChukMCPServer:
             return decorator(func)
         else:
             return decorator
+
+    # ============================================================================
+    # Server Composition Methods
+    # ============================================================================
+
+    def import_server(
+        self,
+        server: "ChukMCPServer",
+        prefix: str | None = None,
+        components: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """
+        Import (copy) components from another MCP server.
+
+        Static composition: creates a one-time copy of tools, resources, and prompts.
+        Changes to the original server after import will NOT be reflected.
+
+        Args:
+            server: ChukMCPServer instance to import from
+            prefix: Optional prefix for namespacing (e.g., "weather" -> "weather.get_forecast")
+            components: List of component types ["tools", "resources", "prompts"]
+                       If None, imports all components
+            tags: Optional tags to filter components
+
+        Example:
+            # Import weather server with prefix
+            main_mcp.import_server(weather_server, prefix="weather")
+
+            # Import only tools
+            main_mcp.import_server(api_server, prefix="api", components=["tools"])
+
+            # Import filtered by tags
+            main_mcp.import_server(data_server, tags=["public"])
+        """
+        self.composition.import_server(server, prefix, components, tags)
+
+    def mount(
+        self,
+        server: "ChukMCPServer | dict[str, Any]",
+        prefix: str | None = None,
+        as_proxy: bool = False,
+    ) -> None:
+        """
+        Mount a server for live delegation.
+
+        Dynamic composition: creates a live link to another server.
+        Changes to the mounted server are reflected immediately.
+
+        Args:
+            server: ChukMCPServer instance or proxy config to mount
+            prefix: Optional prefix for namespacing
+            as_proxy: If True, mount as a proxy (for remote servers)
+
+        Example:
+            # Mount local server (live updates)
+            main_mcp.mount(api_server)
+
+            # Mount remote server as proxy
+            main_mcp.mount(remote_config, prefix="remote", as_proxy=True)
+
+            # Mount with prefix
+            main_mcp.mount(data_server, prefix="data")
+        """
+        self.composition.mount(server, prefix, as_proxy)
+
+    def load_module(self, module_config: dict[str, Any]) -> dict[str, list[str]]:
+        """
+        Load Python modules with tools.
+
+        Convenience method for loading Python modules through the composition layer.
+
+        Args:
+            module_config: Module configuration dictionary
+
+        Returns:
+            Dictionary mapping module names to loaded tool names
+
+        Example:
+            mcp.load_module({
+                "math": {
+                    "enabled": True,
+                    "location": "./modules",
+                    "module": "math_tools.tools",
+                    "namespace": "math"
+                }
+            })
+        """
+        return self.composition.load_module(module_config)
+
+    def get_composition_stats(self) -> dict[str, Any]:
+        """
+        Get statistics about composed/mounted/proxied servers.
+
+        Returns:
+            Dictionary with composition statistics
+        """
+        return self.composition.get_composition_stats()
 
     # ============================================================================
     # HTTP Endpoint Registration
@@ -681,6 +797,19 @@ class ChukMCPServer:
                     logger.debug(f"Tools: {list(self.protocol.tools.keys())}")
                 except Exception as e:
                     logger.error(f"Failed to start proxy manager: {e}", exc_info=True)
+
+            # Load tool modules if configured
+            if self.module_loader:
+                try:
+                    logger.info("Loading tool modules...")
+                    loaded_modules = self.module_loader.load_modules()
+                    module_info = self.module_loader.get_module_info()
+                    logger.info(
+                        f"Loaded {module_info['total_modules']} modules with {module_info['total_tools']} tools"
+                    )
+                    logger.debug(f"Modules: {list(loaded_modules.keys())}")
+                except Exception as e:
+                    logger.error(f"Failed to load tool modules: {e}", exc_info=True)
 
             # Show startup information AFTER proxy initialization
             if getattr(self, "_should_print_config", True):

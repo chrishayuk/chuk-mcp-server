@@ -7,7 +7,7 @@ Tests ToolParameter class, schema generation, and type inference.
 """
 
 import inspect
-from typing import Optional, Union
+from typing import Union
 
 import orjson
 import pytest
@@ -93,11 +93,11 @@ def test_tool_parameter_from_annotation_optional_types():
     from chuk_mcp_server.types.parameters import ToolParameter
 
     # Test Optional[str]
-    param_optional_str = ToolParameter.from_annotation("maybe_name", Optional[str])
+    param_optional_str = ToolParameter.from_annotation("maybe_name", str | None)
     assert param_optional_str.type == "string"
 
     # Test Optional[int]
-    param_optional_int = ToolParameter.from_annotation("maybe_count", Optional[int])
+    param_optional_int = ToolParameter.from_annotation("maybe_count", int | None)
     assert param_optional_int.type == "integer"
 
 
@@ -252,8 +252,8 @@ def test_infer_type_from_annotation():
     assert infer_type_from_annotation(dict) == "object"
 
     # Test Optional types
-    assert infer_type_from_annotation(Optional[str]) == "string"
-    assert infer_type_from_annotation(Optional[int]) == "integer"
+    assert infer_type_from_annotation(str | None) == "string"
+    assert infer_type_from_annotation(int | None) == "integer"
 
     # Test generic types
     assert infer_type_from_annotation(list[str]) == "array"
@@ -471,7 +471,7 @@ def test_extract_parameters_complex_types():
     def complex_function(
         items: list[str],
         config: dict[str, int],
-        maybe: Optional[str] = None,
+        maybe: str | None = None,
         either: Union[str, int] = "default",
     ):
         """A function with complex types."""

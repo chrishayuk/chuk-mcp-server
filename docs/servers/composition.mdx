@@ -1,0 +1,745 @@
+---
+title: "Server Composition"
+sidebarTitle: "Composition"
+description: "Combine multiple MCP servers into a unified endpoint through configuration"
+icon: "puzzle-piece"
+---
+
+Compose multiple MCP servers (GitHub, Slack, custom tools) into a single unified endpoint using simple YAML configuration. No code required.
+
+## What is Server Composition?
+
+Server composition allows you to aggregate multiple MCP servers into one, creating a unified API that combines:
+- **Official MCP servers** (GitHub, Slack, Google Drive, etc.)
+- **Third-party servers** (npm packages, custom implementations)
+- **Your own tools** (custom business logic, integrations)
+
+<Card title="🎯 Why Compose?" icon="lightbulb">
+  Instead of Claude Desktop connecting to 5 different servers, compose them into one endpoint. Simpler configuration, unified monitoring, and better performance.
+</Card>
+
+## Quick Start
+
+Create a composition server in 30 seconds:
+
+<Tabs>
+  <Tab title="uvx init (Recommended ⭐)">
+    **Instant setup** with scaffolder, then add composition:
+
+    ```bash
+    # Generate base server
+    uvx chuk-mcp-server init my-composition
+    cd my-composition
+
+    # Create config.yaml for composition
+    cat > config.yaml << 'EOF'
+server:
+  name: "my-composition"
+  transport: "http"
+  port: 8000
+
+composition:
+  import:
+    - name: "github"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+EOF
+
+    # Modify server.py to load config
+    cat > server.py << 'EOF'
+from chuk_mcp_server.composition import load_from_config
+from chuk_mcp_server import run
+
+# Load composition from config.yaml
+manager = load_from_config("config.yaml")
+
+if __name__ == "__main__":
+    run()
+EOF
+
+    # Run server
+    uv run python server.py
+    ```
+
+    This approach gives you:
+    - Dockerfile and docker-compose.yml from scaffolder
+    - Full composition configuration
+    - Environment variable support
+  </Tab>
+
+  <Tab title="Manual setup">
+    **Step-by-step** manual setup:
+
+    ```bash
+    # Create project
+    uv init my-composition
+    cd my-composition
+
+    # Add ChukMCPServer
+    uv add chuk-mcp-server
+
+    # Create config.yaml
+    cat > config.yaml << 'EOF'
+server:
+  name: "my-composition"
+  transport: "http"
+  port: 8000
+
+composition:
+  import:
+    - name: "github"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+EOF
+
+    # Create server.py
+    cat > server.py << 'EOF'
+from chuk_mcp_server.composition import load_from_config
+from chuk_mcp_server import run
+
+# Load composition from config.yaml
+manager = load_from_config("config.yaml")
+
+if __name__ == "__main__":
+    run()
+EOF
+
+    # Run server
+    uv run python server.py
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Your composition server is now running with all configured servers!
+</Check>
+
+## Composition Strategies
+
+ChukMCPServer supports two composition strategies:
+
+<AccordionGroup>
+  <Accordion title="Import Strategy (Static Copy)" icon="download">
+    **Import** copies tools/resources from another server at startup:
+
+    ```yaml
+    composition:
+      import:
+        - name: "github"
+          command: "npx"
+          args: ["-y", "@modelcontextprotocol/server-github"]
+          prefix: "gh_"  # Optional: prefix all tool names
+          env:
+            GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    ```
+
+    **When to use:**
+    - Server starts quickly and doesn't change
+    - You want to cache/optimize tool calls
+    - Offline operation after initial import
+    - Tools don't need real-time updates
+
+    **How it works:**
+    1. Server spawns subprocess at startup
+    2. Fetches all tools/resources via MCP protocol
+    3. Registers them with optional prefix
+    4. Subprocess is terminated
+    5. All calls handled locally
+  </Accordion>
+
+  <Accordion title="Mount Strategy (Dynamic Delegation)" icon="link">
+    **Mount** delegates calls to a running server:
+
+    ```yaml
+    composition:
+      mount:
+        - name: "slack-api"
+          url: "http://slack-server:8001"
+          prefix: "slack_"
+          timeout: 30  # seconds
+    ```
+
+    **When to use:**
+    - Server state changes frequently
+    - Real-time updates required
+    - Large tool count (avoid import overhead)
+    - Server runs independently
+
+    **How it works:**
+    1. Server stores endpoint URL
+    2. Tool calls forwarded to remote server
+    3. Responses returned transparently
+    4. Remote server handles all logic
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Reference
+
+Complete `config.yaml` structure:
+
+```yaml
+# Server settings
+server:
+  name: "my-composed-server"
+  version: "1.0.0"
+  transport: "http"  # or "stdio"
+  host: "0.0.0.0"
+  port: 8000
+
+# Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "json"  # or "text"
+
+# Composition settings
+composition:
+  # Import servers (static copy)
+  import:
+    - name: "github"
+      enabled: true  # false to disable
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      prefix: "gh_"  # Optional prefix
+      transport: "stdio"  # stdio, http, sse
+      env:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+    - name: "slack"
+      enabled: true
+      command: "python"
+      args: ["-m", "slack_mcp_server"]
+      prefix: "slack_"
+      env:
+        SLACK_TOKEN: "${SLACK_TOKEN}"
+
+  # Mount servers (dynamic delegation)
+  mount:
+    - name: "analytics"
+      enabled: true
+      url: "http://analytics-server:8001"
+      prefix: "analytics_"
+      timeout: 30
+      headers:
+        Authorization: "Bearer ${API_TOKEN}"
+
+# Custom modules (Python code)
+modules:
+  custom_tools:
+    module: "my_tools.business_logic"
+    prefix: "custom_"
+
+# Security settings
+security:
+  require_auth: false
+  allowed_origins: ["*"]
+
+# Performance tuning
+performance:
+  worker_count: 4
+  timeout: 60
+  max_connections: 1000
+```
+
+<Info>
+  Environment variables like `${GITHUB_TOKEN}` are automatically substituted from your environment or `.env` file.
+</Info>
+
+## Real-World Examples
+
+### Example 1: GitHub + Slack + Custom Tools
+
+Combine official GitHub/Slack servers with custom business logic:
+
+```yaml
+server:
+  name: "team-assistant"
+  transport: "http"
+  port: 8000
+
+composition:
+  import:
+    # GitHub integration
+    - name: "github"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      prefix: "gh_"
+      env:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+    # Slack integration
+    - name: "slack"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-slack"]
+      prefix: "slack_"
+      env:
+        SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+
+modules:
+  # Custom business tools
+  team_tools:
+    module: "my_company.team_tools"
+    prefix: "team_"
+```
+
+**Available tools:**
+- `gh_create_issue`, `gh_list_prs`, `gh_merge_pr`
+- `slack_send_message`, `slack_list_channels`
+- `team_schedule_meeting`, `team_assign_task`
+
+### Example 2: Multi-Environment Deployment
+
+Development and production configurations:
+
+<Tabs>
+  <Tab title="config.dev.yaml">
+    ```yaml
+    server:
+      name: "api-dev"
+      host: "localhost"
+      port: 8000
+
+    logging:
+      level: "DEBUG"
+      format: "text"
+
+    composition:
+      mount:
+        - name: "test-api"
+          url: "http://localhost:8001"
+    ```
+  </Tab>
+
+  <Tab title="config.prod.yaml">
+    ```yaml
+    server:
+      name: "api-prod"
+      host: "0.0.0.0"
+      port: 8000
+
+    logging:
+      level: "WARNING"
+      format: "json"
+
+    security:
+      require_auth: true
+      allowed_origins:
+        - "https://app.example.com"
+
+    composition:
+      mount:
+        - name: "prod-api"
+          url: "https://api.example.com"
+          headers:
+            Authorization: "Bearer ${PROD_API_TOKEN}"
+    ```
+  </Tab>
+</Tabs>
+
+Run with specific config:
+
+```bash
+# Development
+uv run python server.py --config config.dev.yaml
+
+# Production
+uv run python server.py --config config.prod.yaml
+```
+
+### Example 3: Microservices Aggregation
+
+Aggregate multiple internal services:
+
+```yaml
+server:
+  name: "api-gateway"
+  transport: "http"
+
+composition:
+  mount:
+    # User service
+    - name: "users"
+      url: "http://user-service:8001"
+      prefix: "user_"
+      timeout: 10
+
+    # Payment service
+    - name: "payments"
+      url: "http://payment-service:8002"
+      prefix: "pay_"
+      timeout: 30
+
+    # Analytics service
+    - name: "analytics"
+      url: "http://analytics-service:8003"
+      prefix: "analytics_"
+      timeout: 60
+
+security:
+  require_auth: true
+
+performance:
+  worker_count: 8
+  max_connections: 5000
+```
+
+## Import vs Mount: Decision Guide
+
+<Tabs>
+  <Tab title="Use Import When...">
+    ✅ **Import Strategy** is best for:
+
+    - Server tools are **static** and don't change
+    - You want **fast response times** (no network hop)
+    - **Offline operation** is important
+    - Tools are **simple** and stateless
+    - **Small tool count** (< 50 tools)
+    - Server **starts quickly**
+
+    **Examples:**
+    - GitHub repository tools
+    - File system operations
+    - Static data resources
+    - Calculation tools
+  </Tab>
+
+  <Tab title="Use Mount When...">
+    ✅ **Mount Strategy** is best for:
+
+    - Server state **changes frequently**
+    - **Real-time data** is required
+    - **Large tool count** (100+ tools)
+    - Server is **long-running**
+    - **Independent deployment** needed
+    - **Load balancing** across instances
+
+    **Examples:**
+    - Live database queries
+    - Real-time analytics
+    - External APIs
+    - Stateful workflows
+    - Microservices
+  </Tab>
+</Tabs>
+
+## Running Composed Servers
+
+### Local Development
+
+```bash
+# Start with default config
+uv run python server.py
+
+# Or specify config file
+uv run python server.py --config my-config.yaml
+
+# Enable debug logging
+LOG_LEVEL=DEBUG uv run python server.py
+```
+
+### Docker Deployment
+
+See the [Docker Deployment Guide](/deployment/docker) for containerized composition servers.
+
+Quick example:
+
+```dockerfile
+FROM python:3.11-slim
+
+# Install uv and Node.js (for npx servers)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+
+COPY config.yaml .
+COPY server.py .
+
+RUN uv pip install chuk-mcp-server
+
+CMD ["python", "server.py", "--config", "config.yaml"]
+```
+
+### Claude Desktop Integration
+
+Add your composition server to Claude Desktop:
+
+<Tabs>
+  <Tab title="macOS">
+    Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-composition": {
+          "command": "uv",
+          "args": [
+            "run",
+            "--directory",
+            "/absolute/path/to/my-composition",
+            "python",
+            "server.py"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "your-github-token",
+            "SLACK_TOKEN": "your-slack-token"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-composition": {
+          "command": "uv",
+          "args": [
+            "run",
+            "--directory",
+            "C:\\path\\to\\my-composition",
+            "python",
+            "server.py"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "your-github-token",
+            "SLACK_TOKEN": "your-slack-token"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Restart Claude Desktop to see all composed tools!
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import server fails to start" icon="triangle-exclamation">
+    **Symptoms:** Error like "Failed to import server 'github'"
+
+    **Solutions:**
+    ```bash
+    # Check if command exists
+    npx --version
+    python --version
+
+    # Test server command directly
+    npx -y @modelcontextprotocol/server-github
+
+    # Check environment variables
+    echo $GITHUB_TOKEN
+
+    # Enable debug logging
+    LOG_LEVEL=DEBUG uv run python server.py
+    ```
+  </Accordion>
+
+  <Accordion title="Mount server connection refused" icon="plug">
+    **Symptoms:** "Connection refused to http://server:8001"
+
+    **Solutions:**
+    ```bash
+    # Verify server is running
+    curl http://localhost:8001/health
+
+    # Check network connectivity
+    ping server-hostname
+
+    # Verify URL in config.yaml
+    # Make sure host/port match running server
+
+    # Check firewall rules
+    # Ensure port is accessible
+    ```
+  </Accordion>
+
+  <Accordion title="Tool name conflicts" icon="clone">
+    **Symptoms:** "Tool 'search' already registered"
+
+    **Solution:** Use prefixes to avoid conflicts:
+
+    ```yaml
+    composition:
+      import:
+        - name: "github"
+          prefix: "gh_"  # Tools: gh_search, gh_create_issue
+
+        - name: "slack"
+          prefix: "slack_"  # Tools: slack_search, slack_send
+    ```
+  </Accordion>
+
+  <Accordion title="Environment variables not substituted" icon="key">
+    **Symptoms:** Literal "${TOKEN}" in server config
+
+    **Solutions:**
+    ```bash
+    # Create .env file
+    cat > .env << 'EOF'
+    GITHUB_TOKEN=your-token-here
+    SLACK_TOKEN=your-slack-token
+    EOF
+
+    # Or export variables
+    export GITHUB_TOKEN="your-token-here"
+    export SLACK_TOKEN="your-slack-token"
+
+    # Verify substitution
+    python -c "
+from chuk_mcp_server.composition import CompositionConfigLoader
+loader = CompositionConfigLoader('config.yaml')
+config = loader.load()
+print(config)
+    "
+    ```
+  </Accordion>
+
+  <Accordion title="Performance issues" icon="gauge">
+    **Symptoms:** Slow response times, timeouts
+
+    **Solutions:**
+
+    ```yaml
+    # Increase workers and timeouts
+    performance:
+      worker_count: 8  # Match CPU cores
+      timeout: 120  # Longer timeout for slow tools
+      max_connections: 2000
+
+    # Use import instead of mount for static servers
+    composition:
+      import:  # Faster than mount
+        - name: "github"
+          command: "npx"
+          args: ["-y", "@modelcontextprotocol/server-github"]
+
+    # Or increase mount timeouts
+    composition:
+      mount:
+        - name: "slow-api"
+          url: "http://api.example.com"
+          timeout: 120  # seconds
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Prefixes">
+    Always use prefixes to avoid tool name conflicts:
+
+    ```yaml
+    composition:
+      import:
+        - name: "github"
+          prefix: "gh_"
+        - name: "slack"
+          prefix: "slack_"
+    ```
+  </Step>
+
+  <Step title="Environment Variables">
+    Never hardcode secrets - use environment variables:
+
+    ```yaml
+    # ❌ Bad - hardcoded token
+    env:
+      GITHUB_TOKEN: "ghp_1234567890"
+
+    # ✅ Good - environment variable
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    ```
+  </Step>
+
+  <Step title="Choose Right Strategy">
+    - **Import** for static servers (GitHub, file system)
+    - **Mount** for dynamic servers (databases, APIs)
+  </Step>
+
+  <Step title="Enable Monitoring">
+    Use structured logging for production:
+
+    ```yaml
+    logging:
+      level: "INFO"
+      format: "json"  # Easier to parse in log aggregators
+    ```
+  </Step>
+
+  <Step title="Test Individually First">
+    Test each server independently before composing:
+
+    ```bash
+    # Test GitHub server alone
+    npx -y @modelcontextprotocol/server-github
+
+    # Test Slack server alone
+    npx -y @modelcontextprotocol/server-slack
+
+    # Then compose them
+    uv run python server.py
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Proxy Servers"
+    icon="network-wired"
+    href="/servers/proxy"
+  >
+    Learn about proxy patterns for multi-server aggregation
+  </Card>
+
+  <Card
+    title="Docker Deployment"
+    icon="docker"
+    href="/deployment/docker"
+  >
+    Deploy composition servers with Docker
+  </Card>
+
+  <Card
+    title="Configuration Reference"
+    icon="file-code"
+    href="/deployment/configuration"
+  >
+    Complete config.yaml reference
+  </Card>
+
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api-reference/composition"
+  >
+    Programmatic composition API
+  </Card>
+</CardGroup>
+
+## Examples Repository
+
+Find complete working examples in our GitHub repository:
+
+- [GitHub + Slack composition](https://github.com/chrishayuk/chuk-mcp-server/tree/main/examples/composition/github-slack)
+- [Microservices gateway](https://github.com/chrishayuk/chuk-mcp-server/tree/main/examples/composition/microservices)
+- [Multi-environment setup](https://github.com/chrishayuk/chuk-mcp-server/tree/main/examples/composition/multi-env)
+
+---
+
+<Info>
+  **Ready to deploy?** Check out the [Docker Deployment Guide](/deployment/docker) for production-ready containerized composition.
+</Info>

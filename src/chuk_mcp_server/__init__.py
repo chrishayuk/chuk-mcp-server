@@ -80,6 +80,7 @@ from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
 from .decorators import prompt, requires_auth, resource, tool
+from .modules import ModuleLoader
 
 # Import proxy functionality
 from .proxy import ProxyManager, create_proxy_tool
@@ -345,6 +346,8 @@ __all__ = [
     # 🌐 PROXY FUNCTIONALITY
     "ProxyManager",  # Multi-server proxy manager
     "create_proxy_tool",  # Create proxy tool wrapper
+    # 📦 MODULE LOADING
+    "ModuleLoader",  # Dynamic tool module loader
 ]
 
 # ============================================================================

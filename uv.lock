@@ -211,21 +211,21 @@ wheels = [
 
 [[package]]
 name = "chuk-mcp"
-version = "0.5.2"
+version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/28/308c448fb91a46a15b5efd154a588196eab7d554fa70595c74cb7e7b01a5/chuk_mcp-0.5.2.tar.gz", hash = "sha256:9f553ca3ed503f356a550ad6e6bfe7b29f2964071cf9273bce8ab34ef685a405", size = 104360 }
+sdist = { url = "https://files.pythonhosted.org/packages/36/31/48e2c2c0a9f8e0f83594ed0ce72b6b9ac2b803c41b158a0c9926019e4ba7/chuk_mcp-0.8.1.tar.gz", hash = "sha256:6913651b1c5696dbe2868ab33e920ef1491f1f2a908d61c742c7b5a8f7f4adbd", size = 150091 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/2d/4746de13cb1cd2d1e0c049b449f0558f9894090410e31fbecdcb0532be55/chuk_mcp-0.5.2-py3-none-any.whl", hash = "sha256:f7e4e513c509202017050e1688138f1dc3df1c1cd145a1a1cbf102af29b7b97d", size = 126877 },
+    { url = "https://files.pythonhosted.org/packages/8f/69/40988763461afb09ae4fe8934d295da2b98cc47a5ab636a081a536757cfc/chuk_mcp-0.8.1-py3-none-any.whl", hash = "sha256:372e4a06987210dc6d635f12ec6fb9d6a0335b8cc3895b8453df7808f21ec819", size = 136228 },
 ]
 
 [[package]]
 name = "chuk-mcp-server"
-version = "0.5.2"
+version = "0.6"
 source = { editable = "." }
 dependencies = [
     { name = "chuk-mcp" },
@@ -234,6 +234,7 @@ dependencies = [
     { name = "orjson" },
     { name = "psutil" },
     { name = "python-multipart" },
+    { name = "pyyaml" },
     { name = "starlette" },
     { name = "uvicorn" },
     { name = "uvloop" },
@@ -250,6 +251,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "requests" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-setuptools" },
 ]
@@ -265,6 +267,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "requests" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-setuptools" },
 ]
@@ -273,7 +276,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", marker = "extra == 'dev'", specifier = ">=3.12.13" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.8" },
-    { name = "chuk-mcp", specifier = ">=0.5.1" },
+    { name = "chuk-mcp", specifier = ">=0.8.1" },
     { name = "chuk-sessions", specifier = ">=0.4.2" },
     { name = "httptools", specifier = ">=0.6.4" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9.0" },
@@ -284,9 +287,11 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", marker = "extra == 'dev'", specifier = ">=2.32.4" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "starlette", specifier = ">=0.47.1" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0" },
     { name = "types-setuptools", marker = "extra == 'dev'", specifier = ">=69.0.0" },
     { name = "uvicorn", specifier = ">=0.35.0" },
@@ -304,6 +309,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=5.0.0" },
     { name = "requests", specifier = ">=2.32.4" },
     { name = "ruff", specifier = ">=0.3.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.0" },
     { name = "types-requests", specifier = ">=2.31.0" },
     { name = "types-setuptools", specifier = ">=69.0.0" },
 ]
@@ -1268,6 +1274,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5b/b9/1ed31d167be802da0fc95020d04cd27b7d7065cc6fbefdd2f9186f60d7bd/tomli-2.2.1-cp313-cp313-win32.whl", hash = "sha256:d3f5614314d758649ab2ab3a62d4f2004c825922f9e370b29416484086b264ec", size = 98724 },
     { url = "https://files.pythonhosted.org/packages/c7/32/b0963458706accd9afcfeb867c0f9175a741bf7b19cd424230714d722198/tomli-2.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:a38aa0308e754b0e3c67e344754dff64999ff9b513e691d0e786265c93583c69", size = 109383 },
     { url = "https://files.pythonhosted.org/packages/6e/c2/61d3e0f47e2b74ef40a68b9e6ad5984f6241a942f7cd3bbfbdbd03861ea9/tomli-2.2.1-py3-none-any.whl", hash = "sha256:cb55c73c5f4408779d0cf3eef9f762b9c9f147a77de7b258bef0a5628adc85cc", size = 14257 },
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.20250915"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/69/3c51b36d04da19b92f9e815be12753125bd8bc247ba0470a982e6979e71c/types_pyyaml-6.0.12.20250915.tar.gz", hash = "sha256:0f8b54a528c303f0e6f7165687dd33fafa81c807fcac23f632b63aa624ced1d3", size = 17522 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl", hash = "sha256:e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6", size = 20338 },
 ]
 
 [[package]]

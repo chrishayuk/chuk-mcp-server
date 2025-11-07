@@ -1,0 +1,141 @@
+# Docker Compose Configuration for ChukMCPServer
+# Demonstrates various deployment scenarios
+
+version: '3.8'
+
+services:
+  # ========================================================================
+  # Main MCP Server - HTTP Mode with Composition
+  # ========================================================================
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chuk-mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      # Server configuration
+      - SERVER_NAME=composed-mcp-server
+      - SERVER_TRANSPORT=http
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+
+      # Logging
+      - LOG_LEVEL=INFO
+
+      # External service tokens (load from .env)
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - API_TOKEN=${API_TOKEN}
+    volumes:
+      # Mount custom config
+      - ./config.yaml:/app/config.yaml:ro
+
+      # Mount custom modules
+      - ./modules:/app/modules:ro
+
+      # Mount data directory for persistence
+      - mcp-data:/app/data
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # ========================================================================
+  # Development Server - With Hot Reload
+  # ========================================================================
+  mcp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chuk-mcp-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - SERVER_NAME=dev-server
+      - SERVER_TRANSPORT=http
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./config.yaml:/app/config.yaml
+      - ./modules:/app/modules
+    command: ["python", "-m", "chuk_mcp_server.cli", "--config", "config.yaml", "--reload"]
+    networks:
+      - mcp-network
+    profiles:
+      - dev
+
+  # ========================================================================
+  # STDIO Mode Server - For MCP Client Integration
+  # ========================================================================
+  mcp-stdio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chuk-mcp-stdio
+    environment:
+      - SERVER_NAME=stdio-server
+      - SERVER_TRANSPORT=stdio
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["python", "-m", "chuk_mcp_server.cli", "--transport", "stdio", "--config", "config.yaml"]
+    networks:
+      - mcp-network
+    profiles:
+      - stdio
+
+  # ========================================================================
+  # Supporting Services (Optional)
+  # ========================================================================
+
+  # Redis - For session management and caching
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - mcp-network
+    profiles:
+      - cache
+
+  # Nginx - Reverse proxy with load balancing
+  nginx:
+    image: nginx:alpine
+    container_name: mcp-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - mcp-server
+    networks:
+      - mcp-network
+    profiles:
+      - production
+
+# ========================================================================
+# Networks
+# ========================================================================
+networks:
+  mcp-network:
+    driver: bridge
+
+# ========================================================================
+# Volumes
+# ========================================================================
+volumes:
+  mcp-data:
+    driver: local
+  redis-data:
+    driver: local
