@@ -36,6 +36,83 @@ class CompositionManager:
             "proxied": 0,
         }
 
+    async def import_from_config(
+        self,
+        server_name: str,
+        config: dict[str, Any],
+        prefix: str | None = None,
+    ) -> None:
+        """
+        Import a server from configuration.
+
+        Supports multiple types:
+        - "module": Direct Python import (e.g., chuk_mcp_echo.server:echo_service)
+        - "stdio": Subprocess MCP server
+        - "http": HTTP-based MCP server
+        - "sse": Server-Sent Events transport
+
+        Args:
+            server_name: Name identifier for the server
+            config: Server configuration (type, module, command, url, etc.)
+            prefix: Optional prefix for namespacing
+        """
+        import importlib
+
+        server_type = config.get("type", "module")
+
+        if server_type == "module":
+            # Direct Python module import (in-process)
+            module_path = config.get("module")
+            if not module_path:
+                raise ValueError(f"Missing 'module' in config for {server_name}")
+
+            # Parse module:attribute format
+            if ":" in module_path:
+                module_name, attr_name = module_path.split(":", 1)
+            else:
+                module_name = module_path
+                attr_name = server_name
+
+            logger.info(f"Importing module {module_name}:{attr_name}")
+
+            # Import the module
+            module = importlib.import_module(module_name)
+            server_instance = getattr(module, attr_name)
+
+            # Use the standard import_server method
+            self.import_server(server_instance, prefix=prefix)
+
+        elif server_type in ("stdio", "http", "sse"):
+            # Use ProxyManager for subprocess/remote servers
+            from ..proxy.manager import ProxyManager
+
+            # Create proxy config for this single server
+            proxy_config = {
+                "proxy": {
+                    "enabled": True,
+                    "namespace": prefix or "",  # Use prefix as namespace
+                },
+                "servers": {
+                    server_name: config
+                }
+            }
+
+            # Initialize and start proxy manager
+            proxy_manager = ProxyManager(proxy_config, self.parent_server.protocol)
+            await proxy_manager.start_servers()
+
+            # Store proxy manager reference for cleanup later
+            if not hasattr(self, '_proxy_managers'):
+                self._proxy_managers = []
+            self._proxy_managers.append(proxy_manager)
+
+            self.composition_stats["imported"] += 1
+            logger.info(f"Imported {server_type} server '{server_name}' via proxy with prefix '{prefix}'")
+
+        else:
+            logger.warning(f"Server type '{server_type}' not supported. Use 'module', 'stdio', 'http', or 'sse'.")
+            return
+
     def import_server(
         self,
         server: Any,

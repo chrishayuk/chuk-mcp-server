@@ -128,17 +128,16 @@ class CompositionConfigLoader:
             manager: CompositionManager instance
             config: Server configuration dictionary
         """
-        from ..proxy.manager import ProxyManager
-
         server_name = config.get("name", "unknown")
-        server_type = config.get("type", "stdio")
+        server_type = config.get("type", "module")
+        prefix = config.get("prefix")
 
         logger.info(f"Importing server '{server_name}' (type={server_type})")
 
-        # Create proxy configuration
-        proxy_config = {
-            "name": server_name,
+        # Create server configuration for the manager
+        server_config = {
             "type": server_type,
+            "module": config.get("module"),
             "command": config.get("command"),
             "args": config.get("args", []),
             "env": config.get("env", {}),
@@ -147,16 +146,9 @@ class CompositionConfigLoader:
             "headers": config.get("headers", {}),
         }
 
-        # Use ProxyManager to connect and get tools
-        proxy_manager = ProxyManager(manager.parent_server)
-        proxy_manager.add_server(server_name, proxy_config)
+        # Use the manager's import_from_config method
+        manager.import_from_config(server_name, server_config, prefix=prefix)
 
-        # Get prefix
-        prefix = config.get("prefix")
-
-        # Import from the proxy server
-        # Note: This is simplified - in practice you'd need to connect to the server
-        # and extract its tools/resources/prompts
         logger.info(f"Imported server '{server_name}' with prefix '{prefix}'")
 
     def _mount_server(self, manager: Any, config: dict[str, Any]) -> None:
