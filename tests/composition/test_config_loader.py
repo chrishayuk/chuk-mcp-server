@@ -240,14 +240,13 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
         manager.parent_server = MagicMock()
+        # Configure the mock to raise an exception when import_from_config is called
+        manager.import_from_config.side_effect = Exception("Import failed")
 
-        with patch("chuk_mcp_server.proxy.manager.ProxyManager") as mock_proxy:
-            mock_proxy.side_effect = Exception("Import failed")
+        stats = loader.apply_to_manager(manager)
 
-            stats = loader.apply_to_manager(manager)
-
-            # Should handle exception and not increment imported
-            assert stats["imported"] == 0
+        # Should handle exception and not increment imported
+        assert stats["imported"] == 0
 
     def test_apply_to_manager_with_mount(self, tmp_path):
         """Test applying configuration with mount section."""
@@ -384,15 +383,14 @@ class TestCompositionConfigLoader:
             "prefix": "gh_",
         }
 
-        with patch("chuk_mcp_server.proxy.manager.ProxyManager") as mock_proxy:
-            mock_proxy_instance = MagicMock()
-            mock_proxy.return_value = mock_proxy_instance
+        loader._import_server(manager, server_config)
 
-            loader._import_server(manager, server_config)
-
-            # Verify ProxyManager was created and add_server called
-            mock_proxy.assert_called_once_with(manager.parent_server)
-            mock_proxy_instance.add_server.assert_called_once()
+        # Verify import_from_config was called with correct arguments
+        manager.import_from_config.assert_called_once()
+        call_args = manager.import_from_config.call_args
+        assert call_args[0][0] == "github"  # server_name
+        assert call_args[0][1]["type"] == "stdio"  # config
+        assert call_args[1]["prefix"] == "gh_"  # prefix kwarg
 
     def test_import_server_http(self, tmp_path):
         """Test _import_server with http server."""
@@ -411,14 +409,14 @@ class TestCompositionConfigLoader:
             "headers": {"Authorization": "Bearer token"},
         }
 
-        with patch("chuk_mcp_server.proxy.manager.ProxyManager") as mock_proxy:
-            mock_proxy_instance = MagicMock()
-            mock_proxy.return_value = mock_proxy_instance
+        loader._import_server(manager, server_config)
 
-            loader._import_server(manager, server_config)
-
-            mock_proxy.assert_called_once_with(manager.parent_server)
-            mock_proxy_instance.add_server.assert_called_once()
+        # Verify import_from_config was called with correct arguments
+        manager.import_from_config.assert_called_once()
+        call_args = manager.import_from_config.call_args
+        assert call_args[0][0] == "api"  # server_name
+        assert call_args[0][1]["type"] == "http"  # config
+        assert call_args[0][1]["url"] == "http://localhost:8001"
 
     def test_mount_server_http(self, tmp_path):
         """Test _mount_server with http server."""
