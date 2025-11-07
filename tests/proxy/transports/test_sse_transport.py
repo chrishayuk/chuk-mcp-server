@@ -214,8 +214,9 @@ class TestSseProxyTransport:
                 await transport.send_request("test_method")
 
     @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx")
+    @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx_sse")
     @pytest.mark.asyncio
-    async def test_call_tool_not_connected(self, mock_httpx):
+    async def test_call_tool_not_connected(self, mock_sse, mock_httpx):
         """Test call_tool when not connected."""
         from chuk_mcp_server.proxy.transports.sse_transport import SseProxyTransport
 
@@ -225,8 +226,9 @@ class TestSseProxyTransport:
             await transport.call_tool("test_tool", {})
 
     @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx")
+    @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx_sse")
     @pytest.mark.asyncio
-    async def test_list_tools_not_connected(self, mock_httpx):
+    async def test_list_tools_not_connected(self, mock_sse, mock_httpx):
         """Test list_tools when not connected."""
         from chuk_mcp_server.proxy.transports.sse_transport import SseProxyTransport
 
@@ -369,8 +371,9 @@ class TestSseProxyTransport:
         assert result is True
 
     @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx")
+    @patch("chuk_mcp_server.proxy.transports.sse_transport.httpx_sse")
     @pytest.mark.asyncio
-    async def test_send_request_not_connected(self, mock_httpx):
+    async def test_send_request_not_connected(self, mock_sse, mock_httpx):
         """Test send_request when not connected."""
         from chuk_mcp_server.proxy.transports.sse_transport import SseProxyTransport
 
