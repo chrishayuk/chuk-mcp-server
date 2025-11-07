@@ -9,6 +9,7 @@ and orjson optimization for maximum performance in schema operations.
 
 import inspect
 from dataclasses import dataclass
+from types import UnionType
 from typing import Any, Union
 
 import orjson
@@ -83,8 +84,9 @@ class ToolParameter:
             origin = typing.get_origin(annotation)
             args = typing.get_args(annotation)
 
-            if origin is Union:
-                # Handle Optional[T] and Union types
+            # Handle both typing.Union and types.UnionType (Python 3.10+ X | Y syntax)
+            if origin is Union or (UnionType is not None and origin is UnionType):
+                # Handle Optional[T] and Union types (including T | None syntax)
                 if len(args) == 2 and type(None) in args:
                     # Optional[T] case
                     non_none_type = next(arg for arg in args if arg is not type(None))
@@ -106,8 +108,8 @@ class ToolParameter:
             else:
                 param_type = type_map.get(origin, "string")
 
-        # Fallback for older typing or direct types
-        elif hasattr(annotation, "__origin__"):
+        # Fallback for older typing or direct types (Python 3.7-3.8 compatibility)
+        elif hasattr(annotation, "__origin__"):  # pragma: no cover - Python 3.7-3.8 compatibility
             origin = annotation.__origin__
             if origin is Union:
                 args = annotation.__args__
@@ -222,10 +224,11 @@ def infer_type_from_annotation(annotation: Any) -> str:
     if hasattr(typing, "get_origin") and hasattr(typing, "get_args"):
         origin = typing.get_origin(annotation)
 
-        if origin is Union:
+        # Handle both typing.Union and types.UnionType (Python 3.10+ X | Y syntax)
+        if origin is Union or (UnionType is not None and origin is UnionType):
             args = typing.get_args(annotation)
             if len(args) == 2 and type(None) in args:
-                # Optional[T] case
+                # Optional[T] case (Union[T, None] or T | None)
                 non_none_type = next(arg for arg in args if arg is not type(None))
                 return type_map.get(non_none_type, "string")
             else:
@@ -240,8 +243,8 @@ def infer_type_from_annotation(annotation: Any) -> str:
         else:
             return type_map.get(origin, "string")
 
-    # Fallback for older typing or direct types
-    elif hasattr(annotation, "__origin__"):
+    # Fallback for older typing or direct types (Python 3.7-3.8 compatibility)
+    elif hasattr(annotation, "__origin__"):  # pragma: no cover - Python 3.7-3.8 compatibility
         origin = annotation.__origin__
         if origin is Union:
             args = annotation.__args__

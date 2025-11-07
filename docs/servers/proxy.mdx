@@ -1,0 +1,905 @@
+---
+title: "Proxy Servers"
+sidebarTitle: "Proxy"
+description: "Use ChukMCPServer as a gateway to aggregate multiple MCP servers programmatically"
+icon: "network-wired"
+---
+
+Use ChukMCPServer as a programmable proxy gateway to aggregate multiple backend MCP servers into a single unified API. Perfect for orchestration, routing, and adding custom logic around existing servers.
+
+## What is a Proxy Server?
+
+A proxy server acts as an intermediary gateway that:
+- **Routes requests** to multiple backend MCP servers
+- **Namespaces tools** to avoid conflicts (e.g., `proxy.github.create_issue`)
+- **Adds orchestration** with custom tools that coordinate backends
+- **Provides monitoring** of backend server health and performance
+
+<Card title="🔀 Proxy vs Composition" icon="code-compare">
+  **Proxy**: Programmatic Python API with `proxy_config` dictionary. Best for dynamic routing, custom logic, and runtime configuration.
+
+  **Composition**: Configuration-based with `config.yaml`. Best for static server aggregation and declarative setups.
+</Card>
+
+## Quick Start
+
+Create a proxy gateway in 30 seconds:
+
+<Tabs>
+  <Tab title="uvx init (Recommended ⭐)">
+    **Instant setup** with scaffolder, then add proxy configuration:
+
+    ```bash
+    # Generate base server
+    uvx chuk-mcp-server init my-gateway
+    cd my-gateway
+
+    # Replace server.py with proxy configuration
+    cat > server.py << 'EOF'
+from chuk_mcp_server import ChukMCPServer
+
+# Configure backend servers
+proxy_config = {
+    "proxy": {
+        "enabled": True,
+        "namespace": "proxy",
+    },
+    "servers": {
+        "github": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+        },
+        "time": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": ["mcp-server-time"],
+        },
+    },
+}
+
+# Create proxy gateway
+mcp = ChukMCPServer(
+    name="API Gateway",
+    version="1.0.0",
+    proxy_config=proxy_config,
+)
+
+# Add orchestration tools
+@mcp.tool
+async def system_status() -> dict:
+    """Get status of all backend servers."""
+    return {
+        "backends": list(proxy_config["servers"].keys()),
+        "status": "running",
+    }
+
+if __name__ == "__main__":
+    mcp.run()
+EOF
+
+    # Run server
+    uv run python server.py
+    ```
+
+    You get:
+    - Dockerfile and docker-compose.yml from scaffolder
+    - All GitHub and time tools namespaced
+    - Custom orchestration tools
+  </Tab>
+
+  <Tab title="Manual setup">
+    **Step-by-step** manual setup:
+
+    ```bash
+    # Create project
+    uv init my-gateway
+    cd my-gateway
+
+    # Add ChukMCPServer
+    uv add chuk-mcp-server
+
+    # Create server.py with proxy config
+    cat > server.py << 'EOF'
+from chuk_mcp_server import ChukMCPServer
+
+proxy_config = {
+    "proxy": {
+        "enabled": True,
+        "namespace": "proxy",
+    },
+    "servers": {
+        "github": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+        },
+    },
+}
+
+mcp = ChukMCPServer(
+    name="API Gateway",
+    proxy_config=proxy_config,
+)
+
+if __name__ == "__main__":
+    mcp.run()
+EOF
+
+    # Run server
+    uv run python server.py
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Your proxy gateway is running! All backend tools are available through the proxy.
+</Check>
+
+## Proxy Configuration
+
+Complete proxy configuration structure:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+proxy_config = {
+    # Proxy settings
+    "proxy": {
+        "enabled": True,
+        "namespace": "proxy",  # Tools: proxy.<server>.<tool>
+        "timeout": 30,  # Default timeout (seconds)
+        "retry_count": 3,  # Retry failed requests
+        "health_check_interval": 60,  # Health check frequency
+    },
+
+    # Backend servers
+    "servers": {
+        # STDIO server (subprocess)
+        "github": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+                "GITHUB_TOKEN": "ghp_...",  # Environment variables
+            },
+            "timeout": 45,  # Per-server timeout override
+        },
+
+        # HTTP server (remote)
+        "analytics": {
+            "type": "http",
+            "url": "http://analytics-server:8001",
+            "headers": {
+                "Authorization": "Bearer token123",
+            },
+            "timeout": 60,
+        },
+
+        # SSE server (legacy)
+        "legacy": {
+            "type": "sse",
+            "url": "http://legacy-server:8002/sse",
+            "timeout": 30,
+        },
+    },
+}
+
+# Create proxy server
+mcp = ChukMCPServer(
+    name="Multi-Server Gateway",
+    version="1.0.0",
+    description="Proxy gateway for multiple backends",
+    proxy_config=proxy_config,
+)
+```
+
+<Info>
+  Backend servers can use any transport: **stdio** (subprocess), **http** (REST), or **sse** (Server-Sent Events).
+</Info>
+
+## Backend Server Types
+
+<AccordionGroup>
+  <Accordion title="STDIO Backend (Subprocess)" icon="terminal">
+    Run backend servers as subprocesses:
+
+    ```python
+    "servers": {
+        "github": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+                "GITHUB_TOKEN": "your-token",
+                "LOG_LEVEL": "info",
+            },
+            "cwd": "/path/to/working/dir",  # Optional
+            "timeout": 30,
+        },
+
+        "python-server": {
+            "type": "stdio",
+            "command": "python",
+            "args": ["-m", "my_mcp_server"],
+            "env": {
+                "API_KEY": "secret",
+            },
+        },
+
+        "node-server": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["server.js"],
+        },
+    }
+    ```
+
+    **When to use:**
+    - MCP servers designed for stdio transport
+    - Claude Desktop integration servers
+    - Local development and testing
+    - Servers you control (subprocess lifecycle)
+  </Accordion>
+
+  <Accordion title="HTTP Backend (Remote)" icon="globe">
+    Connect to remote HTTP MCP servers:
+
+    ```python
+    "servers": {
+        "api": {
+            "type": "http",
+            "url": "http://api.example.com",
+            "headers": {
+                "Authorization": "Bearer token",
+                "X-API-Version": "2.0",
+            },
+            "timeout": 60,
+            "retry_count": 3,
+        },
+
+        "microservice": {
+            "type": "http",
+            "url": "http://service:8001",
+            "timeout": 30,
+        },
+    }
+    ```
+
+    **When to use:**
+    - Production microservices
+    - External APIs and services
+    - Independently deployed servers
+    - Load-balanced backends
+  </Accordion>
+
+  <Accordion title="SSE Backend (Legacy)" icon="rss">
+    Connect to Server-Sent Events servers:
+
+    ```python
+    "servers": {
+        "legacy": {
+            "type": "sse",
+            "url": "http://legacy-server:8002/sse",
+            "timeout": 30,
+        },
+    }
+    ```
+
+    **When to use:**
+    - Legacy MCP servers using SSE transport
+    - Streaming event sources
+    - Backward compatibility
+  </Accordion>
+</AccordionGroup>
+
+## Tool Namespacing
+
+All proxied tools are automatically namespaced to avoid conflicts:
+
+```python
+# Backend server "github" has tool "create_issue"
+# Exposed as: proxy.github.create_issue
+
+# Backend server "slack" has tool "send_message"
+# Exposed as: proxy.slack.send_message
+
+# Custom namespace
+proxy_config = {
+    "proxy": {
+        "namespace": "backend",  # Custom prefix
+    }
+}
+# Tools become: backend.github.create_issue
+```
+
+### Calling Proxied Tools
+
+From Claude or MCP clients:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "proxy.github.create_issue",
+    "arguments": {
+      "repo": "my-org/my-repo",
+      "title": "Bug report",
+      "body": "Description of the bug"
+    }
+  },
+  "id": 1
+}
+```
+
+## Adding Orchestration Logic
+
+Combine backend servers with custom orchestration tools:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+proxy_config = {
+    "proxy": {"enabled": True, "namespace": "proxy"},
+    "servers": {
+        "github": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]},
+        "slack": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"]},
+    },
+}
+
+mcp = ChukMCPServer(name="Orchestration Gateway", proxy_config=proxy_config)
+
+
+# Orchestration tool that coordinates multiple backends
+@mcp.tool
+async def create_issue_and_notify(
+    repo: str,
+    title: str,
+    body: str,
+    slack_channel: str
+) -> dict:
+    """Create GitHub issue and post to Slack."""
+    # Call GitHub backend (via proxy)
+    # Note: You'd need to implement the actual proxy call mechanism
+    # This is a conceptual example
+
+    github_result = await call_backend_tool(
+        "proxy.github.create_issue",
+        {"repo": repo, "title": title, "body": body}
+    )
+
+    # Call Slack backend
+    slack_result = await call_backend_tool(
+        "proxy.slack.post_message",
+        {
+            "channel": slack_channel,
+            "text": f"New issue created: {github_result['url']}"
+        }
+    )
+
+    return {
+        "github_issue": github_result,
+        "slack_notification": slack_result,
+        "status": "success"
+    }
+
+
+# Monitoring tool
+@mcp.tool
+async def get_backend_status() -> dict:
+    """Get health status of all backend servers."""
+    stats = mcp.get_proxy_stats()
+    return {
+        "backends": list(proxy_config["servers"].keys()),
+        "stats": stats,
+        "status": "healthy"
+    }
+
+
+# Configuration resource
+@mcp.resource("proxy://config")
+def proxy_configuration() -> dict:
+    """Get current proxy configuration."""
+    return {
+        "namespace": proxy_config["proxy"]["namespace"],
+        "backend_count": len(proxy_config["servers"]),
+        "backends": list(proxy_config["servers"].keys()),
+    }
+```
+
+## Real-World Examples
+
+### Example 1: GitHub + Slack Gateway
+
+Coordinate GitHub and Slack operations:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+import os
+
+proxy_config = {
+    "proxy": {"enabled": True, "namespace": "backend"},
+    "servers": {
+        "github": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {"GITHUB_TOKEN": os.getenv("GITHUB_TOKEN")},
+        },
+        "slack": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-slack"],
+            "env": {"SLACK_BOT_TOKEN": os.getenv("SLACK_BOT_TOKEN")},
+        },
+    },
+}
+
+mcp = ChukMCPServer(
+    name="Team Gateway",
+    version="1.0.0",
+    description="GitHub and Slack integration gateway",
+    proxy_config=proxy_config,
+)
+
+
+@mcp.tool
+async def deploy_and_announce(
+    repo: str,
+    version: str,
+    channel: str
+) -> dict:
+    """Tag release in GitHub and announce in Slack."""
+    # Your orchestration logic here
+    return {
+        "repo": repo,
+        "version": version,
+        "announced_in": channel,
+        "status": "success"
+    }
+
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### Example 2: Microservices Gateway
+
+Aggregate internal microservices:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+proxy_config = {
+    "proxy": {"enabled": True, "namespace": "api"},
+    "servers": {
+        "users": {
+            "type": "http",
+            "url": "http://user-service:8001",
+            "timeout": 15,
+        },
+        "orders": {
+            "type": "http",
+            "url": "http://order-service:8002",
+            "timeout": 30,
+        },
+        "inventory": {
+            "type": "http",
+            "url": "http://inventory-service:8003",
+            "timeout": 20,
+        },
+        "payments": {
+            "type": "http",
+            "url": "http://payment-service:8004",
+            "timeout": 45,
+        },
+    },
+}
+
+mcp = ChukMCPServer(
+    name="Microservices Gateway",
+    version="2.0.0",
+    proxy_config=proxy_config,
+)
+
+
+@mcp.tool
+async def create_order(
+    user_id: str,
+    items: list,
+    payment_method: str
+) -> dict:
+    """Create order with inventory check and payment processing."""
+    # 1. Check inventory
+    # 2. Reserve items
+    # 3. Process payment
+    # 4. Create order
+    # 5. Update inventory
+    return {"order_id": "12345", "status": "completed"}
+
+
+if __name__ == "__main__":
+    mcp.run(port=8000)
+```
+
+### Example 3: Development Environment Gateway
+
+Proxy local and remote services during development:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+import os
+
+# Different config for dev vs prod
+is_production = os.getenv("ENV") == "production"
+
+proxy_config = {
+    "proxy": {"enabled": True, "namespace": "svc"},
+    "servers": {
+        "database": {
+            "type": "http",
+            "url": "http://localhost:8001" if not is_production else "http://db.prod:8001",
+        },
+        "cache": {
+            "type": "http",
+            "url": "http://localhost:8002" if not is_production else "http://cache.prod:8002",
+        },
+    },
+}
+
+mcp = ChukMCPServer(
+    name="Environment Gateway",
+    proxy_config=proxy_config,
+)
+
+if __name__ == "__main__":
+    port = 8000 if not is_production else 80
+    mcp.run(port=port)
+```
+
+## Proxy vs Composition
+
+<Tabs>
+  <Tab title="Use Proxy When...">
+    ✅ **Proxy** is best for:
+
+    - **Dynamic configuration** at runtime
+    - **Custom orchestration** logic needed
+    - **Programmatic control** over backends
+    - **Complex routing** rules
+    - **Python code** for configuration
+    - **Runtime backend changes**
+
+    **Examples:**
+    - Multi-step workflows across backends
+    - Dynamic backend selection based on load
+    - Custom authentication/authorization
+    - A/B testing between backends
+    - Circuit breaker patterns
+  </Tab>
+
+  <Tab title="Use Composition When...">
+    ✅ **Composition** is best for:
+
+    - **Static configuration** via YAML
+    - **Declarative setup** preferred
+    - **Simple aggregation** without logic
+    - **Configuration-driven** deployment
+    - **Import/mount** strategies
+    - **Environment-based** configs
+
+    **Examples:**
+    - Simple server aggregation
+    - Configuration-only deployment
+    - Docker-based composition
+    - Multi-environment configs (dev/prod)
+    - GitOps workflows
+  </Tab>
+</Tabs>
+
+## Deployment
+
+### Docker Deployment
+
+The scaffolder creates Dockerfile and docker-compose.yml:
+
+```dockerfile
+FROM python:3.11-slim
+
+# Install uv and Node.js (for npx backends)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+
+COPY server.py .
+RUN uv pip install chuk-mcp-server
+
+ENV GITHUB_TOKEN=""
+ENV SLACK_TOKEN=""
+
+CMD ["python", "server.py"]
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - SLACK_TOKEN=${SLACK_TOKEN}
+```
+
+Run with:
+```bash
+docker-compose up
+```
+
+### Claude Desktop Integration
+
+Add proxy gateway to Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "gateway": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/my-gateway",
+        "python",
+        "server.py"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "your-token",
+        "SLACK_TOKEN": "your-slack-token"
+      }
+    }
+  }
+}
+```
+
+## Monitoring and Health Checks
+
+Built-in health monitoring:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer(proxy_config=proxy_config)
+
+
+@mcp.tool
+async def health_check() -> dict:
+    """Check health of all backend servers."""
+    stats = mcp.get_proxy_stats()
+
+    return {
+        "gateway": "healthy",
+        "backends": {
+            name: {
+                "status": "healthy",
+                "response_time_ms": stats.get(name, {}).get("avg_response_time", 0),
+                "request_count": stats.get(name, {}).get("request_count", 0),
+                "error_count": stats.get(name, {}).get("error_count", 0),
+            }
+            for name in proxy_config["servers"].keys()
+        }
+    }
+
+
+@mcp.resource("metrics://proxy")
+def proxy_metrics() -> dict:
+    """Get detailed proxy metrics."""
+    return mcp.get_proxy_stats()
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Backend server fails to start" icon="triangle-exclamation">
+    **Symptoms:** Error like "Failed to start server 'github'"
+
+    **Solutions:**
+    ```bash
+    # Test backend command directly
+    npx -y @modelcontextprotocol/server-github
+
+    # Check environment variables
+    echo $GITHUB_TOKEN
+
+    # Enable debug logging
+    mcp.run(debug=True, log_level="debug")
+
+    # Check command path
+    which npx
+    which python
+    ```
+  </Accordion>
+
+  <Accordion title="Tool not found" icon="magnifying-glass">
+    **Symptoms:** "Tool 'github.create_issue' not found"
+
+    **Solution:** Use full namespaced name:
+
+    ```python
+    # ❌ Wrong
+    tool_name = "github.create_issue"
+
+    # ✅ Correct (with default namespace)
+    tool_name = "proxy.github.create_issue"
+
+    # ✅ Correct (with custom namespace)
+    proxy_config = {"proxy": {"namespace": "backend"}}
+    tool_name = "backend.github.create_issue"
+    ```
+  </Accordion>
+
+  <Accordion title="Timeout errors" icon="clock">
+    **Symptoms:** Requests timing out
+
+    **Solutions:**
+    ```python
+    # Increase global timeout
+    proxy_config = {
+        "proxy": {
+            "timeout": 120,  # 2 minutes
+        }
+    }
+
+    # Or per-server timeout
+    "servers": {
+        "slow-api": {
+            "type": "http",
+            "url": "http://api.example.com",
+            "timeout": 180,  # 3 minutes for this server
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Connection refused" icon="plug">
+    **Symptoms:** "Connection refused to http://backend:8001"
+
+    **Solutions:**
+    ```bash
+    # Check backend is running
+    curl http://localhost:8001/health
+
+    # Check network connectivity
+    ping backend-hostname
+
+    # Verify URL in proxy_config
+    # Make sure host and port are correct
+
+    # Check Docker networking
+    docker network ls
+    docker network inspect <network-name>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Health Checks">
+    Implement health monitoring for all backends:
+
+    ```python
+    @mcp.tool
+    async def system_health() -> dict:
+        stats = mcp.get_proxy_stats()
+        backends = {}
+
+        for name in proxy_config["servers"]:
+            backend_stats = stats.get(name, {})
+            backends[name] = {
+                "healthy": backend_stats.get("error_count", 0) == 0,
+                "errors": backend_stats.get("error_count", 0),
+            }
+
+        return {"status": "healthy", "backends": backends}
+    ```
+  </Step>
+
+  <Step title="Environment Variables">
+    Never hardcode secrets in proxy_config:
+
+    ```python
+    import os
+
+    # ❌ Bad
+    "env": {"TOKEN": "secret-123"}
+
+    # ✅ Good
+    "env": {"TOKEN": os.getenv("API_TOKEN")}
+    ```
+  </Step>
+
+  <Step title="Timeout Configuration">
+    Set appropriate timeouts per backend:
+
+    ```python
+    "servers": {
+        "fast-api": {"timeout": 10},    # Quick APIs
+        "slow-batch": {"timeout": 300}, # Long-running jobs
+    }
+    ```
+  </Step>
+
+  <Step title="Retry Logic">
+    Enable retries for transient failures:
+
+    ```python
+    proxy_config = {
+        "proxy": {
+            "retry_count": 3,  # Retry failed requests
+            "retry_delay": 1,  # Wait 1s between retries
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Graceful Degradation">
+    Handle backend failures gracefully:
+
+    ```python
+    @mcp.tool
+    async def resilient_call() -> dict:
+        try:
+            # Try primary backend
+            result = await call_backend("primary")
+            return {"source": "primary", "data": result}
+        except Exception:
+            # Fallback to secondary
+            result = await call_backend("secondary")
+            return {"source": "secondary", "data": result}
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Server Composition"
+    icon="puzzle-piece"
+    href="/servers/composition"
+  >
+    Learn about config-based composition
+  </Card>
+
+  <Card
+    title="Docker Deployment"
+    icon="docker"
+    href="/deployment/docker"
+  >
+    Deploy proxy servers with Docker
+  </Card>
+
+  <Card
+    title="Performance Tuning"
+    icon="gauge-high"
+    href="/advanced/performance"
+  >
+    Optimize proxy performance
+  </Card>
+
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api-reference/proxy"
+  >
+    Complete proxy API documentation
+  </Card>
+</CardGroup>
+
+---
+
+<Info>
+  **Ready to deploy?** Check out the [Docker Deployment Guide](/deployment/docker) for production-ready containerized proxies.
+</Info>

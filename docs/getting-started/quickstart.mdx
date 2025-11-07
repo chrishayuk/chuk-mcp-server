@@ -1,0 +1,645 @@
+---
+title: "Quickstart"
+sidebarTitle: "Quickstart"
+description: "Build your first MCP server in 5 minutes"
+icon: "rocket-launch"
+---
+
+Build a production-ready MCP server with tools, resources, and prompts in just 5 minutes.
+
+## Before You Start
+
+Make sure you have **uv** installed (our recommended package manager):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+<Check>
+  **Already have uv?** Skip ahead to [Step 1](#step-1-create-your-first-server).
+</Check>
+
+## Step 1: Create Your First Server
+
+Create a simple MCP server with a single tool. Choose your preferred method:
+
+<Tabs>
+  <Tab title="uvx init (Recommended ⭐)">
+    **Fastest way** - Use the built-in scaffolder to generate a complete project:
+
+    ```bash
+    # Generate a new project with scaffolder
+    uvx chuk-mcp-server init my-mcp-server
+    cd my-mcp-server
+
+    # Run your server (dependencies auto-managed by uv)
+    uv run python server.py
+    ```
+
+    The scaffolder creates:
+    - `server.py` with example tools, resources, and prompts
+    - `pyproject.toml` with dependencies
+    - `README.md` with comprehensive documentation
+    - `Dockerfile` and `docker-compose.yml` for deployment
+    - `.gitignore` and other essentials
+  </Tab>
+
+  <Tab title="Manual setup">
+    **Full control** - Set up the project manually:
+
+    ```bash
+    # Create a new project
+    uv init my-mcp-server
+    cd my-mcp-server
+
+    # Add ChukMCPServer
+    uv add chuk-mcp-server
+
+    # Create server.py
+    cat > server.py << 'EOF'
+from chuk_mcp_server import tool, run
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! 👋"
+
+if __name__ == "__main__":
+    run()
+EOF
+
+    # Run your server
+    uv run python server.py
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Your server is now running! Press `Ctrl+C` to stop it.
+</Check>
+
+### What Just Happened?
+
+1. **Created a project** - `uv init` set up a Python project with dependencies managed by uv
+2. **Added a tool** - The `@tool` decorator exposes a Python function as an MCP tool
+3. **Started the server** - `run()` auto-detects the best transport (STDIO by default)
+
+## Step 2: Add More Tools
+
+Let's add more functionality to your server:
+
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! 👋"
+
+@tool
+def calculate(operation: str, a: float, b: float) -> float:
+    """Perform basic math operations.
+
+    Args:
+        operation: One of 'add', 'subtract', 'multiply', 'divide'
+        a: First number
+        b: Second number
+    """
+    operations = {
+        "add": lambda x, y: x + y,
+        "subtract": lambda x, y: x - y,
+        "multiply": lambda x, y: x * y,
+        "divide": lambda x, y: x / y if y != 0 else float('inf'),
+    }
+    return operations.get(operation, lambda x, y: 0)(a, b)
+
+@tool
+async def fetch_data(url: str) -> dict:
+    """Fetch data from a URL (async example)."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return {"status": response.status_code, "data": response.text[:100]}
+
+if __name__ == "__main__":
+    run()
+```
+
+<Info>
+  **Type hints matter!** ChukMCPServer automatically generates JSON schemas from your type hints.
+</Info>
+
+## Step 3: Add Resources
+
+Resources provide data that LLMs can access. Add a resource to your server:
+
+```python
+from chuk_mcp_server import tool, resource, run
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! 👋"
+
+@resource("config://server")
+def server_config() -> dict:
+    """Server configuration and capabilities."""
+    return {
+        "name": "My MCP Server",
+        "version": "1.0.0",
+        "features": ["tools", "resources", "prompts"],
+        "max_concurrent_requests": 100
+    }
+
+@resource("data://users/{user_id}")
+def user_data(user_id: str) -> dict:
+    """Get user data by ID (example with URI parameter)."""
+    return {
+        "user_id": user_id,
+        "name": f"User {user_id}",
+        "role": "developer"
+    }
+
+if __name__ == "__main__":
+    run()
+```
+
+<Note>
+  Resources use URI templates. The `{user_id}` in the URI becomes a function parameter.
+</Note>
+
+## Step 4: Add Prompts
+
+Prompts are reusable templates that help structure LLM interactions:
+
+```python
+from chuk_mcp_server import tool, resource, prompt, run
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! 👋"
+
+@resource("config://server")
+def server_config() -> dict:
+    """Server configuration and capabilities."""
+    return {"name": "My MCP Server", "version": "1.0.0"}
+
+@prompt
+def code_review(language: str, code: str) -> str:
+    """Generate a code review prompt."""
+    return f"""Please review this {language} code:
+
+```{language}
+{code}
+```
+
+Provide feedback on:
+- Code quality and style
+- Potential bugs or issues
+- Performance considerations
+- Best practices
+"""
+
+@prompt
+def debug_helper(error_message: str, context: str = "") -> str:
+    """Generate a debugging assistance prompt."""
+    prompt_text = f"I'm getting this error:\n\n{error_message}\n\n"
+    if context:
+        prompt_text += f"Context:\n{context}\n\n"
+    prompt_text += "Can you help me understand what's wrong and how to fix it?"
+    return prompt_text
+
+if __name__ == "__main__":
+    run()
+```
+
+## Step 5: Test Your Server
+
+### Option 1: Test with Claude Desktop
+
+Add your server to Claude Desktop's config:
+
+<Tabs>
+  <Tab title="macOS">
+    Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-server": {
+          "command": "uv",
+          "args": [
+            "run",
+            "--directory",
+            "/absolute/path/to/my-mcp-server",
+            "python",
+            "server.py"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-server": {
+          "command": "uv",
+          "args": [
+            "run",
+            "--directory",
+            "C:\\path\\to\\my-mcp-server",
+            "python",
+            "server.py"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Restart Claude Desktop and your tools will appear!
+</Check>
+
+### Option 2: Test with HTTP Mode
+
+Run your server in HTTP mode for web/API access:
+
+```bash
+# Run in HTTP mode
+uv run python server.py --transport http --port 8000
+
+# Test the health endpoint
+curl http://localhost:8000/health
+
+# List available tools
+curl http://localhost:8000/mcp/tools
+
+# Call a tool
+curl -X POST http://localhost:8000/mcp/tools/greet \
+  -H "Content-Type: application/json" \
+  -d '{"name": "World"}'
+```
+
+### Option 3: Use the Inspector
+
+Install the MCP Inspector for interactive testing:
+
+```bash
+# Install inspector
+npm install -g @modelcontextprotocol/inspector
+
+# Run inspector
+npx @modelcontextprotocol/inspector uv run python server.py
+```
+
+## Step 6: Organize Your Code
+
+For larger servers, organize your code into modules:
+
+```
+my-mcp-server/
+├── server.py           # Main entry point
+├── tools/
+│   ├── __init__.py
+│   ├── greeting.py     # Greeting tools
+│   └── math.py         # Math tools
+├── resources/
+│   ├── __init__.py
+│   └── config.py       # Configuration resources
+├── prompts/
+│   ├── __init__.py
+│   └── templates.py    # Prompt templates
+└── pyproject.toml
+```
+
+**server.py:**
+```python
+from chuk_mcp_server import ChukMCPServer
+
+# Import your tools, resources, and prompts
+from tools.greeting import *
+from tools.math import *
+from resources.config import *
+from prompts.templates import *
+
+if __name__ == "__main__":
+    mcp = ChukMCPServer()
+    mcp.run()
+```
+
+**tools/greeting.py:**
+```python
+from chuk_mcp_server import tool
+
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! 👋"
+```
+
+## Complete Example
+
+Here's a complete, production-ready server:
+
+```python
+"""
+My MCP Server - A production-ready MCP server with tools, resources, and prompts.
+"""
+from chuk_mcp_server import tool, resource, prompt, run
+import httpx
+
+# ============================================================================
+# Tools - Actions the LLM can perform
+# ============================================================================
+
+@tool
+def greet(name: str, greeting: str = "Hello") -> str:
+    """Greet someone with a custom greeting.
+
+    Args:
+        name: Person's name to greet
+        greeting: Custom greeting (default: "Hello")
+    """
+    return f"{greeting}, {name}! 👋"
+
+@tool
+def calculate(operation: str, a: float, b: float) -> float:
+    """Perform basic math operations.
+
+    Args:
+        operation: One of 'add', 'subtract', 'multiply', 'divide'
+        a: First number
+        b: Second number
+    """
+    ops = {
+        "add": lambda x, y: x + y,
+        "subtract": lambda x, y: x - y,
+        "multiply": lambda x, y: x * y,
+        "divide": lambda x, y: x / y if y != 0 else float('inf'),
+    }
+    return ops.get(operation, lambda x, y: 0)(a, b)
+
+@tool
+async def fetch_json(url: str) -> dict:
+    """Fetch JSON data from a URL.
+
+    Args:
+        url: URL to fetch data from
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.json()
+
+# ============================================================================
+# Resources - Data the LLM can access
+# ============================================================================
+
+@resource("config://server")
+def server_config() -> dict:
+    """Server configuration and capabilities."""
+    return {
+        "name": "My MCP Server",
+        "version": "1.0.0",
+        "description": "A production-ready MCP server",
+        "features": ["tools", "resources", "prompts"],
+        "capabilities": {
+            "supports_async": True,
+            "supports_streaming": False
+        }
+    }
+
+@resource("data://stats")
+def server_stats() -> dict:
+    """Current server statistics."""
+    return {
+        "uptime_seconds": 3600,
+        "requests_handled": 1234,
+        "active_connections": 5
+    }
+
+# ============================================================================
+# Prompts - Reusable templates for LLM interactions
+# ============================================================================
+
+@prompt
+def code_review(language: str, code: str) -> str:
+    """Generate a code review prompt.
+
+    Args:
+        language: Programming language
+        code: Code to review
+    """
+    return f"""Please review this {language} code:
+
+```{language}
+{code}
+```
+
+Provide feedback on:
+- Code quality and style
+- Potential bugs or issues
+- Performance considerations
+- Best practices
+"""
+
+@prompt
+def summarize_text(text: str, max_sentences: int = 3) -> str:
+    """Generate a text summarization prompt.
+
+    Args:
+        text: Text to summarize
+        max_sentences: Maximum sentences in summary
+    """
+    return f"""Please summarize the following text in {max_sentences} sentences or less:
+
+{text}
+"""
+
+# ============================================================================
+# Run Server
+# ============================================================================
+
+if __name__ == "__main__":
+    # Auto-detects best transport (STDIO for Claude Desktop)
+    run()
+
+    # Or specify transport explicitly:
+    # run(transport="http", port=8000)  # HTTP mode for web/API access
+    # run(transport="stdio")            # STDIO mode for Claude Desktop
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Deploy with Docker"
+    icon="docker"
+    href="/deployment/docker"
+  >
+    Package your server in a container
+  </Card>
+
+  <Card
+    title="Server Composition"
+    icon="puzzle-piece"
+    href="/servers/composition"
+  >
+    Combine multiple servers into one
+  </Card>
+
+  <Card
+    title="Add OAuth"
+    icon="shield-check"
+    href="/advanced/oauth"
+  >
+    Secure your server with OAuth 2.1
+  </Card>
+
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api-reference/decorators"
+  >
+    Explore all decorators and options
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Error Handling" icon="triangle-exclamation">
+    ```python
+    from chuk_mcp_server import tool
+
+    @tool
+    def safe_divide(a: float, b: float) -> dict:
+        """Safely divide two numbers."""
+        try:
+            result = a / b
+            return {"success": True, "result": result}
+        except ZeroDivisionError:
+            return {"success": False, "error": "Cannot divide by zero"}
+    ```
+  </Accordion>
+
+  <Accordion title="Async Tools" icon="clock">
+    ```python
+    from chuk_mcp_server import tool
+    import httpx
+
+    @tool
+    async def fetch_data(url: str) -> dict:
+        """Fetch data asynchronously."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            return response.json()
+    ```
+  </Accordion>
+
+  <Accordion title="Complex Return Types" icon="list">
+    ```python
+    from chuk_mcp_server import tool
+    from typing import List, Dict
+
+    @tool
+    def get_users() -> List[Dict[str, str]]:
+        """Return a list of users."""
+        return [
+            {"id": "1", "name": "Alice", "role": "admin"},
+            {"id": "2", "name": "Bob", "role": "user"}
+        ]
+    ```
+  </Accordion>
+
+  <Accordion title="Environment Variables" icon="key">
+    ```python
+    from chuk_mcp_server import tool
+    import os
+
+    @tool
+    def get_api_key() -> str:
+        """Get API key from environment."""
+        api_key = os.getenv("API_KEY")
+        if not api_key:
+            return "API_KEY not configured"
+        return "API key is configured"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Tips & Best Practices
+
+<Steps>
+  <Step title="Use Type Hints">
+    ChukMCPServer generates JSON schemas from type hints. Always annotate your functions:
+    ```python
+    @tool
+    def greet(name: str, age: int = 25) -> str:  # ✅ Good
+        return f"Hello {name}, age {age}"
+
+    @tool
+    def bad_greet(name, age):  # ❌ Bad - no types
+        return f"Hello {name}"
+    ```
+  </Step>
+
+  <Step title="Write Clear Docstrings">
+    Docstrings become tool descriptions in the MCP protocol:
+    ```python
+    @tool
+    def search(query: str, limit: int = 10) -> list:
+        """Search for items matching the query.
+
+        Args:
+            query: Search query string
+            limit: Maximum number of results to return
+
+        Returns:
+            List of matching items
+        """
+        # Implementation...
+    ```
+  </Step>
+
+  <Step title="Handle Errors Gracefully">
+    Return structured error information instead of raising exceptions:
+    ```python
+    @tool
+    def risky_operation(input: str) -> dict:
+        """Perform an operation that might fail."""
+        try:
+            result = perform_operation(input)
+            return {"success": True, "data": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    ```
+  </Step>
+
+  <Step title="Use Async for I/O">
+    Use async functions for network requests and file I/O:
+    ```python
+    @tool
+    async def fetch_data(url: str) -> dict:
+        """Fetch data asynchronously for better performance."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            return response.json()
+    ```
+  </Step>
+</Steps>
+
+---
+
+<Info>
+  **Ready for production?** Check out our [Deployment Guide](/deployment/running-server) and [Docker Guide](/deployment/docker).
+</Info>

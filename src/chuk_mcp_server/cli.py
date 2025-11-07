@@ -273,7 +273,7 @@ if __name__ == "__main__":
     print("✅ Created server.py")
 
     # Create pyproject.toml
-    pyproject_content = f'''[project]
+    pyproject_content = f"""[project]
 name = "{project_name}"
 version = "0.1.0"
 description = "MCP server built with ChukMCPServer"
@@ -302,7 +302,7 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-'''
+"""
 
     pyproject_file = project_dir / "pyproject.toml"
     pyproject_file.write_text(pyproject_content)

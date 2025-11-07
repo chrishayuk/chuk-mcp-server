@@ -1,0 +1,32 @@
+# ChukMCPServer Configuration
+# Minimal configuration for composing multiple MCP servers
+
+server:
+  name: "my-mcp-server"
+  transport: "http"  # "http" or "stdio"
+
+  http:
+    host: "0.0.0.0"
+    port: 8000
+
+logging:
+  level: "INFO"
+
+# Compose multiple servers
+composition:
+  # Import external servers (static copy)
+  import:
+    - name: "github"
+      enabled: false
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      prefix: "github"
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+
+  # Mount for live delegation
+  mount: []
+
+# Load Python modules with tools
+modules: {}
