@@ -7,6 +7,7 @@ This module handles loading configuration files and applying them to the
 composition manager to create unified multi-server deployments.
 """
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -146,8 +147,19 @@ class CompositionConfigLoader:
             "headers": config.get("headers", {}),
         }
 
-        # Use the manager's import_from_config method
-        manager.import_from_config(server_name, server_config, prefix=prefix)
+        # Use the manager's import_from_config method (async)
+        # Run it in an event loop since import_from_config is async
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, create a task
+                asyncio.create_task(manager.import_from_config(server_name, server_config, prefix=prefix))
+            else:
+                # If no loop is running, use asyncio.run()
+                asyncio.run(manager.import_from_config(server_name, server_config, prefix=prefix))
+        except RuntimeError:
+            # No event loop, create one
+            asyncio.run(manager.import_from_config(server_name, server_config, prefix=prefix))
 
         logger.info(f"Imported server '{server_name}' with prefix '{prefix}'")
 
