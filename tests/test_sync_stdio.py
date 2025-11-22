@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Test synchronous STDIO transport."""
 
+import contextlib
 import json
+import os
 import select
 import subprocess
 import sys
+import tempfile
 import time
 
 import pytest
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="select.select() doesn't work with pipes on Windows")
 @pytest.mark.timeout(10)
 def test_sync_stdio():
     """Test synchronous stdio transport."""
@@ -33,9 +37,9 @@ if __name__ == "__main__":
     run(transport="stdio", debug=False)
 '''
 
-    # Write server script
-    server_path = "/tmp/sync_stdio_server.py"
-    with open(server_path, "w") as f:
+    # Write server script to temp directory (cross-platform)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        server_path = f.name
         f.write(server_script)
 
     print("🚀 Starting sync stdio server...")
@@ -128,6 +132,9 @@ if __name__ == "__main__":
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
+        # Clean up temporary file
+        with contextlib.suppress(Exception):
+            os.unlink(server_path)
 
 
 if __name__ == "__main__":

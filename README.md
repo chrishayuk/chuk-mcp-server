@@ -12,8 +12,8 @@ Optimized for Claude agents, real-time tool calling, and high-throughput applica
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-885%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://img.shields.io/badge/tests-1409%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
 ---
 
@@ -129,7 +129,8 @@ run()  # That's it - production-ready server in 5 lines
 **Requirements:**
 - **Python 3.11 or higher** (tested on 3.11, 3.12, 3.13)
 - **uv** (recommended) or pip for package management
-- **Operating Systems:** macOS, Linux, Windows (WSL recommended)
+- **Operating Systems:** macOS, Linux, Windows (native support)
+  - **Note:** On Windows, uvloop is not available, so the default asyncio event loop is used. Performance remains excellent for most use cases.
 
 **Claude Desktop Compatibility:**
 - Tested with Claude Desktop 1.0+
@@ -716,7 +717,7 @@ if __name__ == "__main__":
 
 ## 🔐 OAuth & Authentication
 
-ChukMCPServer provides full OAuth 2.1 support with PKCE for building authenticated MCP servers. Perfect for integrating with external APIs like LinkedIn, GitHub, Google, etc.
+ChukMCPServer provides full OAuth 2.1 support with RFC 9728 Protected Resource Metadata, PKCE, and automatic token management. Perfect for building spec-compliant authenticated MCP servers that integrate with LinkedIn, GitHub, Google, and other OAuth providers.
 
 ### Quick Start: OAuth-Protected Tools
 
@@ -770,8 +771,11 @@ if __name__ == "__main__":
 
 ### OAuth Features
 
-- **OAuth 2.1 Compliant** - Full PKCE support (RFC 7636)
-- **Dynamic Client Registration** - RFC 7591 support
+- **OAuth 2.1 Compliant** - Full PKCE support ([RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636))
+- **Authorization Server Discovery** - [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414) metadata endpoint
+- **Protected Resource Metadata** - [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) discovery support
+- **JWT Access Tokens** - [RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) format support
+- **Dynamic Client Registration** - [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591) support
 - **Token Management** - Automatic token refresh and validation
 - **Scope-Based Access** - Fine-grained permission control
 - **Multi-Tenant** - Sandbox isolation for token storage
@@ -782,8 +786,11 @@ if __name__ == "__main__":
 When OAuth is enabled, these endpoints are auto-registered:
 
 ```bash
-# Discovery endpoint (RFC 8414)
+# Authorization Server Discovery (RFC 8414)
 GET /.well-known/oauth-authorization-server
+
+# Protected Resource Metadata (RFC 9728)
+GET /.well-known/oauth-protected-resource
 
 # Authorization endpoint
 GET /oauth/authorize?client_id={id}&redirect_uri={uri}&response_type=code&code_challenge={challenge}&code_challenge_method=S256
@@ -793,13 +800,25 @@ POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&code={code}&client_id={id}&redirect_uri={uri}&code_verifier={verifier}
 
-# Client registration endpoint
+# Client registration endpoint (RFC 7591)
 POST /oauth/register
 Content-Type: application/json
 {"client_name": "My Client", "redirect_uris": ["http://localhost:8080/callback"]}
 
 # External provider callback
 GET /oauth/callback?code={code}&state={state}
+```
+
+**Example: Protected Resource Metadata Response**
+```json
+{
+  "resource": "https://your-server.com",
+  "authorization_servers": ["https://your-server.com"],
+  "scopes_supported": ["posts.write", "profile.read"],
+  "bearer_methods_supported": ["header"],
+  "resource_signing_alg_values_supported": ["RS256"],
+  "resource_documentation": "https://docs.your-server.com"
+}
 ```
 
 ### Implementing an OAuth Provider
