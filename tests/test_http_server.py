@@ -667,6 +667,8 @@ class TestEdgeCasesAndIntegration:
         self, mock_uvicorn, mock_info_endpoint, mock_health_endpoint, mock_mcp_endpoint, mock_registry
     ):
         """Test comprehensive uvicorn configuration."""
+        import sys
+
         # Mock registry
         mock_registry.clear_endpoints = Mock()
         mock_registry.register_endpoint = Mock()
@@ -689,7 +691,6 @@ class TestEdgeCasesAndIntegration:
             "host": "custom.host",
             "port": 9999,
             "workers": 1,
-            "loop": "uvloop",
             "http": "httptools",
             "access_log": False,
             "server_header": False,
@@ -700,6 +701,10 @@ class TestEdgeCasesAndIntegration:
             "timeout_keep_alive": 60,
             "h11_max_incomplete_event_size": 16384,
         }
+
+        # On non-Windows platforms, uvloop should be used
+        if sys.platform != "win32":
+            expected_config["loop"] = "uvloop"
 
         for key, expected_value in expected_config.items():
             assert config[key] == expected_value
