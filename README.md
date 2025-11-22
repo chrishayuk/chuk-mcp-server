@@ -12,7 +12,7 @@ Optimized for Claude agents, real-time tool calling, and high-throughput applica
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1182%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://img.shields.io/badge/tests-1409%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
 [![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
 ---
@@ -129,7 +129,8 @@ run()  # That's it - production-ready server in 5 lines
 **Requirements:**
 - **Python 3.11 or higher** (tested on 3.11, 3.12, 3.13)
 - **uv** (recommended) or pip for package management
-- **Operating Systems:** macOS, Linux, Windows (WSL recommended)
+- **Operating Systems:** macOS, Linux, Windows (native support)
+  - **Note:** On Windows, uvloop is not available, so the default asyncio event loop is used. Performance remains excellent for most use cases.
 
 **Claude Desktop Compatibility:**
 - Tested with Claude Desktop 1.0+
