@@ -1,0 +1,172 @@
+# ChukMCPServer Configuration Example
+# This file demonstrates how to compose multiple MCP servers into a single unified server
+
+# ============================================================================
+# Server Configuration
+# ============================================================================
+server:
+  name: "composed-mcp-server"
+  version: "1.0.0"
+  description: "Unified MCP server with multiple tool providers"
+
+  # Transport mode: "http" or "stdio"
+  transport: "http"
+
+  # HTTP settings (when transport=http)
+  http:
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+
+  # STDIO settings (when transport=stdio)
+  stdio:
+    log_to_stderr: true
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Logger-specific overrides
+  loggers:
+    "chuk_mcp_server.proxy": "WARNING"
+    "chuk_mcp_server.composition": "INFO"
+
+# ============================================================================
+# Server Composition - Import & Mount External Servers
+# ============================================================================
+composition:
+  # Import servers (static copy of components)
+  import:
+    # GitHub MCP Server (via npx)
+    - name: "github"
+      enabled: true
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      prefix: "github"
+      components: ["tools", "resources"]  # Which components to import
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+
+    # Weather Server (Python)
+    - name: "weather"
+      enabled: true
+      type: "stdio"
+      command: "python"
+      args: ["-m", "mcp_server_weather"]
+      prefix: "weather"
+      components: ["tools"]
+
+    # Time Server (via uvx)
+    - name: "time"
+      enabled: true
+      type: "stdio"
+      command: "uvx"
+      args: ["mcp-server-time", "--local-timezone", "America/New_York"]
+      prefix: "time"
+
+  # Mount servers (dynamic delegation - live updates)
+  mount:
+    # Remote HTTP MCP Server
+    - name: "api_service"
+      enabled: true
+      type: "http"
+      url: "http://api.example.com/mcp"
+      prefix: "api"
+      as_proxy: true
+      timeout: 30
+      headers:
+        Authorization: "Bearer ${API_TOKEN}"
+
+    # Remote SSE MCP Server
+    - name: "analytics"
+      enabled: false
+      type: "sse"
+      url: "http://analytics.example.com"
+      sse_path: "/sse"
+      message_path: "/messages"
+      prefix: "analytics"
+      as_proxy: true
+
+# ============================================================================
+# Module Loading - Python Module Integration
+# ============================================================================
+modules:
+  # Math tools module
+  math:
+    enabled: true
+    location: "./modules"
+    module: "math_tools.tools"
+    namespace: "math"
+
+  # Database tools
+  database:
+    enabled: false
+    location: "./modules"
+    module: "db_tools.tools"
+    namespace: "db"
+
+# ============================================================================
+# Proxy Configuration
+# ============================================================================
+proxy:
+  enabled: true
+
+  # Proxy servers (alternative to composition.import/mount)
+  servers:
+    github:
+      enabled: true
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      namespace: "github"
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+
+# ============================================================================
+# Environment Variables
+# ============================================================================
+# Reference environment variables with ${VAR_NAME} syntax
+# The server will substitute these at runtime
+environment:
+  load_from_file: true  # Load from .env file
+  required:
+    - GITHUB_TOKEN
+    - API_TOKEN
+  optional:
+    - OPENAI_API_KEY
+    - DATABASE_URL
+
+# ============================================================================
+# Security
+# ============================================================================
+security:
+  # CORS settings (HTTP mode only)
+  cors:
+    enabled: true
+    origins: ["*"]
+    methods: ["GET", "POST", "OPTIONS"]
+
+  # Rate limiting
+  rate_limit:
+    enabled: false
+    requests_per_minute: 100
+
+# ============================================================================
+# Performance
+# ============================================================================
+performance:
+  # Cache tool schemas
+  cache_schemas: true
+
+  # Connection pooling
+  max_connections: 100
+
+  # Timeout settings (seconds)
+  timeouts:
+    tool_execution: 30
+    server_connection: 10
+    request: 60

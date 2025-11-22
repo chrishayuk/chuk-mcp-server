@@ -75,6 +75,7 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - ⚡ **Real-time systems** - Sub-3ms overhead per tool call
 - 🔐 **OAuth integrations** - Built-in OAuth 2.1 for LinkedIn, GitHub, etc.
 - ☁️ **Cloud deployment** - Auto-detects AWS, GCP, Azure, Vercel
+- 🔀 **Multi-server proxy** - Aggregate multiple MCP servers into one endpoint
 
 **Simple to use:**
 ```python
@@ -108,6 +109,7 @@ run()  # That's it - production-ready server in 5 lines
 - [Configuration & Logging](#configuration--logging)
 - [Performance Benchmarks](#performance-benchmarks)
 - [Understanding Transport Modes](#-understanding-transport-modes)
+- [Multi-Server Proxy](#-multi-server-proxy)
 - [Project Scaffolder](#project-scaffolder)
 - [More Examples](#-more-examples)
 - [API Reference](#-api-reference)
@@ -272,6 +274,7 @@ Add to your Claude Desktop config file:
 - **💬 Prompts Support**: Create reusable prompt templates with `@prompt`
 - **🔄 Context Management**: Track sessions and users with built-in context
 - **🌐 Dual Transport**: Supports both stdio (MCP standard) and HTTP modes
+- **🔀 Multi-Server Proxy**: Aggregate multiple MCP servers into one endpoint
 - **📊 Production Ready**: 885 tests, 86% coverage, comprehensive error handling
 
 ---
@@ -1606,6 +1609,431 @@ run(transport="stdio")
 # Force HTTP mode
 run(transport="http", port=8000)
 ```
+
+---
+
+## 🔀 Multi-Server Proxy
+
+ChukMCPServer can act as a **proxy/gateway** to multiple backend MCP servers, aggregating their tools under a unified namespace. Perfect for:
+
+- **Microservices architecture** - Combine tools from multiple specialized servers
+- **Service aggregation** - Expose multiple MCP servers through a single endpoint
+- **Namespace management** - Prevent tool naming conflicts across servers
+- **Simplified client access** - One connection instead of many
+
+### Quick Start
+
+Create a proxy server that connects to multiple backend MCP servers:
+
+```python
+from chuk_mcp_server import ChukMCPServer
+import sys
+
+# Configure proxy to connect to backend servers
+proxy_config = {
+    "proxy": {
+        "enabled": True,
+        "namespace": "proxy",  # All proxied tools: proxy.<server>.<tool>
+    },
+    "servers": {
+        # Connect to a time server
+        "time": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": ["mcp-server-time"],
+        },
+        # Connect to a weather server
+        "weather": {
+            "type": "stdio",
+            "command": "python",
+            "args": ["-m", "weather_server"],
+        },
+    },
+}
+
+# Create proxy server
+mcp = ChukMCPServer(
+    name="API Gateway",
+    version="1.0.0",
+    proxy_config=proxy_config,
+)
+
+# Add local tools that run on the proxy server itself
+@mcp.tool
+def proxy_status() -> dict:
+    """Get status of all backend servers."""
+    return mcp.get_proxy_stats()
+
+if __name__ == "__main__":
+    mcp.run(port=8000)
+```
+
+### How It Works
+
+```
+┌─────────────────────────────────┐
+│   ChukMCPServer (Proxy Mode)    │
+│                                 │
+│  Local Tools:                   │
+│  - proxy_status                 │
+│  - other_local_tool             │
+│                                 │
+│  Proxied Tools (Auto-discovered):│
+│  ├─ proxy.time.*                │◄── stdio → mcp-server-time
+│  │  └─ get_current_time         │
+│  └─ proxy.weather.*             │◄── stdio → weather_server
+│     └─ get_forecast             │
+│                                 │
+│  HTTP Server (port 8000)        │
+└─────────────────────────────────┘
+         │
+         ▼
+    MCP Clients
+```
+
+### Tool Naming
+
+All proxied tools follow the pattern: `{namespace}.{server}.{tool}`
+
+**Examples:**
+- `proxy.time.get_current_time` - Get current time from time server
+- `proxy.weather.get_forecast` - Get weather from weather server
+- `proxy_status` - Local tool running on proxy server
+
+### Configuration Options
+
+**Proxy Configuration:**
+```python
+proxy_config = {
+    "proxy": {
+        "enabled": True,           # Enable proxy mode
+        "namespace": "proxy",      # Namespace prefix (default: "proxy")
+    },
+    "servers": {
+        # Server configurations here
+    }
+}
+```
+
+**Server Configuration (stdio transport):**
+```python
+"server_name": {
+    "type": "stdio",                    # Transport type (currently only stdio)
+    "command": "python",                # Executable command
+    "args": ["-m", "my_server"],        # Command arguments
+    "cwd": "/path/to/workdir",          # Optional working directory
+}
+```
+
+### Complete Example
+
+Here's a complete working example with multiple backend servers:
+
+```python
+# proxy_gateway.py
+from chuk_mcp_server import ChukMCPServer
+import sys
+
+proxy_config = {
+    "proxy": {
+        "enabled": True,
+        "namespace": "proxy",
+    },
+    "servers": {
+        # Backend server 1: Time server (external package)
+        "time": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": ["mcp-server-time", "--local-timezone", "UTC"],
+        },
+        # Backend server 2: Custom Python server
+        "mytools": {
+            "type": "stdio",
+            "command": sys.executable,  # Current Python interpreter
+            "args": ["path/to/my_backend_server.py"],
+        },
+    },
+}
+
+mcp = ChukMCPServer(
+    name="Multi-Server Gateway",
+    proxy_config=proxy_config,
+)
+
+# Local management tools
+@mcp.tool
+def list_backend_servers() -> dict:
+    """List all connected backend servers."""
+    stats = mcp.get_proxy_stats()
+    return {
+        "total_servers": stats.get("servers", 0),
+        "server_names": stats.get("server_names", []),
+        "total_tools": stats.get("tools", 0),
+    }
+
+@mcp.tool
+async def call_backend_tool(tool_name: str, **kwargs) -> dict:
+    """Dynamically call any backend tool."""
+    try:
+        result = await mcp.call_proxied_tool(tool_name, **kwargs)
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@mcp.resource("config://proxy")
+def proxy_config_resource() -> dict:
+    """Get proxy configuration."""
+    return proxy_config
+
+if __name__ == "__main__":
+    mcp.run(port=8000)
+```
+
+### Testing Your Proxy
+
+**1. Test with the included script:**
+```bash
+# Run the complete test
+./examples/test_proxy.sh
+```
+
+**2. Manual testing with curl:**
+```bash
+# Start your proxy server
+python proxy_gateway.py
+
+# Initialize MCP session
+SESSION_RESPONSE=$(curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 0,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "test", "version": "1.0"}
+    }
+  }')
+
+# Extract session ID and save it
+SESSION_ID="your-session-id"
+
+# List all tools (local + proxied)
+curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }' | python -m json.tool
+
+# Call a local tool
+curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "proxy_status",
+      "arguments": {}
+    }
+  }' | python -m json.tool
+
+# Call a proxied tool
+curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "proxy.time.get_current_time",
+      "arguments": {"timezone": "UTC"}
+    }
+  }' | python -m json.tool
+```
+
+### Example Output
+
+When you run the test, you'll see:
+
+```bash
+🧪 Proxy Integration Test
+=========================
+
+✅ Server is up!
+
+🔑 Initializing MCP session...
+Session ID: default-session
+
+1️⃣  Listing all tools...
+                "name": "proxy_status",
+                "name": "list_backend_servers",
+                "name": "proxy.time.get_current_time",
+                "name": "proxy.mytools.echo",
+                "name": "proxy.mytools.calculate",
+
+2️⃣  Testing local tool (proxy_status)...
+    "result": {
+        "status": "running",
+        "details": {
+            "enabled": true,
+            "namespace": "proxy",
+            "servers": 2,
+            "tools": 5,
+            "server_names": ["time", "mytools"]
+        }
+    }
+
+3️⃣  Testing proxied tool (proxy.time.get_current_time)...
+    "result": {
+        "content": [{"type": "text", "text": "2025-01-06T10:30:00Z"}]
+    }
+
+✅ Test complete!
+```
+
+### Proxy Management API
+
+ChukMCPServer provides methods to manage and interact with proxied servers:
+
+```python
+# Get proxy statistics
+stats = mcp.get_proxy_stats()
+# Returns:
+# {
+#     "enabled": True,
+#     "namespace": "proxy",
+#     "servers": 2,
+#     "tools": 5,
+#     "server_names": ["time", "mytools"]
+# }
+
+# Call a proxied tool programmatically
+result = await mcp.call_proxied_tool(
+    "proxy.time.get_current_time",
+    timezone="UTC"
+)
+
+# Enable proxy dynamically (advanced)
+mcp.enable_proxy(proxy_config)
+```
+
+### Use Cases
+
+**1. Microservices Architecture**
+```python
+# Aggregate specialized services
+proxy_config = {
+    "servers": {
+        "auth": {"command": "python", "args": ["auth_service.py"]},
+        "data": {"command": "python", "args": ["data_service.py"]},
+        "ml": {"command": "python", "args": ["ml_service.py"]},
+    }
+}
+# All services accessible through one endpoint
+```
+
+**2. Development/Production Split**
+```python
+# Route to different backends based on environment
+import os
+
+proxy_config = {
+    "servers": {
+        "api": {
+            "command": "python",
+            "args": [
+                "dev_server.py" if os.getenv("ENV") == "dev"
+                else "prod_server.py"
+            ]
+        }
+    }
+}
+```
+
+**3. Testing Multiple Servers**
+```python
+# Test integration of multiple MCP servers
+proxy_config = {
+    "servers": {
+        "server_a": {"command": "python", "args": ["server_a.py"]},
+        "server_b": {"command": "python", "args": ["server_b.py"]},
+    }
+}
+# Test tool interactions across servers
+```
+
+### Comparison with chuk-mcp-runtime
+
+This proxy implementation is inspired by [chuk-mcp-runtime](https://github.com/chrishayuk/chuk-mcp-runtime) but designed for ChukMCPServer:
+
+| Feature | chuk-mcp-server | chuk-mcp-runtime |
+|---------|-----------------|------------------|
+| **Proxy multiple servers** | ✅ | ✅ |
+| **Stdio transport** | ✅ | ✅ |
+| **HTTP/SSE transport** | 🚧 Coming | ✅ |
+| **Tool namespacing** | ✅ `proxy.<server>.<tool>` | ✅ Configurable |
+| **Zero-config integration** | ✅ Built-in | ❌ Separate package |
+| **Local + proxied tools** | ✅ Mixed in one server | ❌ Proxy only |
+| **Session management** | ✅ Basic | ✅ Advanced |
+| **Artifact storage** | ❌ | ✅ |
+| **JWT authentication** | ❌ | ✅ |
+| **Performance** | 🚀 36,000+ RPS | 🎯 Production-ready |
+
+**Choose chuk-mcp-server proxy when:**
+- You want zero-config proxy integrated with your server
+- You need to mix local and proxied tools
+- You're building a simple gateway/aggregator
+- You want maximum performance (36,000+ RPS)
+
+**Choose chuk-mcp-runtime when:**
+- You need advanced session management
+- You require artifact storage (S3, filesystem, memory)
+- You need JWT authentication
+- You're building a full-featured proxy service
+
+### Examples
+
+Complete working examples are available:
+
+- **`examples/simple_backend_server.py`** - Simple MCP server to be proxied
+- **`examples/proxy_demo.py`** - Complete proxy demo with local + proxied tools
+- **`examples/test_proxy.sh`** - Automated test script
+- **`examples/proxy_multi_server_example.py`** - Multi-server configuration
+- **`examples/PROXY_README.md`** - Detailed proxy documentation
+
+**Quick test:**
+```bash
+# Run the complete working demo
+./examples/test_proxy.sh
+
+# Or start the demo server manually
+python examples/proxy_demo.py
+```
+
+### Current Limitations
+
+- **Transport:** Only stdio transport currently supported for backend servers
+- **HTTP/SSE:** Coming in future release
+- **Health checking:** Not yet implemented for backend servers
+- **Auto-reconnect:** Not yet implemented for failed backends
+
+### Roadmap
+
+- [ ] HTTP transport support for backend servers
+- [ ] SSE transport support
+- [ ] Health checking for backend servers
+- [ ] Automatic reconnection on failure
+- [ ] Tool filtering and renaming options
+- [ ] Request/response caching
+- [ ] Load balancing across multiple backend instances
 
 ---
 

@@ -1,0 +1,945 @@
+---
+title: "Docker Deployment"
+sidebarTitle: "Docker"
+description: "Deploy ChukMCPServer with Docker for production-ready containerized applications"
+icon: "docker"
+---
+
+Deploy ChukMCPServer in production-ready Docker containers with optimized multi-stage builds, health checks, and orchestration support.
+
+## Quick Start
+
+Get your server running in Docker in 60 seconds:
+
+<Tabs>
+  <Tab title="uvx init (Recommended ⭐)">
+    **Instant setup** - Scaffolder includes Dockerfile and docker-compose.yml:
+
+    ```bash
+    # Generate server with Docker configs
+    uvx chuk-mcp-server init my-server
+    cd my-server
+
+    # The scaffolder creates:
+    # - Dockerfile (optimized multi-stage build)
+    # - docker-compose.yml (production-ready config)
+    # - .dockerignore (optimized builds)
+
+    # Start with Docker Compose
+    docker-compose up -d
+
+    # Test the server
+    curl http://localhost:8000/health
+    ```
+
+    You get production-ready Docker setup out of the box!
+  </Tab>
+
+  <Tab title="Manual setup">
+    **Step-by-step** Docker setup:
+
+    ```bash
+    # Create project
+    uv init my-server
+    cd my-server
+    uv add chuk-mcp-server
+
+    # Create Dockerfile
+    cat > Dockerfile << 'EOF'
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install uv for fast dependency management
+RUN pip install uv
+
+# Copy project files
+COPY pyproject.toml server.py ./
+
+# Install dependencies
+RUN uv pip install --system chuk-mcp-server
+
+# Expose HTTP port
+EXPOSE 8000
+
+# Run server
+CMD ["python", "server.py", "--port", "8000", "--host", "0.0.0.0"]
+EOF
+
+    # Create docker-compose.yml
+    cat > docker-compose.yml << 'EOF'
+version: '3.8'
+services:
+  server:
+    build: .
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+EOF
+
+    # Build and run
+    docker-compose up -d
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Your server is running in Docker at http://localhost:8000
+</Check>
+
+## Production Dockerfile
+
+The scaffolder creates an optimized multi-stage Dockerfile:
+
+```dockerfile
+# ============================================================================
+# Stage 1: Builder - Install dependencies
+# ============================================================================
+FROM python:3.11-slim AS builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for ultra-fast dependency management
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+
+# Copy project files
+COPY pyproject.toml uv.lock* ./
+COPY src ./src
+COPY README.md ./
+
+# Install dependencies
+RUN uv pip install --system -e .
+
+# ============================================================================
+# Stage 2: Runtime - Minimal production image
+# ============================================================================
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Optional: Install Node.js for npx-based MCP servers
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --from=builder /build/src /app/src
+COPY server.py config.yaml* ./
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Expose HTTP port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command
+CMD ["python", "server.py"]
+```
+
+<Info>
+  **Multi-stage build** reduces final image size by ~60% and improves security by excluding build tools from production image.
+</Info>
+
+## Docker Compose Configurations
+
+### Basic Production Setup
+
+```yaml
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    container_name: my-mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVER_NAME=my-server
+      - LOG_LEVEL=INFO
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - mcp-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mcp-data:
+```
+
+### Multi-Environment Setup
+
+<AccordionGroup>
+  <Accordion title="Development with Hot Reload" icon="code">
+    ```yaml
+    version: '3.8'
+
+    services:
+      mcp-dev:
+        build: .
+        ports:
+          - "8000:8000"
+        environment:
+          - LOG_LEVEL=DEBUG
+          - ENV=development
+        volumes:
+          # Mount source for hot reload
+          - ./src:/app/src
+          - ./server.py:/app/server.py
+          - ./config.yaml:/app/config.yaml
+        command: ["python", "server.py", "--debug"]
+    ```
+
+    Start development server:
+    ```bash
+    docker-compose -f docker-compose.dev.yml up
+    ```
+  </Accordion>
+
+  <Accordion title="Production with Redis" icon="server">
+    ```yaml
+    version: '3.8'
+
+    services:
+      mcp-server:
+        build: .
+        ports:
+          - "8000:8000"
+        environment:
+          - REDIS_URL=redis://redis:6379
+          - LOG_LEVEL=WARNING
+        depends_on:
+          - redis
+        restart: unless-stopped
+
+      redis:
+        image: redis:7-alpine
+        volumes:
+          - redis-data:/data
+        restart: unless-stopped
+
+    volumes:
+      redis-data:
+    ```
+  </Accordion>
+
+  <Accordion title="With Nginx Reverse Proxy" icon="network-wired">
+    ```yaml
+    version: '3.8'
+
+    services:
+      mcp-server:
+        build: .
+        expose:
+          - "8000"
+        restart: unless-stopped
+
+      nginx:
+        image: nginx:alpine
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - ./nginx.conf:/etc/nginx/nginx.conf:ro
+          - ./ssl:/etc/nginx/ssl:ro
+        depends_on:
+          - mcp-server
+        restart: unless-stopped
+    ```
+
+    **nginx.conf:**
+    ```nginx
+    upstream mcp_backend {
+        server mcp-server:8000;
+    }
+
+    server {
+        listen 80;
+        server_name api.example.com;
+
+        location / {
+            proxy_pass http://mcp_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-Server Composition" icon="puzzle-piece">
+    ```yaml
+    version: '3.8'
+
+    services:
+      # Main composition server
+      gateway:
+        build: .
+        ports:
+          - "8000:8000"
+        environment:
+          - GITHUB_TOKEN=${GITHUB_TOKEN}
+          - SLACK_TOKEN=${SLACK_TOKEN}
+        volumes:
+          - ./config.yaml:/app/config.yaml:ro
+        restart: unless-stopped
+
+      # Backend service 1
+      users-api:
+        image: my-users-api:latest
+        expose:
+          - "8001"
+        restart: unless-stopped
+
+      # Backend service 2
+      orders-api:
+        image: my-orders-api:latest
+        expose:
+          - "8002"
+        restart: unless-stopped
+
+    networks:
+      default:
+        name: mcp-network
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Deployment Script
+
+The scaffolder includes `deploy.sh` for easy deployment:
+
+```bash
+#!/bin/bash
+# Quick deployment commands
+
+# First time setup
+./deploy.sh setup
+
+# Start production server
+./deploy.sh start
+
+# View logs
+./deploy.sh logs
+
+# Check status
+./deploy.sh status
+
+# Restart server
+./deploy.sh restart
+
+# Stop server
+./deploy.sh stop
+
+# Start development mode
+./deploy.sh dev
+```
+
+### Deploy Script Commands
+
+<Steps>
+  <Step title="Setup">
+    Initialize environment and configuration:
+
+    ```bash
+    ./deploy.sh setup
+    ```
+
+    Creates `.env` from `.env.example` and `config.yaml` from `config.example.yaml`.
+  </Step>
+
+  <Step title="Start">
+    Build and start the server:
+
+    ```bash
+    # Default production mode
+    ./deploy.sh start
+
+    # With specific profile
+    ./deploy.sh start dev       # Development
+    ./deploy.sh start cache     # With Redis
+    ./deploy.sh start production # With Nginx
+    ```
+  </Step>
+
+  <Step title="Monitor">
+    View logs and status:
+
+    ```bash
+    # Follow logs
+    ./deploy.sh logs
+
+    # Check health
+    ./deploy.sh status
+    ```
+  </Step>
+
+  <Step title="Manage">
+    Control the server:
+
+    ```bash
+    # Restart (e.g., after config changes)
+    ./deploy.sh restart
+
+    # Stop
+    ./deploy.sh stop
+    ```
+  </Step>
+</Steps>
+
+## Environment Variables
+
+Configure your Docker deployment with environment variables:
+
+```bash
+# .env file
+# Server configuration
+SERVER_NAME=my-mcp-server
+SERVER_VERSION=1.0.0
+SERVER_TRANSPORT=http
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+
+# External services
+GITHUB_TOKEN=ghp_your_token_here
+SLACK_TOKEN=xoxb-your-token-here
+API_TOKEN=your_api_token_here
+
+# Optional: Database
+DATABASE_URL=postgresql://user:pass@db:5432/mcp
+
+# Optional: Redis
+REDIS_URL=redis://redis:6379
+
+# Optional: OAuth
+OAUTH_CLIENT_ID=your_client_id
+OAUTH_CLIENT_SECRET=your_secret
+```
+
+**Load in docker-compose.yml:**
+
+```yaml
+services:
+  mcp-server:
+    build: .
+    env_file:
+      - .env
+    # Or specify individually:
+    environment:
+      - SERVER_NAME=${SERVER_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+```
+
+<Warning>
+  **Never commit `.env` to git!** Always use `.env.example` as a template and add `.env` to `.gitignore`.
+</Warning>
+
+## Volume Management
+
+Persist data and configurations with Docker volumes:
+
+```yaml
+services:
+  mcp-server:
+    volumes:
+      # Read-only config
+      - ./config.yaml:/app/config.yaml:ro
+
+      # Persistent data
+      - mcp-data:/app/data
+
+      # Custom modules
+      - ./modules:/app/modules:ro
+
+      # Logs
+      - ./logs:/app/logs
+
+volumes:
+  mcp-data:
+    driver: local
+```
+
+### Volume Best Practices
+
+<Steps>
+  <Step title="Read-Only Configs">
+    Mount configs as read-only with `:ro` flag:
+
+    ```yaml
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    ```
+  </Step>
+
+  <Step title="Named Volumes for Data">
+    Use named volumes for persistent data:
+
+    ```yaml
+    volumes:
+      - mcp-data:/app/data  # Named volume
+
+    volumes:
+      mcp-data:  # Define at top level
+    ```
+  </Step>
+
+  <Step title="Bind Mounts for Development">
+    Bind mount source code for hot reload:
+
+    ```yaml
+    volumes:
+      - ./src:/app/src  # Live code changes
+    ```
+  </Step>
+</Steps>
+
+## Cloud Platform Deployment
+
+### AWS ECS
+
+Deploy to Amazon ECS with Fargate:
+
+```bash
+# Build and push to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com
+
+docker build -t my-mcp-server .
+docker tag my-mcp-server:latest 123456789.dkr.ecr.us-east-1.amazonaws.com/my-mcp-server:latest
+docker push 123456789.dkr.ecr.us-east-1.amazonaws.com/my-mcp-server:latest
+
+# Create ECS task definition
+aws ecs register-task-definition --cli-input-json file://task-definition.json
+
+# Run service
+aws ecs create-service \
+  --cluster my-cluster \
+  --service-name mcp-server \
+  --task-definition mcp-server \
+  --desired-count 2
+```
+
+### Google Cloud Run
+
+Deploy to Cloud Run (serverless):
+
+```bash
+# Build and push to GCR
+gcloud builds submit --tag gcr.io/PROJECT_ID/mcp-server
+
+# Deploy to Cloud Run
+gcloud run deploy mcp-server \
+  --image gcr.io/PROJECT_ID/mcp-server \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --port 8000 \
+  --set-env-vars LOG_LEVEL=INFO
+```
+
+### Azure Container Instances
+
+Deploy to Azure:
+
+```bash
+# Create resource group
+az group create --name mcp-rg --location eastus
+
+# Create container
+az container create \
+  --resource-group mcp-rg \
+  --name mcp-server \
+  --image myregistry.azurecr.io/mcp-server:latest \
+  --dns-name-label mcp-server \
+  --ports 8000 \
+  --environment-variables LOG_LEVEL=INFO
+```
+
+### Kubernetes
+
+Deploy to Kubernetes cluster:
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+      - name: mcp-server
+        image: my-registry/mcp-server:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: LOG_LEVEL
+          value: "INFO"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+spec:
+  selector:
+    app: mcp-server
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer
+```
+
+Deploy:
+```bash
+kubectl apply -f deployment.yaml
+```
+
+## Health Checks
+
+Built-in health check endpoint:
+
+```dockerfile
+# In Dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+```
+
+Test health check:
+```bash
+# Docker
+docker ps  # Shows (healthy) status
+
+# Manual test
+curl http://localhost:8000/health
+
+# Response
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "uptime": 3600
+}
+```
+
+## Build Optimization
+
+### Multi-Stage Build Benefits
+
+<Tabs>
+  <Tab title="Image Size">
+    **Before (single-stage):** ~1.2 GB
+    ```dockerfile
+    FROM python:3.11
+    RUN apt-get install build-essential git ...
+    # Everything in one layer
+    ```
+
+    **After (multi-stage):** ~400 MB
+    ```dockerfile
+    FROM python:3.11-slim AS builder
+    # Build deps only in builder
+
+    FROM python:3.11-slim
+    COPY --from=builder /usr/local/lib/python3.11/site-packages
+    # Only runtime artifacts
+    ```
+
+    **Result:** 67% smaller image
+  </Tab>
+
+  <Tab title="Security">
+    Multi-stage removes build tools from production:
+
+    - No gcc, make, git
+    - No source code in final image
+    - Runs as non-root user
+    - Minimal attack surface
+
+    ```dockerfile
+    # Builder has tools
+    FROM python:3.11 AS builder
+    RUN apt-get install build-essential
+
+    # Runtime is minimal
+    FROM python:3.11-slim
+    USER appuser  # Non-root
+    ```
+  </Tab>
+
+  <Tab title="Build Speed">
+    Layer caching for faster rebuilds:
+
+    ```dockerfile
+    # Dependencies change rarely - cached
+    COPY pyproject.toml ./
+    RUN uv pip install -e .
+
+    # Code changes often - not cached
+    COPY src ./src
+    ```
+
+    **First build:** 5 minutes
+    **Rebuild after code change:** 30 seconds
+  </Tab>
+</Tabs>
+
+### Docker Ignore
+
+Optimize builds with `.dockerignore`:
+
+```bash
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.git/
+.gitignore
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.md
+docs/
+tests/
+examples/
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Container won't start" icon="triangle-exclamation">
+    **Check logs:**
+    ```bash
+    docker-compose logs mcp-server
+    docker logs <container-id>
+    ```
+
+    **Common issues:**
+    - Missing environment variables
+    - Port already in use
+    - Invalid config.yaml
+    - Missing dependencies
+
+    **Solutions:**
+    ```bash
+    # Check port availability
+    lsof -i :8000
+
+    # Validate config
+    python -c "import yaml; yaml.safe_load(open('config.yaml'))"
+
+    # Rebuild with no cache
+    docker-compose build --no-cache
+    ```
+  </Accordion>
+
+  <Accordion title="Health check failing" icon="heart-pulse">
+    **Symptoms:** Container status shows `(unhealthy)`
+
+    **Debug:**
+    ```bash
+    # Check health endpoint manually
+    docker exec <container-id> curl http://localhost:8000/health
+
+    # Check if server is running
+    docker exec <container-id> ps aux
+
+    # Check logs
+    docker logs <container-id>
+    ```
+
+    **Solutions:**
+    ```dockerfile
+    # Increase start period if server is slow to start
+    HEALTHCHECK --start-period=30s ...
+
+    # Use different health check command
+    HEALTHCHECK CMD python -c "import requests; requests.get('http://localhost:8000/health')"
+    ```
+  </Accordion>
+
+  <Accordion title="Volume permission errors" icon="lock">
+    **Symptoms:** Permission denied errors accessing volumes
+
+    **Solutions:**
+    ```bash
+    # Fix ownership
+    sudo chown -R 1000:1000 ./data
+
+    # Or run container as root (not recommended)
+    docker-compose run --user root mcp-server bash
+    ```
+
+    **Better: Use named volumes**
+    ```yaml
+    volumes:
+      - mcp-data:/app/data  # Docker manages permissions
+
+    volumes:
+      mcp-data:
+    ```
+  </Accordion>
+
+  <Accordion title="Out of memory" icon="memory">
+    **Symptoms:** Container killed, exit code 137
+
+    **Solutions:**
+    ```yaml
+    services:
+      mcp-server:
+        deploy:
+          resources:
+            limits:
+              memory: 2G
+            reservations:
+              memory: 1G
+    ```
+
+    ```bash
+    # Check memory usage
+    docker stats
+
+    # Increase Docker Desktop memory allocation
+    # Settings > Resources > Memory > 4GB+
+    ```
+  </Accordion>
+
+  <Accordion title="Slow builds" icon="hourglass">
+    **Optimize build speed:**
+
+    ```dockerfile
+    # Use build cache
+    COPY pyproject.toml ./
+    RUN uv pip install -e .  # Cached if deps unchanged
+
+    COPY src ./src  # Only rebuild if code changes
+    ```
+
+    ```bash
+    # Use BuildKit
+    export DOCKER_BUILDKIT=1
+    docker build .
+
+    # Or in docker-compose
+    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build
+    ```
+
+    ```yaml
+    # docker-compose.yml
+    services:
+      mcp-server:
+        build:
+          context: .
+          cache_from:
+            - my-registry/mcp-server:latest
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration Reference"
+    icon="file-code"
+    href="/deployment/configuration"
+  >
+    Complete configuration options
+  </Card>
+
+  <Card
+    title="Server Composition"
+    icon="puzzle-piece"
+    href="/servers/composition"
+  >
+    Deploy composed multi-server systems
+  </Card>
+
+  <Card
+    title="Performance Tuning"
+    icon="gauge-high"
+    href="/advanced/performance"
+  >
+    Optimize Docker performance
+  </Card>
+
+  <Card
+    title="Security Best Practices"
+    icon="shield-check"
+    href="/advanced/security"
+  >
+    Secure your Docker deployments
+  </Card>
+</CardGroup>
+
+---
+
+<Info>
+  **Production ready?** Your Docker deployment is production-grade with multi-stage builds, health checks, and orchestration support!
+</Info>

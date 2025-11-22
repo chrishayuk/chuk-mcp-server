@@ -21,6 +21,7 @@ from .endpoint_registry import http_endpoint_registry
 from .http_server import create_server
 from .mcp_registry import mcp_registry
 from .protocol import MCPProtocolHandler
+from .proxy import ProxyManager
 from .stdio_transport import StdioSyncTransport
 
 # Updated imports for clean types API
@@ -74,6 +75,10 @@ class ChukMCPServer:
         port: int | None = None,
         debug: bool | None = None,
         transport: str | None = None,  # Added transport parameter
+        # Proxy configuration
+        proxy_config: dict[str, Any] | None = None,
+        # Tool modules configuration
+        tool_modules_config: dict[str, Any] | None = None,
         **kwargs,  # noqa: ARG002
     ):
         """
@@ -94,6 +99,8 @@ class ChukMCPServer:
             port: Port to bind to (auto-detected if None)
             debug: Debug mode (auto-detected if None)
             transport: Transport mode ('http' or 'stdio') (auto-detected if None)
+            proxy_config: Configuration for multi-server proxy
+            tool_modules_config: Configuration for loading tool modules
             **kwargs: Additional keyword arguments
         """
         # Initialize the modular smart configuration system
@@ -140,6 +147,25 @@ class ChukMCPServer:
 
         # HTTP server will be created when needed
         self._server = None
+
+        # Proxy manager for multi-server support
+        self.proxy_manager: ProxyManager | None = None
+        if proxy_config:
+            self.proxy_manager = ProxyManager(proxy_config, self.protocol)
+
+        # Module loader for hosting multiple tool collections
+        self.module_loader: Any = None
+        if tool_modules_config:
+            from .modules import ModuleLoader
+
+            # Wrap config in proper structure (ModuleLoader expects {"tool_modules": {...}})
+            config = {"tool_modules": tool_modules_config}
+            self.module_loader = ModuleLoader(config, self)
+
+        # Composition manager for unified server composition
+        from .composition import CompositionManager
+
+        self.composition = CompositionManager(self)
 
         # Don't print banner during init - will be done in run() if needed
         # This avoids cluttering stdio mode
@@ -364,6 +390,104 @@ class ChukMCPServer:
             return decorator
 
     # ============================================================================
+    # Server Composition Methods
+    # ============================================================================
+
+    def import_server(
+        self,
+        server: "ChukMCPServer",
+        prefix: str | None = None,
+        components: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """
+        Import (copy) components from another MCP server.
+
+        Static composition: creates a one-time copy of tools, resources, and prompts.
+        Changes to the original server after import will NOT be reflected.
+
+        Args:
+            server: ChukMCPServer instance to import from
+            prefix: Optional prefix for namespacing (e.g., "weather" -> "weather.get_forecast")
+            components: List of component types ["tools", "resources", "prompts"]
+                       If None, imports all components
+            tags: Optional tags to filter components
+
+        Example:
+            # Import weather server with prefix
+            main_mcp.import_server(weather_server, prefix="weather")
+
+            # Import only tools
+            main_mcp.import_server(api_server, prefix="api", components=["tools"])
+
+            # Import filtered by tags
+            main_mcp.import_server(data_server, tags=["public"])
+        """
+        self.composition.import_server(server, prefix, components, tags)
+
+    def mount(
+        self,
+        server: "ChukMCPServer | dict[str, Any]",
+        prefix: str | None = None,
+        as_proxy: bool = False,
+    ) -> None:
+        """
+        Mount a server for live delegation.
+
+        Dynamic composition: creates a live link to another server.
+        Changes to the mounted server are reflected immediately.
+
+        Args:
+            server: ChukMCPServer instance or proxy config to mount
+            prefix: Optional prefix for namespacing
+            as_proxy: If True, mount as a proxy (for remote servers)
+
+        Example:
+            # Mount local server (live updates)
+            main_mcp.mount(api_server)
+
+            # Mount remote server as proxy
+            main_mcp.mount(remote_config, prefix="remote", as_proxy=True)
+
+            # Mount with prefix
+            main_mcp.mount(data_server, prefix="data")
+        """
+        self.composition.mount(server, prefix, as_proxy)
+
+    def load_module(self, module_config: dict[str, Any]) -> dict[str, list[str]]:
+        """
+        Load Python modules with tools.
+
+        Convenience method for loading Python modules through the composition layer.
+
+        Args:
+            module_config: Module configuration dictionary
+
+        Returns:
+            Dictionary mapping module names to loaded tool names
+
+        Example:
+            mcp.load_module({
+                "math": {
+                    "enabled": True,
+                    "location": "./modules",
+                    "module": "math_tools.tools",
+                    "namespace": "math"
+                }
+            })
+        """
+        return self.composition.load_module(module_config)
+
+    def get_composition_stats(self) -> dict[str, Any]:
+        """
+        Get statistics about composed/mounted/proxied servers.
+
+        Returns:
+            Dictionary with composition statistics
+        """
+        return self.composition.get_composition_stats()
+
+    # ============================================================================
     # HTTP Endpoint Registration
     # ============================================================================
 
@@ -563,6 +687,18 @@ class ChukMCPServer:
     # Smart Server Management with Modular Configuration
     # ============================================================================
 
+    async def _start_proxy_if_enabled(self):
+        """Start proxy manager if configured."""
+        if self.proxy_manager:
+            await self.proxy_manager.start_servers()
+            logger.info(f"Proxy manager started: {self.proxy_manager.get_stats()}")
+
+    async def _stop_proxy_if_enabled(self):
+        """Stop proxy manager if running."""
+        if self.proxy_manager:
+            await self.proxy_manager.stop_servers()
+            logger.info("Proxy manager stopped")
+
     def run(
         self,
         host: str | None = None,
@@ -644,7 +780,38 @@ class ChukMCPServer:
             # Show the banner (always, regardless of log level)
             if self.smart_debug:
                 self._print_smart_config(actual_log_level=app_log_level)
-            # Show startup information
+
+            # Start proxy manager if configured (BEFORE showing startup info)
+            import asyncio
+
+            if self.proxy_manager:
+                try:
+                    logger.info("Starting proxy manager...")
+                    asyncio.run(self._start_proxy_if_enabled())
+                    stats = self.proxy_manager.get_stats()
+                    logger.info(f"Proxy manager started successfully: {stats}")
+
+                    # Log registered tools
+                    tool_count = len(self.protocol.tools)
+                    logger.info(f"Total tools after proxy: {tool_count}")
+                    logger.debug(f"Tools: {list(self.protocol.tools.keys())}")
+                except Exception as e:
+                    logger.error(f"Failed to start proxy manager: {e}", exc_info=True)
+
+            # Load tool modules if configured
+            if self.module_loader:
+                try:
+                    logger.info("Loading tool modules...")
+                    loaded_modules = self.module_loader.load_modules()
+                    module_info = self.module_loader.get_module_info()
+                    logger.info(
+                        f"Loaded {module_info['total_modules']} modules with {module_info['total_tools']} tools"
+                    )
+                    logger.debug(f"Modules: {list(loaded_modules.keys())}")
+                except Exception as e:
+                    logger.error(f"Failed to load tool modules: {e}", exc_info=True)
+
+            # Show startup information AFTER proxy initialization
             if getattr(self, "_should_print_config", True):
                 self._print_startup_info(final_host, final_port, final_debug, actual_log_level=app_log_level)
 
@@ -657,8 +824,14 @@ class ChukMCPServer:
                 self._server.run(host=final_host, port=final_port, debug=final_debug, log_level=log_level)
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
+                # Stop proxy servers on shutdown
+                if self.proxy_manager:
+                    asyncio.run(self._stop_proxy_if_enabled())
             except Exception as e:
                 logger.error(f"❌ Server error: {e}")
+                # Stop proxy servers on error
+                if self.proxy_manager:
+                    asyncio.run(self._stop_proxy_if_enabled())
                 raise
 
     def run_stdio(self, debug: bool | None = None, log_level: str = "warning"):
@@ -787,6 +960,41 @@ class ChukMCPServer:
         self.smart_containerized = smart_defaults["containerized"]
 
         logger.info("🔄 Smart configuration refreshed")
+
+    # ============================================================================
+    # Proxy Management
+    # ============================================================================
+
+    def enable_proxy(self, config: dict[str, Any]) -> None:
+        """
+        Enable proxy mode with the given configuration.
+
+        Args:
+            config: Proxy configuration dictionary
+        """
+        self.proxy_manager = ProxyManager(config, self.protocol)
+        logger.info("Proxy mode enabled")
+
+    def get_proxy_stats(self) -> dict[str, Any] | None:
+        """Get proxy manager statistics."""
+        if self.proxy_manager:
+            return self.proxy_manager.get_stats()
+        return None
+
+    async def call_proxied_tool(self, name: str, **kwargs: Any) -> Any:
+        """
+        Call a proxied tool.
+
+        Args:
+            name: Full tool name (e.g., "proxy.time.get_current_time")
+            **kwargs: Tool arguments
+
+        Returns:
+            Tool result
+        """
+        if not self.proxy_manager:
+            raise RuntimeError("Proxy mode not enabled")
+        return await self.proxy_manager.call_tool(name, **kwargs)
 
     # ============================================================================
     # Context Manager Support

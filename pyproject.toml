@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.7"
+version = "0.7.4"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,6 +16,7 @@ dependencies = [
     "orjson>=3.10.18",
     "psutil>=7.0.0",
     "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware
+    "pyyaml>=6.0", # Required for composition config loading
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
     "uvloop>=0.21.0; sys_platform != 'win32'",  # uvloop doesn't support Windows
@@ -33,6 +34,7 @@ dev = [
     "pre-commit>=3.6.0",
     "types-requests>=2.31.0",
     "types-setuptools>=69.0.0",
+    "types-PyYAML>=6.0.0",
     "bandit>=1.7.8",
 ]
 
@@ -79,6 +81,7 @@ dev = [
     "pre-commit>=3.6.0",
     "types-requests>=2.31.0",
     "types-setuptools>=69.0.0",
+    "types-PyYAML>=6.0.0",
     "bandit>=1.7.8",
 ]
 
@@ -120,7 +123,7 @@ ignore = [
 fixable = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["UP045", "UP007", "UP038"]  # Allow old-style type annotations in tests
+"tests/**/*.py" = ["UP007", "UP038"]  # Allow old-style type annotations in tests
 "examples/**/*.py" = ["W291", "W293", "F401", "F841"]  # Allow whitespace and unused imports in examples
 "benchmarks/**/*.py" = ["C401", "F841", "SIM108"]  # Allow certain patterns in benchmarks
 "diagnostics/**/*.py" = ["ALL"]  # Very lenient for diagnostics
@@ -183,6 +186,9 @@ module = [
     "chuk_mcp_server.endpoint_registry",
     "chuk_mcp_server.endpoints.*",
     "chuk_mcp_server.http_server",
+    "chuk_mcp_server.composition.*",
+    "chuk_mcp_server.proxy.*",
+    "chuk_mcp_server.modules.*",
     "chuk_mcp_server.__init__"
 ]
 ignore_errors = true

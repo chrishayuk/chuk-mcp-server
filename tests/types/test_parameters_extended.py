@@ -3,7 +3,7 @@
 
 import inspect
 import typing
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 import orjson
 
@@ -180,7 +180,7 @@ class TestExtractParametersExtended:
     def test_extract_parameters_with_optional(self):
         """Test extracting parameters with Optional types."""
 
-        def optional_func(value: Optional[str] = None):
+        def optional_func(value: str | None = None):
             pass
 
         params = extract_parameters_from_function(optional_func)

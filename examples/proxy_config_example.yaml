@@ -1,0 +1,39 @@
+# Example Proxy Configuration for ChukMCPServer
+# This configuration demonstrates how to set up multiple backend MCP servers
+
+# Enable proxy mode
+proxy:
+  enabled: true
+  namespace: "proxy"  # All proxied tools will be under proxy.<server>.<tool>
+
+# Define backend servers
+servers:
+  # Example 1: Time server (stdio transport)
+  time:
+    type: stdio
+    command: uvx
+    args:
+      - mcp-server-time
+      - --local-timezone
+      - America/New_York
+    # cwd: /optional/working/directory
+
+  # Example 2: Weather server (stdio transport)
+  weather:
+    type: stdio
+    command: python
+    args:
+      - -m
+      - weather_server
+
+  # Example 3: Custom server
+  custom:
+    type: stdio
+    command: python
+    args:
+      - path/to/your/server.py
+
+# Notes:
+# - All tools from backend servers will be exposed as proxy.<server>.<tool>
+# - For example: proxy.time.get_current_time, proxy.weather.get_forecast
+# - The proxy server runs on the main ChukMCPServer HTTP or STDIO transport
