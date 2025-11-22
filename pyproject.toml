@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.6"
+version = "0.7"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
@@ -18,7 +18,7 @@ dependencies = [
     "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware
     "starlette>=0.47.1",
     "uvicorn>=0.35.0",
-    "uvloop>=0.21.0",
+    "uvloop>=0.21.0; sys_platform != 'win32'",  # uvloop doesn't support Windows
 ]
 
 [project.optional-dependencies]
