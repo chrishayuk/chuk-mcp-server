@@ -76,6 +76,60 @@ from .context import (
     set_session_id,
     set_user_id,
 )
+
+# Import artifact/workspace context (optional - requires chuk-artifacts)
+try:
+    from .artifacts_context import (
+        create_blob_namespace,
+        create_workspace_namespace,
+        get_artifact_store,
+        get_namespace_vfs,
+        has_artifact_store,
+        read_blob,
+        read_workspace_file,
+        set_artifact_store,
+        set_global_artifact_store,
+        write_blob,
+        write_workspace_file,
+    )
+
+    _ARTIFACTS_AVAILABLE = True
+except ImportError:
+    _ARTIFACTS_AVAILABLE = False
+
+    # Create stub functions that provide helpful error messages
+    def _artifact_not_available(*args, **kwargs):  # type: ignore
+        raise RuntimeError(
+            "Artifact/workspace functionality requires chuk-artifacts. "
+            "Install with: pip install 'chuk-mcp-server[artifacts]'"
+        )
+
+    get_artifact_store = _artifact_not_available  # type: ignore
+    set_artifact_store = _artifact_not_available  # type: ignore
+    set_global_artifact_store = _artifact_not_available  # type: ignore
+    has_artifact_store = lambda: False  # type: ignore
+    create_blob_namespace = _artifact_not_available  # type: ignore
+    create_workspace_namespace = _artifact_not_available  # type: ignore
+    write_blob = _artifact_not_available  # type: ignore
+    read_blob = _artifact_not_available  # type: ignore
+    write_workspace_file = _artifact_not_available  # type: ignore
+    read_workspace_file = _artifact_not_available  # type: ignore
+    get_namespace_vfs = _artifact_not_available  # type: ignore
+
+# Re-export types from chuk-artifacts if available
+try:
+    from chuk_artifacts import (
+        NamespaceInfo,
+        NamespaceType,
+        StorageScope,
+    )
+
+    _ARTIFACTS_TYPES_AVAILABLE = True
+except ImportError:
+    _ARTIFACTS_TYPES_AVAILABLE = False
+    NamespaceType = None  # type: ignore
+    StorageScope = None  # type: ignore
+    NamespaceInfo = None  # type: ignore
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
@@ -343,6 +397,22 @@ __all__ = [
     "require_user_id",  # Require authenticated user
     "set_session_id",  # Set session context
     "set_user_id",  # Set user context
+    # 📦 ARTIFACT/WORKSPACE CONTEXT (Optional - requires chuk-artifacts)
+    "get_artifact_store",  # Get artifact store from context
+    "set_artifact_store",  # Set artifact store in context
+    "set_global_artifact_store",  # Set global artifact store
+    "has_artifact_store",  # Check if artifact store available
+    "create_blob_namespace",  # Create blob namespace
+    "create_workspace_namespace",  # Create workspace namespace
+    "write_blob",  # Write to blob namespace
+    "read_blob",  # Read from blob namespace
+    "write_workspace_file",  # Write file to workspace
+    "read_workspace_file",  # Read file from workspace
+    "get_namespace_vfs",  # Get VFS for namespace
+    # 📦 ARTIFACT/WORKSPACE TYPES (Optional - from chuk-artifacts)
+    "NamespaceType",  # BLOB or WORKSPACE
+    "StorageScope",  # SESSION, USER, or SANDBOX
+    "NamespaceInfo",  # Namespace information model
     # 🌐 PROXY FUNCTIONALITY
     "ProxyManager",  # Multi-server proxy manager
     "create_proxy_tool",  # Create proxy tool wrapper
