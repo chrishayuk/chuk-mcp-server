@@ -14,7 +14,7 @@ try:
 except ImportError:
     ARTIFACTS_AVAILABLE = False
 
-from chuk_mcp_server.artifacts_context import (
+from chuk_mcp_server import (
     clear_artifact_store,
     get_artifact_store,
     has_artifact_store,

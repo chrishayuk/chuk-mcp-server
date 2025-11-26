@@ -79,6 +79,12 @@ from .context import (
 
 # Import artifact/workspace context (optional - requires chuk-artifacts)
 try:
+    from chuk_artifacts import (
+        NamespaceInfo,
+        NamespaceType,
+        StorageScope,
+    )
+
     from .artifacts_context import (
         clear_artifact_store,
         create_blob_namespace,
@@ -92,13 +98,6 @@ try:
         set_global_artifact_store,
         write_blob,
         write_workspace_file,
-    )
-
-    # Also import types in the same try block
-    from chuk_artifacts import (
-        NamespaceInfo,
-        NamespaceType,
-        StorageScope,
     )
 
     _ARTIFACTS_AVAILABLE = True
@@ -133,9 +132,9 @@ except ImportError:
     get_namespace_vfs = _artifact_not_available
 
     # Type stubs
-    NamespaceType = None  # type: ignore[assignment]
-    StorageScope = None  # type: ignore[assignment]
-    NamespaceInfo = None  # type: ignore[assignment]
+    NamespaceType = None
+    StorageScope = None
+    NamespaceInfo = None
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
