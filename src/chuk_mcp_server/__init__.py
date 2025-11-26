@@ -80,6 +80,7 @@ from .context import (
 # Import artifact/workspace context (optional - requires chuk-artifacts)
 try:
     from .artifacts_context import (
+        clear_artifact_store,
         create_blob_namespace,
         create_workspace_namespace,
         get_artifact_store,
@@ -98,26 +99,32 @@ except ImportError:
     _ARTIFACTS_AVAILABLE = False
 
     # Create stub functions that provide helpful error messages
-    def _artifact_not_available(*args, **kwargs):  # type: ignore
+    from typing import Any, NoReturn
+
+    def _artifact_not_available(*args: Any, **kwargs: Any) -> NoReturn:
         raise RuntimeError(
             "Artifact/workspace functionality requires chuk-artifacts. "
             "Install with: pip install 'chuk-mcp-server[artifacts]'"
         )
 
-    get_artifact_store = _artifact_not_available  # type: ignore
-    set_artifact_store = _artifact_not_available  # type: ignore
-    set_global_artifact_store = _artifact_not_available  # type: ignore
-    has_artifact_store = lambda: False  # type: ignore
-    create_blob_namespace = _artifact_not_available  # type: ignore
-    create_workspace_namespace = _artifact_not_available  # type: ignore
-    write_blob = _artifact_not_available  # type: ignore
-    read_blob = _artifact_not_available  # type: ignore
-    write_workspace_file = _artifact_not_available  # type: ignore
-    read_workspace_file = _artifact_not_available  # type: ignore
-    get_namespace_vfs = _artifact_not_available  # type: ignore
+    get_artifact_store = _artifact_not_available
+    set_artifact_store = _artifact_not_available
+    set_global_artifact_store = _artifact_not_available
+    clear_artifact_store = _artifact_not_available
+
+    def has_artifact_store() -> bool:
+        return False
+
+    create_blob_namespace = _artifact_not_available
+    create_workspace_namespace = _artifact_not_available
+    write_blob = _artifact_not_available
+    read_blob = _artifact_not_available
+    write_workspace_file = _artifact_not_available
+    read_workspace_file = _artifact_not_available
+    get_namespace_vfs = _artifact_not_available
 
 # Re-export types from chuk-artifacts if available
-try:
+if _ARTIFACTS_AVAILABLE:
     from chuk_artifacts import (
         NamespaceInfo,
         NamespaceType,
@@ -125,11 +132,11 @@ try:
     )
 
     _ARTIFACTS_TYPES_AVAILABLE = True
-except ImportError:
+else:
     _ARTIFACTS_TYPES_AVAILABLE = False
-    NamespaceType = None  # type: ignore
-    StorageScope = None  # type: ignore
-    NamespaceInfo = None  # type: ignore
+    NamespaceType = None
+    StorageScope = None
+    NamespaceInfo = None
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage

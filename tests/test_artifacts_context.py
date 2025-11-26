@@ -129,9 +129,7 @@ class TestConvenienceFunctions:
         """Test create_workspace_namespace convenience function."""
         from chuk_mcp_server.artifacts_context import create_workspace_namespace
 
-        ns = await create_workspace_namespace(
-            name="test-workspace", scope=StorageScope.SANDBOX
-        )
+        ns = await create_workspace_namespace(name="test-workspace", scope=StorageScope.SANDBOX)
 
         assert ns is not None
         assert ns.type == NamespaceType.WORKSPACE
@@ -166,9 +164,7 @@ class TestConvenienceFunctions:
             write_workspace_file,
         )
 
-        ns = await create_workspace_namespace(
-            name="test-ws", scope=StorageScope.SANDBOX
-        )
+        ns = await create_workspace_namespace(name="test-ws", scope=StorageScope.SANDBOX)
         await write_workspace_file(ns.namespace_id, "/test.txt", b"workspace data")
 
         # Verify it was written
@@ -183,9 +179,7 @@ class TestConvenienceFunctions:
             read_workspace_file,
         )
 
-        ns = await create_workspace_namespace(
-            name="test-ws", scope=StorageScope.SANDBOX
-        )
+        ns = await create_workspace_namespace(name="test-ws", scope=StorageScope.SANDBOX)
         vfs = self.store.get_namespace_vfs(ns.namespace_id)
         await vfs.write_file("/test.txt", b"file content")
 
@@ -194,17 +188,16 @@ class TestConvenienceFunctions:
 
     def test_get_namespace_vfs(self):
         """Test get_namespace_vfs convenience function."""
+        import asyncio
+
         from chuk_mcp_server.artifacts_context import get_namespace_vfs
 
         # Create a namespace
-        import asyncio
 
         async def create_ns():
             from chuk_mcp_server.artifacts_context import create_workspace_namespace
 
-            return await create_workspace_namespace(
-                name="vfs-test", scope=StorageScope.SANDBOX
-            )
+            return await create_workspace_namespace(name="vfs-test", scope=StorageScope.SANDBOX)
 
         ns = asyncio.run(create_ns())
 
@@ -246,8 +239,6 @@ class TestDefaultScopes:
         session_manager = self.store._session_manager
         await session_manager.allocate_session(session_id="test-session-2")
 
-        ns = await create_workspace_namespace(
-            name="test-ws", session_id="test-session-2"
-        )
+        ns = await create_workspace_namespace(name="test-ws", session_id="test-session-2")
 
         assert ns.scope == StorageScope.SESSION

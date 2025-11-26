@@ -35,17 +35,17 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     try:
         from chuk_artifacts import ArtifactStore, NamespaceInfo, StorageScope
         from chuk_virtual_fs import AsyncVirtualFileSystem
     except ImportError:
-        ArtifactStore = None  # type: ignore
-        NamespaceInfo = None  # type: ignore
-        StorageScope = None  # type: ignore
-        AsyncVirtualFileSystem = None  # type: ignore
+        ArtifactStore = Any
+        NamespaceInfo = Any
+        StorageScope = Any
+        AsyncVirtualFileSystem = Any
 
 logger = logging.getLogger(__name__)
 
@@ -80,12 +80,13 @@ def get_artifact_store() -> ArtifactStore:
         ArtifactStore instance
 
     Raises:
-        RuntimeError: If no store available and chuk-artifacts not installed
-        ValueError: If no store has been set in context or globally
+        RuntimeError: If no store has been set in context or globally
 
     Examples:
-        >>> store = get_artifact_store()
-        >>> ns = await store.create_namespace(type=NamespaceType.BLOB)
+        >>> from chuk_artifacts import ArtifactStore
+        >>> store = ArtifactStore()
+        >>> set_artifact_store(store)
+        >>> retrieved = get_artifact_store()
     """
     # Try context variable first
     store = _artifact_store.get()
@@ -97,18 +98,11 @@ def get_artifact_store() -> ArtifactStore:
     if _global_artifact_store is not None:
         return _global_artifact_store
 
-    # Auto-create if chuk-artifacts is available
-    try:
-        from chuk_artifacts import ArtifactStore
-
-        logger.info("Auto-creating global ArtifactStore instance")
-        _global_artifact_store = ArtifactStore()
-        return _global_artifact_store
-    except ImportError as e:
-        raise RuntimeError(
-            "chuk-artifacts not installed. Install with: "
-            "pip install 'chuk-mcp-server[artifacts]' or pip install chuk-artifacts"
-        ) from e
+    # No store available
+    raise RuntimeError(
+        "No artifact store has been set. Use set_artifact_store() or "
+        "set_global_artifact_store() to configure an ArtifactStore instance."
+    )
 
 
 def set_global_artifact_store(store: ArtifactStore) -> None:
@@ -130,10 +124,10 @@ def set_global_artifact_store(store: ArtifactStore) -> None:
 
 def has_artifact_store() -> bool:
     """
-    Check if an artifact store is available.
+    Check if an artifact store is currently set.
 
     Returns:
-        True if store is available (context, global, or can be auto-created)
+        True if store is set in context or global, False otherwise
 
     Examples:
         >>> if has_artifact_store():
@@ -145,16 +139,23 @@ def has_artifact_store() -> bool:
         return True
 
     # Check global
-    if _global_artifact_store is not None:
-        return True
+    return _global_artifact_store is not None
 
-    # Check if can auto-create
-    try:
-        import chuk_artifacts  # noqa: F401
 
-        return True
-    except ImportError:
-        return False
+def clear_artifact_store() -> None:
+    """
+    Clear the artifact store from the current context and reset the global store.
+
+    This is primarily useful for testing to ensure a clean state.
+
+    Examples:
+        >>> clear_artifact_store()
+        >>> assert not has_artifact_store()
+    """
+    global _global_artifact_store
+    _artifact_store.set(None)
+    _global_artifact_store = None
+    logger.debug("Cleared artifact store from context and global")
 
 
 # ============================================================================
@@ -166,7 +167,7 @@ async def create_blob_namespace(
     scope: StorageScope | None = None,
     session_id: str | None = None,
     user_id: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> NamespaceInfo:
     """
     Convenience function to create a blob namespace.
@@ -212,7 +213,7 @@ async def create_workspace_namespace(
     session_id: str | None = None,
     user_id: str | None = None,
     provider_type: str = "vfs-memory",
-    **kwargs,
+    **kwargs: Any,
 ) -> NamespaceInfo:
     """
     Convenience function to create a workspace namespace.
@@ -289,7 +290,7 @@ async def read_blob(namespace_id: str) -> bytes:
         >>> data = await read_blob(namespace_id)
     """
     store = get_artifact_store()
-    return await store.read_namespace(namespace_id)
+    return cast(bytes, await store.read_namespace(namespace_id))
 
 
 async def write_workspace_file(namespace_id: str, path: str, data: bytes) -> None:
@@ -324,7 +325,7 @@ async def read_workspace_file(namespace_id: str, path: str) -> bytes:
         >>> data = await read_workspace_file(ws.namespace_id, "/main.py")
     """
     store = get_artifact_store()
-    return await store.read_namespace(namespace_id, path=path)
+    return cast(bytes, await store.read_namespace(namespace_id, path=path))
 
 
 def get_namespace_vfs(namespace_id: str) -> AsyncVirtualFileSystem:
