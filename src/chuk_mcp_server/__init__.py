@@ -94,9 +94,18 @@ try:
         write_workspace_file,
     )
 
+    # Also import types in the same try block
+    from chuk_artifacts import (
+        NamespaceInfo,
+        NamespaceType,
+        StorageScope,
+    )
+
     _ARTIFACTS_AVAILABLE = True
+    _ARTIFACTS_TYPES_AVAILABLE = True
 except ImportError:
     _ARTIFACTS_AVAILABLE = False
+    _ARTIFACTS_TYPES_AVAILABLE = False
 
     # Create stub functions that provide helpful error messages
     from typing import Any, NoReturn
@@ -123,20 +132,10 @@ except ImportError:
     read_workspace_file = _artifact_not_available
     get_namespace_vfs = _artifact_not_available
 
-# Re-export types from chuk-artifacts if available
-if _ARTIFACTS_AVAILABLE:
-    from chuk_artifacts import (
-        NamespaceInfo,
-        NamespaceType,
-        StorageScope,
-    )
-
-    _ARTIFACTS_TYPES_AVAILABLE = True
-else:
-    _ARTIFACTS_TYPES_AVAILABLE = False
-    NamespaceType = None
-    StorageScope = None
-    NamespaceInfo = None
+    # Type stubs
+    NamespaceType = None  # type: ignore[assignment]
+    StorageScope = None  # type: ignore[assignment]
+    NamespaceInfo = None  # type: ignore[assignment]
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
