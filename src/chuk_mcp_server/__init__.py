@@ -76,6 +76,65 @@ from .context import (
     set_session_id,
     set_user_id,
 )
+
+# Import artifact/workspace context (optional - requires chuk-artifacts)
+try:
+    from chuk_artifacts import (
+        NamespaceInfo,
+        NamespaceType,
+        StorageScope,
+    )
+
+    from .artifacts_context import (
+        clear_artifact_store,
+        create_blob_namespace,
+        create_workspace_namespace,
+        get_artifact_store,
+        get_namespace_vfs,
+        has_artifact_store,
+        read_blob,
+        read_workspace_file,
+        set_artifact_store,
+        set_global_artifact_store,
+        write_blob,
+        write_workspace_file,
+    )
+
+    _ARTIFACTS_AVAILABLE = True
+    _ARTIFACTS_TYPES_AVAILABLE = True
+except ImportError:
+    _ARTIFACTS_AVAILABLE = False
+    _ARTIFACTS_TYPES_AVAILABLE = False
+
+    # Create stub functions that provide helpful error messages
+    from typing import Any, NoReturn
+
+    def _artifact_not_available(*args: Any, **kwargs: Any) -> NoReturn:
+        raise RuntimeError(
+            "Artifact/workspace functionality requires chuk-artifacts. "
+            "Install with: pip install 'chuk-mcp-server[artifacts]'"
+        )
+
+    get_artifact_store = _artifact_not_available
+    set_artifact_store = _artifact_not_available
+    set_global_artifact_store = _artifact_not_available
+    clear_artifact_store = _artifact_not_available
+
+    def has_artifact_store() -> bool:
+        return False
+
+    create_blob_namespace = _artifact_not_available
+    create_workspace_namespace = _artifact_not_available
+    write_blob = _artifact_not_available
+    read_blob = _artifact_not_available
+    write_workspace_file = _artifact_not_available
+    read_workspace_file = _artifact_not_available
+    get_namespace_vfs = _artifact_not_available
+
+    # Type stubs
+    NamespaceType = None
+    StorageScope = None
+    NamespaceInfo = None
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
@@ -124,6 +183,23 @@ def get_or_create_global_server() -> ChukMCPServer:
     if _global_server is None:
         _global_server = ChukMCPServer()  # Auto-detects cloud environment
     return _global_server
+
+
+def get_mcp_server() -> ChukMCPServer:
+    """Get the global MCP server instance (alias for get_or_create_global_server).
+
+    Useful for accessing the server instance in OAuth setup and other contexts.
+
+    Returns:
+        The global ChukMCPServer instance
+
+    Example:
+        from chuk_mcp_server import get_mcp_server
+        from chuk_mcp_server.oauth.helpers import setup_google_drive_oauth
+
+        oauth_hook = setup_google_drive_oauth(get_mcp_server())
+    """
+    return get_or_create_global_server()
 
 
 def run(transport: str = "http", **kwargs: Any) -> None:
@@ -308,6 +384,7 @@ _auto_export_cloud_handlers()
 __all__ = [
     # 🧠 PRIMARY INTERFACE (Zero Config)
     "ChukMCPServer",
+    "get_mcp_server",
     # 🪄 MAGIC DECORATORS
     "tool",
     "resource",
@@ -343,6 +420,22 @@ __all__ = [
     "require_user_id",  # Require authenticated user
     "set_session_id",  # Set session context
     "set_user_id",  # Set user context
+    # 📦 ARTIFACT/WORKSPACE CONTEXT (Optional - requires chuk-artifacts)
+    "get_artifact_store",  # Get artifact store from context
+    "set_artifact_store",  # Set artifact store in context
+    "set_global_artifact_store",  # Set global artifact store
+    "has_artifact_store",  # Check if artifact store available
+    "create_blob_namespace",  # Create blob namespace
+    "create_workspace_namespace",  # Create workspace namespace
+    "write_blob",  # Write to blob namespace
+    "read_blob",  # Read from blob namespace
+    "write_workspace_file",  # Write file to workspace
+    "read_workspace_file",  # Read file from workspace
+    "get_namespace_vfs",  # Get VFS for namespace
+    # 📦 ARTIFACT/WORKSPACE TYPES (Optional - from chuk-artifacts)
+    "NamespaceType",  # BLOB or WORKSPACE
+    "StorageScope",  # SESSION, USER, or SANDBOX
+    "NamespaceInfo",  # Namespace information model
     # 🌐 PROXY FUNCTIONALITY
     "ProxyManager",  # Multi-server proxy manager
     "create_proxy_tool",  # Create proxy tool wrapper

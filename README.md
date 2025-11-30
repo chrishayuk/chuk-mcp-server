@@ -12,8 +12,8 @@ Optimized for Claude agents, real-time tool calling, and high-throughput applica
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![License](https://img.shields.io/pypi/l/chuk-mcp-server)](https://github.com/chrishayuk/chuk-mcp-server/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-885%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://img.shields.io/badge/tests-1409%20passing-success)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 
 ---
 
@@ -112,6 +112,8 @@ run()  # That's it - production-ready server in 5 lines
 - [Multi-Server Proxy](#-multi-server-proxy)
 - [Project Scaffolder](#project-scaffolder)
 - [More Examples](#-more-examples)
+- [Context Management](#-context-management)
+- [Artifact & Workspace Context](#-artifact--workspace-context)
 - [API Reference](#-api-reference)
 - [Cloud Deployment](#cloud-deployment)
 - [Docker Support](#-docker-support)
@@ -129,7 +131,8 @@ run()  # That's it - production-ready server in 5 lines
 **Requirements:**
 - **Python 3.11 or higher** (tested on 3.11, 3.12, 3.13)
 - **uv** (recommended) or pip for package management
-- **Operating Systems:** macOS, Linux, Windows (WSL recommended)
+- **Operating Systems:** macOS, Linux, Windows (native support)
+  - **Note:** On Windows, uvloop is not available, so the default asyncio event loop is used. Performance remains excellent for most use cases.
 
 **Claude Desktop Compatibility:**
 - Tested with Claude Desktop 1.0+
@@ -716,7 +719,7 @@ if __name__ == "__main__":
 
 ## 🔐 OAuth & Authentication
 
-ChukMCPServer provides full OAuth 2.1 support with PKCE for building authenticated MCP servers. Perfect for integrating with external APIs like LinkedIn, GitHub, Google, etc.
+ChukMCPServer provides full OAuth 2.1 support with RFC 9728 Protected Resource Metadata, PKCE, and automatic token management. Perfect for building spec-compliant authenticated MCP servers that integrate with LinkedIn, GitHub, Google, and other OAuth providers.
 
 ### Quick Start: OAuth-Protected Tools
 
@@ -770,8 +773,11 @@ if __name__ == "__main__":
 
 ### OAuth Features
 
-- **OAuth 2.1 Compliant** - Full PKCE support (RFC 7636)
-- **Dynamic Client Registration** - RFC 7591 support
+- **OAuth 2.1 Compliant** - Full PKCE support ([RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636))
+- **Authorization Server Discovery** - [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414) metadata endpoint
+- **Protected Resource Metadata** - [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) discovery support
+- **JWT Access Tokens** - [RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) format support
+- **Dynamic Client Registration** - [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591) support
 - **Token Management** - Automatic token refresh and validation
 - **Scope-Based Access** - Fine-grained permission control
 - **Multi-Tenant** - Sandbox isolation for token storage
@@ -782,8 +788,11 @@ if __name__ == "__main__":
 When OAuth is enabled, these endpoints are auto-registered:
 
 ```bash
-# Discovery endpoint (RFC 8414)
+# Authorization Server Discovery (RFC 8414)
 GET /.well-known/oauth-authorization-server
+
+# Protected Resource Metadata (RFC 9728)
+GET /.well-known/oauth-protected-resource
 
 # Authorization endpoint
 GET /oauth/authorize?client_id={id}&redirect_uri={uri}&response_type=code&code_challenge={challenge}&code_challenge_method=S256
@@ -793,13 +802,25 @@ POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&code={code}&client_id={id}&redirect_uri={uri}&code_verifier={verifier}
 
-# Client registration endpoint
+# Client registration endpoint (RFC 7591)
 POST /oauth/register
 Content-Type: application/json
 {"client_name": "My Client", "redirect_uris": ["http://localhost:8080/callback"]}
 
 # External provider callback
 GET /oauth/callback?code={code}&state={state}
+```
+
+**Example: Protected Resource Metadata Response**
+```json
+{
+  "resource": "https://your-server.com",
+  "authorization_servers": ["https://your-server.com"],
+  "scopes_supported": ["posts.write", "profile.read"],
+  "bearer_methods_supported": ["header"],
+  "resource_signing_alg_values_supported": ["RS256"],
+  "resource_documentation": "https://docs.your-server.com"
+}
 ```
 
 ### Implementing an OAuth Provider
@@ -927,12 +948,55 @@ OAUTH_CLIENT_REGISTRATION_TTL=31536000  # Client registrations: 1 year (default)
 OAUTH_EXTERNAL_TOKEN_TTL=5184000     # External tokens: 60 days (default)
 ```
 
-### Real-World Example
+### Built-In OAuth Providers
 
-See a complete implementation:
-- **[chuk-mcp-linkedin](https://github.com/chrishayuk/chuk-mcp-linkedin)** - Full LinkedIn OAuth integration
+ChukMCPServer includes reusable OAuth providers that can be used across different MCP servers:
 
-For detailed OAuth documentation, see [docs/OAUTH.md](docs/OAUTH.md).
+#### Google Drive Provider
+
+One-line OAuth integration with Google Drive for user-owned persistent storage.
+
+**Installation:**
+```bash
+pip install chuk-mcp-server[google_drive]
+```
+
+**Quick Setup:**
+```python
+from chuk_mcp_server import get_mcp_server, run
+from chuk_mcp_server.oauth.helpers import setup_google_drive_oauth
+
+# One line to add Google Drive OAuth!
+oauth_hook = setup_google_drive_oauth(get_mcp_server())
+
+run(transport="http", port=8000, post_register_hook=oauth_hook)
+```
+
+**Environment Variables:**
+```bash
+export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+export GOOGLE_CLIENT_SECRET="your-client-secret"
+```
+
+That's it! OAuth endpoints are auto-registered, tokens auto-managed. See [docs/OAUTH_PROVIDERS.md](docs/OAUTH_PROVIDERS.md) for complete documentation.
+
+**Use Cases:**
+- Store user data in their Google Drive (scenes, configs, files)
+- Access Google Drive API on behalf of users
+- User-owned persistent storage with zero infrastructure cost
+
+### Real-World Examples
+
+See complete implementations:
+- **[chuk-mcp-linkedin](https://github.com/chrishayuk/chuk-mcp-linkedin)** - LinkedIn OAuth integration
+- **[chuk-mcp-stage](https://github.com/chrishayuk/chuk-mcp-stage)** - Google Drive OAuth for 3D scenes
+
+### Documentation
+
+For detailed OAuth documentation:
+- [docs/OAUTH.md](docs/OAUTH.md) - Complete OAuth implementation guide
+- [docs/OAUTH_PROVIDERS.md](docs/OAUTH_PROVIDERS.md) - Provider documentation and examples
+- [docs/OAUTH_TYPES.md](docs/OAUTH_TYPES.md) - Type reference and API docs
 
 ---
 
@@ -1149,6 +1213,16 @@ See [docs/OAUTH.md](docs/OAUTH.md) for detailed OAuth 2.1 implementation guide.
 ---
 
 ## 💡 More Examples
+
+**📁 See [examples/README.md](examples/README.md) for 25+ working examples organized by category!**
+
+Examples include:
+- **Basic:** Zero-config servers, STDIO transport
+- **Async:** High-performance async patterns
+- **Context:** Session management, user authentication
+- **Composition:** Multi-server setups, modular tools
+- **Proxy:** Server aggregation and routing
+- **Configuration:** Smart config, logging, deployment
 
 ### Safe Calculator with AST
 ```python
@@ -2307,12 +2381,10 @@ if __name__ == "__main__":
 
 ## 🔄 Context Management
 
-Access request context in your tools and resources:
-
-### Basic Context Access
+Access request context, track sessions, and manage user authentication in your tools:
 
 ```python
-from chuk_mcp_server import tool, get_session_id, get_user_id
+from chuk_mcp_server import tool, get_session_id, get_user_id, require_user_id
 
 @tool
 def get_current_context() -> dict:
@@ -2325,23 +2397,12 @@ def get_current_context() -> dict:
         "user_id": user,
         "authenticated": user is not None
     }
-```
-
-### Require Authentication
-
-Use `require_user_id()` to enforce OAuth authentication:
-
-```python
-from chuk_mcp_server import tool, require_user_id, requires_auth
 
 @tool
-@requires_auth()
 async def create_private_resource(name: str) -> dict:
-    """Create a user-specific resource."""
-    # This will raise PermissionError if user is not authenticated
-    user_id = require_user_id()
+    """Create a user-specific resource (requires authentication)."""
+    user_id = require_user_id()  # Raises PermissionError if not authenticated
 
-    # Now safely use user_id for user-specific operations
     return {
         "created": name,
         "owner": user_id,
@@ -2349,117 +2410,117 @@ async def create_private_resource(name: str) -> dict:
     }
 ```
 
-### Context Manager Pattern
+**📖 For detailed context management guide, see [docs/guides/context-management.md](docs/guides/context-management.md)**
 
-Set context manually for testing or advanced scenarios:
+---
 
-```python
-from chuk_mcp_server import RequestContext
+## 💾 Artifact & Workspace Storage
 
-async with RequestContext(
-    session_id="test-session",
-    user_id="user-123",
-    metadata={"source": "test"}
-):
-    # All tools called within this block will have this context
-    result = await my_tool()
+Store blobs and manage workspaces with virtual filesystems using the optional [chuk-artifacts](https://github.com/chuk-ai/chuk-artifacts) integration:
+
+```bash
+pip install 'chuk-mcp-server[artifacts]'
 ```
-
-### Available Context Functions
 
 ```python
 from chuk_mcp_server import (
-    get_session_id,      # Get current MCP session ID
-    set_session_id,      # Set MCP session ID
-    get_user_id,         # Get current OAuth user ID (returns None if not authenticated)
-    set_user_id,         # Set OAuth user ID
-    require_user_id,     # Get user ID or raise PermissionError
-    RequestContext,      # Context manager for manual control
+    tool,
+    set_artifact_store,
+    create_workspace_namespace,
+    write_workspace_file,
 )
+from chuk_artifacts import ArtifactStore, StorageScope
+
+# Initialize once at startup
+store = ArtifactStore()
+set_artifact_store(store)
+
+@tool
+async def create_project(name: str) -> str:
+    """Create a workspace with VFS."""
+    ws = await create_workspace_namespace(
+        name=name,
+        scope=StorageScope.SESSION,
+        provider_type="vfs-memory"  # or vfs-filesystem, vfs-s3, vfs-sqlite
+    )
+
+    await write_workspace_file(ws.namespace_id, "/README.md", b"# Project\n")
+
+    return f"Created workspace: {ws.namespace_id}"
 ```
 
-**Use Cases:**
-- `get_user_id()`: Check if user is authenticated (optional)
-- `require_user_id()`: Enforce authentication (raises error if not authenticated)
-- `get_session_id()`: Track requests per MCP session
-- `RequestContext`: Testing, background tasks, manual control
+**Storage Backends:** Memory, Filesystem, S3, SQLite
+**Storage Scopes:** SESSION, USER, GLOBAL, SANDBOX
+
+**📖 For detailed artifacts guide, see [docs/guides/artifacts.md](docs/guides/artifacts.md)**
+
+---
+
+## 🏗️ Architecture
+
+ChukMCPServer is built on a modular architecture with several specialized packages:
+
+### Core Components
+
+- **chuk-mcp-server** (this package): High-performance MCP server framework
+  - Decorator-based API for tools, resources, and prompts
+  - HTTP and STDIO transport layers
+  - OAuth 2.1 integration
+  - Cloud auto-detection and adapters
+
+### Dependent Packages
+
+| Package | Purpose | Repository |
+|---------|---------|------------|
+| **[chuk-sessions](https://github.com/chuk-ai/chuk-sessions)** | Session management for MCP servers | Manages MCP session lifecycle, state, and correlation |
+| **[chuk-artifacts](https://github.com/chuk-ai/chuk-artifacts)** | Unified artifact and workspace storage | Blob storage and VFS-backed workspaces with multiple backends |
+| **[chuk-virtual-fs](https://github.com/chuk-ai/chuk-virtual-fs)** | Virtual filesystem abstraction | Unified VFS interface for memory, filesystem, S3, SQLite |
+| **[chuk-mcp](https://github.com/chuk-ai/chuk-mcp)** | Low-level MCP protocol implementation | JSON-RPC 2.0, transport abstractions, type system |
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ChukMCPServer                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │ Decorators   │  │    OAuth     │  │    Cloud     │     │
+│  │ (@tool, etc) │  │  Integration │  │   Adapters   │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+├─────────────────────────────────────────────────────────────┤
+│                   Transport Layer                           │
+│  ┌──────────────┐  ┌──────────────┐                        │
+│  │ HTTP + SSE   │  │    STDIO     │                        │
+│  └──────────────┘  └──────────────┘                        │
+├─────────────────────────────────────────────────────────────┤
+│                   chuk-mcp (Protocol)                       │
+│  JSON-RPC 2.0 │ Type System │ Transport Abstractions       │
+└─────────────────────────────────────────────────────────────┘
+         │                  │                  │
+    ┌────┴─────┐      ┌────┴────┐      ┌─────┴──────┐
+    │  chuk-   │      │  chuk-  │      │   chuk-    │
+    │ sessions │      │artifacts│      │ virtual-fs │
+    └──────────┘      └─────────┘      └────────────┘
+```
+
+**📖 For detailed architecture documentation, see [docs/CONTEXT_ARCHITECTURE.md](docs/CONTEXT_ARCHITECTURE.md)**
 
 ---
 
 ## 📚 API Reference
 
-### Core Decorators
+### Quick Reference
 
-| Decorator | Purpose | Required Parameters | Optional Parameters | Example |
-|-----------|---------|-------------------|---------------------|---------|
-| `@tool` | Define a callable tool/function for Claude | None | `name`, `description` | `@tool`<br/>`def add(a: int, b: int) -> int:` |
-| `@resource(uri)` | Define a data resource Claude can read | `uri` (e.g., `"config://app"`) | `name`, `description`, `mime_type` | `@resource("config://app")`<br/>`def get_config() -> dict:` |
-| `@prompt` | Define a reusable prompt template | None | `name`, `description` | `@prompt`<br/>`def review(code: str) -> str:` |
-| `@requires_auth()` | Mark a tool as requiring OAuth | None | `scopes` (list of strings) | `@tool`<br/>`@requires_auth()`<br/>`async def publish(...):` |
+**Decorators:** `@tool`, `@resource(uri)`, `@prompt`, `@requires_auth()`
 
-### Main Functions
+**Server:** `run(transport="stdio"|"http")`, `ChukMCPServer(name)`
 
-| Function | Purpose | Parameters | Example |
-|----------|---------|------------|---------|
-| `run()` | Start the MCP server | `transport` ("stdio"/"http"), `host`, `port`, `log_level`, `post_register_hook` | `run()` or `run(port=8000)` |
-| `ChukMCPServer()` | Create server instance (class-based API) | `name` (optional) | `mcp = ChukMCPServer("my-server")` |
+**Context:** `get_session_id()`, `get_user_id()`, `require_user_id()`, `RequestContext()`
 
-### Context Functions
+**Artifacts:** `get_artifact_store()`, `create_workspace_namespace()`, `write_workspace_file()`
 
-| Function | Purpose | Returns | Use Case |
-|----------|---------|---------|----------|
-| `get_session_id()` | Get current MCP session ID | `str \| None` | Track requests per session |
-| `get_user_id()` | Get current OAuth user ID | `str \| None` | Check if user is authenticated |
-| `require_user_id()` | Get user ID or raise error | `str` (raises `PermissionError` if not authenticated) | Enforce authentication |
-| `set_session_id(id)` | Set session context | None | Testing, manual control |
-| `set_user_id(id)` | Set user context | None | Testing, manual control |
-| `RequestContext()` | Context manager for request context | Context manager | Testing, background tasks |
+**Cloud:** `is_cloud()`, `is_gcf()`, `is_lambda()`, `is_azure()`, `get_deployment_info()`
 
-### Cloud Helpers
-
-| Function | Purpose | Returns | Example |
-|----------|---------|---------|---------|
-| `is_cloud()` | Check if running in any cloud environment | `bool` | `if is_cloud(): ...` |
-| `is_gcf()` | Check if running in Google Cloud Functions | `bool` | `if is_gcf(): ...` |
-| `is_lambda()` | Check if running in AWS Lambda | `bool` | `if is_lambda(): ...` |
-| `is_azure()` | Check if running in Azure Functions | `bool` | `if is_azure(): ...` |
-| `get_deployment_info()` | Get detailed deployment information | `dict` | `info = get_deployment_info()` |
-| `get_cloud_handler()` | Get cloud-specific handler | Handler function | `handler = get_cloud_handler()` |
-
-### Quick Examples
-
-**Basic Tool:**
-```python
-from chuk_mcp_server import tool
-
-@tool
-def my_function(param: str, count: int = 1) -> str:
-    """This docstring explains what the tool does."""
-    return f"Result: {param} x {count}"
-```
-
-**Resource:**
-```python
-from chuk_mcp_server import resource
-
-@resource("mydata://info")
-def get_info() -> dict:
-    """This docstring explains what data is available."""
-    return {"key": "value"}
-```
-
-**Async Support:**
-```python
-import httpx
-from chuk_mcp_server import tool
-
-@tool
-async def fetch_data(url: str) -> dict:
-    """Fetch data from a URL."""
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        return response.json()
-```
+**📖 For complete API reference, see [docs/api-reference/README.md](docs/api-reference/README.md)**
 
 **Full Import Reference:**
 ```python

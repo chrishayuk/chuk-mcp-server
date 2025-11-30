@@ -142,6 +142,7 @@ class HTTPServer:
         # Logging is already configured in core.py before this is called
         # Just determine the uvicorn log level based on the passed log_level
         import os
+        import sys
 
         # If debug is explicitly set to True, override log_level
         if debug is True:
@@ -166,7 +167,6 @@ class HTTPServer:
             "port": port,
             # Core performance settings
             "workers": 1,
-            "loop": "uvloop",  # Force uvloop
             "http": "httptools",  # Force httptools
             # Disable overhead features
             "access_log": debug,  # Only show access logs in debug mode
@@ -181,11 +181,14 @@ class HTTPServer:
             "h11_max_incomplete_event_size": 16384,  # Increase buffer
         }
 
-        # Verify performance libraries are available (silently)
-        try:
-            import uvloop  # noqa: F401
-        except ImportError:
-            uvicorn_config.pop("loop", None)
+        # Add uvloop only on non-Windows platforms (uvloop doesn't support Windows)
+        if sys.platform != "win32":
+            try:
+                import uvloop  # noqa: F401
+
+                uvicorn_config["loop"] = "uvloop"
+            except ImportError:
+                pass  # Fall back to default asyncio loop
 
         try:
             import httptools  # noqa: F401
