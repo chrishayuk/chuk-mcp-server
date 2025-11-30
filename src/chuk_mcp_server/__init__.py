@@ -185,6 +185,23 @@ def get_or_create_global_server() -> ChukMCPServer:
     return _global_server
 
 
+def get_mcp_server() -> ChukMCPServer:
+    """Get the global MCP server instance (alias for get_or_create_global_server).
+
+    Useful for accessing the server instance in OAuth setup and other contexts.
+
+    Returns:
+        The global ChukMCPServer instance
+
+    Example:
+        from chuk_mcp_server import get_mcp_server
+        from chuk_mcp_server.oauth.helpers import setup_google_drive_oauth
+
+        oauth_hook = setup_google_drive_oauth(get_mcp_server())
+    """
+    return get_or_create_global_server()
+
+
 def run(transport: str = "http", **kwargs: Any) -> None:
     """
     Run the global smart server with cloud detection and transport selection.
@@ -367,6 +384,7 @@ _auto_export_cloud_handlers()
 __all__ = [
     # 🧠 PRIMARY INTERFACE (Zero Config)
     "ChukMCPServer",
+    "get_mcp_server",
     # 🪄 MAGIC DECORATORS
     "tool",
     "resource",

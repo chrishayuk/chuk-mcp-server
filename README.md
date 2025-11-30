@@ -948,12 +948,55 @@ OAUTH_CLIENT_REGISTRATION_TTL=31536000  # Client registrations: 1 year (default)
 OAUTH_EXTERNAL_TOKEN_TTL=5184000     # External tokens: 60 days (default)
 ```
 
-### Real-World Example
+### Built-In OAuth Providers
 
-See a complete implementation:
-- **[chuk-mcp-linkedin](https://github.com/chrishayuk/chuk-mcp-linkedin)** - Full LinkedIn OAuth integration
+ChukMCPServer includes reusable OAuth providers that can be used across different MCP servers:
 
-For detailed OAuth documentation, see [docs/OAUTH.md](docs/OAUTH.md).
+#### Google Drive Provider
+
+One-line OAuth integration with Google Drive for user-owned persistent storage.
+
+**Installation:**
+```bash
+pip install chuk-mcp-server[google_drive]
+```
+
+**Quick Setup:**
+```python
+from chuk_mcp_server import get_mcp_server, run
+from chuk_mcp_server.oauth.helpers import setup_google_drive_oauth
+
+# One line to add Google Drive OAuth!
+oauth_hook = setup_google_drive_oauth(get_mcp_server())
+
+run(transport="http", port=8000, post_register_hook=oauth_hook)
+```
+
+**Environment Variables:**
+```bash
+export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+export GOOGLE_CLIENT_SECRET="your-client-secret"
+```
+
+That's it! OAuth endpoints are auto-registered, tokens auto-managed. See [docs/OAUTH_PROVIDERS.md](docs/OAUTH_PROVIDERS.md) for complete documentation.
+
+**Use Cases:**
+- Store user data in their Google Drive (scenes, configs, files)
+- Access Google Drive API on behalf of users
+- User-owned persistent storage with zero infrastructure cost
+
+### Real-World Examples
+
+See complete implementations:
+- **[chuk-mcp-linkedin](https://github.com/chrishayuk/chuk-mcp-linkedin)** - LinkedIn OAuth integration
+- **[chuk-mcp-stage](https://github.com/chrishayuk/chuk-mcp-stage)** - Google Drive OAuth for 3D scenes
+
+### Documentation
+
+For detailed OAuth documentation:
+- [docs/OAUTH.md](docs/OAUTH.md) - Complete OAuth implementation guide
+- [docs/OAUTH_PROVIDERS.md](docs/OAUTH_PROVIDERS.md) - Provider documentation and examples
+- [docs/OAUTH_TYPES.md](docs/OAUTH_TYPES.md) - Type reference and API docs
 
 ---
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.10.1"
+version = "0.11"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
@@ -40,6 +40,12 @@ dev = [
 artifacts = [
     "chuk-artifacts>=0.9",
     "chuk-virtual-fs>=0.3",
+]
+google_drive = [
+    "google-auth>=2.23.0",
+    "google-auth-oauthlib>=1.1.0",
+    "google-auth-httplib2>=0.1.1",
+    "google-api-python-client>=2.100.0",
 ]
 
 [tool.setuptools]
