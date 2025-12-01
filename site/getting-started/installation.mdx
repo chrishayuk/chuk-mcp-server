@@ -1,0 +1,556 @@
+---
+title: "Installation"
+sidebarTitle: "Installation"
+description: "Install ChukMCPServer and get started in 30 seconds"
+icon: "download"
+---
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="uv - Recommended" icon="bolt">
+    **Ultra-fast Python package manager** (10-100x faster than pip)
+
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+  </Card>
+
+  <Card title="Python 3.11+" icon="python">
+    ChukMCPServer requires Python 3.11 or higher
+
+    ```bash
+    python --version  # Should be 3.11+
+    ```
+  </Card>
+</CardGroup>
+
+<Warning>
+  **We strongly recommend uv** for all installations. It's 10-100x faster than pip, has better dependency resolution, and is what we use for ChukMCPServer development.
+</Warning>
+
+## Quick Install
+
+<Tabs>
+  <Tab title="uv (Recommended ⭐)">
+    **Install with uv** - Our recommended method:
+
+    ```bash
+    # Install globally (recommended)
+    uv pip install chuk-mcp-server
+
+    # Or add to a project
+    uv add chuk-mcp-server
+
+    # Install with all optional features
+    uv pip install "chuk-mcp-server[all]"
+    ```
+
+    **Why uv?**
+    - ⚡ **10-100x faster** than pip
+    - 🎯 **Better dependency resolution** - handles conflicts automatically
+    - 🔒 **Lock file support** - reproducible installations
+    - 🚀 **What we use** - ChukMCPServer is developed with uv
+  </Tab>
+
+  <Tab title="uvx (Run without installing)">
+    **Run ChukMCPServer instantly** without installation:
+
+    ```bash
+    # Run scaffolder directly (no install needed)
+    uvx --from chuk-mcp-server chuk-mcp-server scaffold my-server
+
+    # Or use the shorter form
+    uvx chuk-mcp-server scaffold my-server
+
+    # Create and run a server
+    cd my-server
+    uv run python server.py
+    ```
+
+    Perfect for:
+    - Quick testing
+    - CI/CD pipelines
+    - One-off project generation
+  </Tab>
+
+  <Tab title="pip (Alternative)">
+    If you prefer traditional pip:
+
+    ```bash
+    # Install with pip
+    pip install chuk-mcp-server
+
+    # With all optional dependencies
+    pip install "chuk-mcp-server[all]"
+    ```
+
+    <Info>
+      **Note:** pip is slower than uv. We recommend switching to uv for better performance.
+    </Info>
+  </Tab>
+
+  <Tab title="pipx (Alternative)">
+    For global CLI installation:
+
+    ```bash
+    # Install CLI globally
+    pipx install chuk-mcp-server
+
+    # Run scaffolder
+    pipx run chuk-mcp-server scaffold my-server
+    ```
+
+    <Info>
+      **Tip:** `uvx` is faster than `pipx run` and doesn't require installation.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Verify Installation
+
+**Using uv (recommended):**
+
+```bash
+# Check version
+uv run python -c "import chuk_mcp_server; print(chuk_mcp_server.__version__)"
+
+# Create and run a test server
+uv run python -c "
+from chuk_mcp_server import tool, run
+
+@tool
+def hello(name: str = 'World') -> str:
+    return f'Hello, {name}!'
+
+run()
+"
+```
+
+**Using standard Python:**
+
+```bash
+# Check version
+python -c "import chuk_mcp_server; print(chuk_mcp_server.__version__)"
+
+# Create a test server
+python -c "
+from chuk_mcp_server import tool, run
+
+@tool
+def hello(name: str = 'World') -> str:
+    return f'Hello, {name}!'
+
+run()
+"
+```
+
+<Check>
+  If you see the server start without errors, installation was successful!
+</Check>
+
+## Optional Dependencies
+
+ChukMCPServer has several optional dependency groups for specific features:
+
+<AccordionGroup>
+  <Accordion title="Development Tools" icon="code">
+    ```bash
+    # Using uv (recommended)
+    uv pip install "chuk-mcp-server[dev]"
+
+    # Or using pip
+    pip install "chuk-mcp-server[dev]"
+    ```
+
+    Includes:
+    - pytest, pytest-asyncio, pytest-cov (testing)
+    - ruff (linting & formatting)
+    - mypy (type checking)
+    - pre-commit (git hooks)
+    - bandit (security scanning)
+  </Accordion>
+
+  <Accordion title="Cloud Deployment" icon="cloud">
+    ```bash
+    # Using uv (recommended)
+    uv pip install "chuk-mcp-server[cloud]"
+
+    # Or using pip
+    pip install "chuk-mcp-server[cloud]"
+    ```
+
+    Includes:
+    - functions-framework (Google Cloud Functions)
+    - AWS Lambda runtime support
+    - Azure Functions bindings
+  </Accordion>
+
+  <Accordion title="OAuth Support" icon="shield-check">
+    ```bash
+    # Using uv (recommended)
+    uv pip install "chuk-mcp-server[oauth]"
+
+    # Or using pip
+    pip install "chuk-mcp-server[oauth]"
+    ```
+
+    Includes:
+    - python-multipart (form parsing)
+    - authlib (OAuth 2.1)
+    - Additional session management
+  </Accordion>
+
+  <Accordion title="All Features" icon="box">
+    ```bash
+    # Using uv (recommended)
+    uv pip install "chuk-mcp-server[all]"
+
+    # Or using pip
+    pip install "chuk-mcp-server[all]"
+    ```
+
+    Includes all optional dependencies.
+  </Accordion>
+</AccordionGroup>
+
+## System Requirements
+
+<Info>
+  ChukMCPServer is designed to work across all major platforms with minimal system requirements.
+</Info>
+
+### Operating Systems
+
+| Platform | Support | Notes |
+|----------|---------|-------|
+| **macOS** | ✅ Full | Tested on macOS 12+ (Intel & Apple Silicon) |
+| **Linux** | ✅ Full | Ubuntu 20.04+, Debian 11+, RHEL 8+ |
+| **Windows** | ⚠️ WSL Recommended | Native Windows support via WSL2 |
+
+### Hardware
+
+**Minimum:**
+- 512MB RAM
+- 1 CPU core
+- 100MB disk space
+
+**Recommended:**
+- 2GB+ RAM (for production workloads)
+- 2+ CPU cores (for concurrent requests)
+- 500MB+ disk space (with dependencies)
+
+### Python Versions
+
+| Version | Support | Notes |
+|---------|---------|-------|
+| **3.13** | ✅ Full | Latest features |
+| **3.12** | ✅ Full | Recommended |
+| **3.11** | ✅ Full | Minimum version |
+| 3.10 | ❌ Not supported | Use 3.11+ |
+
+## Installation Methods
+
+### Method 1: uv (Recommended ⭐)
+
+**The fastest and recommended way:**
+
+```bash
+# Install uv first (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install ChukMCPServer
+uv pip install chuk-mcp-server
+
+# Verify installation
+uv run python -c "import chuk_mcp_server; print(chuk_mcp_server.__version__)"
+```
+
+### Method 2: uvx (No Installation Required)
+
+**Run instantly without installing:**
+
+```bash
+# Generate a new project (no install needed!)
+uvx chuk-mcp-server scaffold my-awesome-server
+
+# Start the server
+cd my-awesome-server
+uv run python server.py
+```
+
+Perfect for trying ChukMCPServer without committing to an installation.
+
+### Method 3: From Source (Contributors)
+
+For development or contributing:
+
+```bash
+# Clone repository
+git clone https://github.com/chrishayuk/chuk-mcp-server
+cd chuk-mcp-server
+
+# Install with dev dependencies using uv
+uv sync --dev
+
+# Run tests to verify
+make check
+```
+
+### Method 4: Docker
+
+Use pre-built Docker images:
+
+```bash
+# Pull latest image
+docker pull chrishayuk/chuk-mcp-server:latest
+
+# Run server
+docker run -p 8000:8000 chrishayuk/chuk-mcp-server:latest
+```
+
+<Card title="Learn More" icon="book">
+  See the [Docker Deployment Guide](/deployment/docker) for more options.
+</Card>
+
+### Method 5: pip/pipx (Legacy)
+
+If you're unable to use uv:
+
+```bash
+# Using pip
+pip install chuk-mcp-server
+
+# Or using pipx for global CLI
+pipx install chuk-mcp-server
+```
+
+<Warning>
+  **Performance Impact:** pip is 10-100x slower than uv. We strongly recommend using uv for better performance.
+</Warning>
+
+## Environment Setup
+
+### Using uv (Recommended ⭐)
+
+**Create a new project from scratch:**
+
+```bash
+# Initialize a new Python project with uv
+uv init my-mcp-server
+cd my-mcp-server
+
+# Add ChukMCPServer as a dependency
+uv add chuk-mcp-server
+
+# Create your server file
+cat > server.py << 'EOF'
+from chuk_mcp_server import tool, run
+
+@tool
+def hello(name: str = "World") -> str:
+    return f"Hello, {name}!"
+
+run()
+EOF
+
+# Run your server (uv handles the environment automatically)
+uv run python server.py
+```
+
+**Why this is better:**
+- ⚡ No manual venv creation needed
+- 🔒 Automatic lock file for reproducibility
+- 🚀 Dependencies installed instantly
+- 📦 Project structure created automatically
+
+### Using venv (Alternative)
+
+If you need a traditional virtual environment:
+
+```bash
+# Create virtual environment
+python -m venv .venv
+
+# Activate
+source .venv/bin/activate  # Linux/macOS
+# or
+.venv\Scripts\activate  # Windows
+
+# Install with uv (even in venv, uv is faster!)
+uv pip install chuk-mcp-server
+
+# Or use pip if uv is not available
+pip install chuk-mcp-server
+```
+
+### Using conda (Alternative)
+
+For conda environments:
+
+```bash
+# Create environment
+conda create -n mcp-server python=3.12
+conda activate mcp-server
+
+# Install using uv (recommended even in conda)
+uv pip install chuk-mcp-server
+
+# Or use pip
+pip install chuk-mcp-server
+```
+
+## Claude Desktop Integration
+
+To use ChukMCPServer with Claude Desktop, configure your MCP settings:
+
+<Tabs>
+  <Tab title="macOS">
+    Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-server": {
+          "command": "python",
+          "args": ["/absolute/path/to/server.py"]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "my-server": {
+          "command": "python",
+          "args": ["C:\\path\\to\\server.py"]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Check>
+  Restart Claude Desktop and your tools will appear!
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import Error: No module named 'chuk_mcp_server'" icon="triangle-exclamation">
+    **Cause:** ChukMCPServer not installed or wrong Python environment
+
+    **Solution:**
+    ```bash
+    # Check Python version
+    python --version  # Must be 3.11+
+
+    # Reinstall using uv (recommended)
+    uv pip install --upgrade chuk-mcp-server
+
+    # Or using pip
+    pip install --upgrade chuk-mcp-server
+
+    # Verify installation
+    python -c "import chuk_mcp_server; print('Success!')"
+    ```
+  </Accordion>
+
+  <Accordion title="Version Conflicts" icon="circle-exclamation">
+    **Cause:** Dependency version mismatches
+
+    **Solution using uv (recommended):**
+    ```bash
+    # Create fresh project with uv
+    uv init fresh-project
+    cd fresh-project
+    uv add chuk-mcp-server
+    uv run python -c "import chuk_mcp_server; print('Success!')"
+    ```
+
+    **Solution using venv:**
+    ```bash
+    # Create fresh environment
+    python -m venv fresh-env
+    source fresh-env/bin/activate
+    uv pip install chuk-mcp-server  # Still use uv even in venv!
+    ```
+  </Accordion>
+
+  <Accordion title="Performance Issues" icon="gauge">
+    **Cause:** Missing optional performance dependencies
+
+    **Solution:**
+    ```bash
+    # Install with all features using uv (recommended)
+    uv pip install "chuk-mcp-server[all]"
+
+    # Or using pip
+    pip install "chuk-mcp-server[all]"
+
+    # Verify uvloop is installed
+    python -c "import uvloop; print('uvloop available')"
+    ```
+  </Accordion>
+
+  <Accordion title="SSL/TLS Errors" icon="lock">
+    **Cause:** Certificate validation issues
+
+    **Solution:**
+    ```bash
+    # Update certificates (macOS)
+    /Applications/Python\ 3.11/Install\ Certificates.command
+
+    # Update certificates (Linux)
+    sudo update-ca-certificates
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart Tutorial"
+    icon="rocket-launch"
+    href="/getting-started/quickstart"
+  >
+    Build your first MCP server in 5 minutes
+  </Card>
+
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/getting-started/core-concepts"
+  >
+    Learn about tools, resources, and prompts
+  </Card>
+
+  <Card
+    title="Deployment Guide"
+    icon="cloud"
+    href="/deployment/running-server"
+  >
+    Deploy your server to production
+  </Card>
+
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api-reference/decorators"
+  >
+    Explore the complete API
+  </Card>
+</CardGroup>
+
+---
+
+<Info>
+  **Need help?** Join our [GitHub Discussions](https://github.com/chrishayuk/chuk-mcp-server/discussions) or open an [issue](https://github.com/chrishayuk/chuk-mcp-server/issues).
+</Info>
