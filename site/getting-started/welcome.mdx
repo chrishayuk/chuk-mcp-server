@@ -1,0 +1,173 @@
+---
+title: "Welcome to ChukMCPServer!"
+sidebarTitle: "Welcome"
+description: "High-performance MCP server framework for Python - optimized for production and Claude agents"
+icon: "hand-wave"
+---
+
+![ChukMCPServer](https://raw.githubusercontent.com/chrishayuk/chuk-mcp-server/main/assets/logo.png)
+
+# Welcome to ChukMCPServer
+
+ChukMCPServer is a **high-performance MCP (Model Context Protocol) server framework** for Python, designed for production-grade applications and seamless Claude Desktop integration.
+
+## Why ChukMCPServer?
+
+```python
+from chuk_mcp_server import tool, run
+
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+run()  # Production-ready server in 5 lines!
+```
+
+<Card title="⚡ Performance First" icon="bolt">
+  **Sub-3ms latency** per tool call with **36,000+ RPS** peak throughput. When LLMs issue dozens of tool calls per completion, every millisecond counts.
+</Card>
+
+<Card title="🚀 Zero Configuration" icon="rocket">
+  Auto-detects optimal settings for your environment - local development, Docker, AWS, GCP, Azure, or edge platforms.
+</Card>
+
+<Card title="🔐 Built-in OAuth 2.1" icon="shield-check">
+  Production-ready OAuth support for LinkedIn, GitHub, and custom providers. Build authenticated integrations in minutes.
+</Card>
+
+<Card title="🔗 Server Composition" icon="puzzle-piece">
+  Compose multiple MCP servers into a unified endpoint through configuration. No code required.
+</Card>
+
+## What is MCP?
+
+The **Model Context Protocol (MCP)** is an open standard that enables AI assistants like Claude to securely connect to external data sources and tools. Think of it as USB for AI - a universal way to plug any tool into any AI assistant.
+
+## Beyond Basic MCP
+
+While MCP provides the protocol, ChukMCPServer adds:
+
+- **Performance optimization** - <3ms overhead vs 5-50ms in typical implementations
+- **Production features** - OAuth, rate limiting, health checks, metrics
+- **Developer experience** - Zero config, auto-detection, FastAPI-like decorators
+- **Deployment flexibility** - STDIO, HTTP, SSE, Docker, cloud platforms
+- **Server composition** - Aggregate multiple servers with configuration
+
+## Quick Start
+
+<CardGroup cols={3}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/getting-started/installation"
+  >
+    Install ChukMCPServer in seconds
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="rocket-launch"
+    href="/getting-started/quickstart"
+  >
+    Build your first server
+  </Card>
+  <Card
+    title="Deployment"
+    icon="cloud"
+    href="/deployment/running-server"
+  >
+    Deploy to production
+  </Card>
+</CardGroup>
+
+## Performance at a Glance
+
+| Metric | Value | What it means |
+|--------|-------|---------------|
+| **Peak Throughput** | 36,348 RPS | Handle 36,000+ tool calls per second |
+| **Average Latency** | 2.74ms | Each tool call adds <3ms overhead |
+| **p95 Latency** | ~5-6ms | 95% of calls complete in under 6ms |
+| **Concurrency** | 1-1000 | Linear scaling from 1 to 1000 connections |
+| **Success Rate** | 100% | Zero errors under load testing |
+
+## Perfect For
+
+<AccordionGroup>
+  <Accordion title="🤖 Claude Desktop Integration" icon="robot">
+    Add custom tools to Claude Desktop in minutes. ChukMCPServer uses the standard MCP stdio transport for seamless integration.
+  </Accordion>
+
+  <Accordion title="🌐 Production APIs" icon="globe">
+    Handle thousands of requests per second with built-in health checks, metrics, and monitoring.
+  </Accordion>
+
+  <Accordion title="⚡ Real-time Systems" icon="bolt">
+    Sub-3ms overhead per tool call enables real-time responsiveness even under heavy load.
+  </Accordion>
+
+  <Accordion title="🔐 OAuth Integrations" icon="shield-check">
+    Built-in OAuth 2.1 support for LinkedIn, GitHub, and custom providers.
+  </Accordion>
+
+  <Accordion title="☁️ Cloud Deployment" icon="cloud">
+    Auto-detects and optimizes for AWS, GCP, Azure, Vercel, Netlify, and Cloudflare.
+  </Accordion>
+
+  <Accordion title="🔀 Multi-Server Composition" icon="puzzle-piece">
+    Aggregate multiple MCP servers (GitHub, Slack, custom) into a single unified endpoint.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Steps>
+  <Step title="Install ChukMCPServer">
+    Get up and running in 30 seconds with `pip` or `uv`.
+
+    [Installation Guide →](/getting-started/installation)
+  </Step>
+
+  <Step title="Build Your First Server">
+    Create a production-ready MCP server with tools, resources, and prompts.
+
+    [Quickstart Guide →](/getting-started/quickstart)
+  </Step>
+
+  <Step title="Deploy to Production">
+    Learn about deployment options: Docker, cloud platforms, and composition.
+
+    [Deployment Guide →](/deployment/running-server)
+  </Step>
+
+  <Step title="Explore Advanced Features">
+    OAuth, server composition, proxying, and performance optimization.
+
+    [Advanced Guides →](/advanced/oauth)
+  </Step>
+</Steps>
+
+## LLM-Friendly Documentation
+
+This documentation is optimized for both humans and AI assistants:
+
+<Tabs>
+  <Tab title="For Developers">
+    - Progressive tutorials with runnable examples
+    - Complete API reference with type hints
+    - Performance benchmarks and best practices
+    - Troubleshooting guides and FAQs
+  </Tab>
+
+  <Tab title="For AI Assistants">
+    - Structured markdown with clear headings
+    - Code examples with context and explanations
+    - Decision trees for architecture choices
+    - Common patterns and anti-patterns
+  </Tab>
+</Tabs>
+
+---
+
+<Card title="Ready to get started?" icon="rocket">
+  Continue to [Installation](/getting-started/installation) to begin building with ChukMCPServer.
+</Card>

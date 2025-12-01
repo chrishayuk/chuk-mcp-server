@@ -1,0 +1,140 @@
+site_name: ChukMCPServer
+site_description: The fastest, most developer-friendly MCP server framework for Python
+site_author: Chris Hay
+site_url: https://chrishayuk.github.io/chuk-mcp-server/
+
+repo_name: chrishayuk/chuk-mcp-server
+repo_url: https://github.com/chrishayuk/chuk-mcp-server
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Your First Server: getting-started/first-server.md
+    - Claude Desktop Setup: getting-started/claude-desktop.md
+  - Core Concepts:
+    - Tools: concepts/tools.md
+    - Resources: concepts/resources.md
+    - Prompts: concepts/prompts.md
+    - Context Management: concepts/context.md
+    - Transport Modes: concepts/transport.md
+  - Building Tools:
+    - Basic Tools: tools/basic.md
+    - Async Tools: tools/async.md
+    - Type Validation: tools/types.md
+    - Error Handling: tools/errors.md
+    - Testing: tools/testing.md
+  - OAuth & Authentication:
+    - Overview: oauth/overview.md
+    - Google Drive Provider: oauth/google-drive.md
+    - Custom Providers: oauth/custom-providers.md
+    - Protected Tools: oauth/protected-tools.md
+    - Token Management: oauth/tokens.md
+    - OAuth API Reference: oauth/api-reference.md
+  - Deployment:
+    - HTTP Mode: deployment/http-mode.md
+    - Docker: deployment/docker.md
+    - Cloud Platforms: deployment/cloud.md
+    - Production Guide: deployment/production.md
+    - Environment Variables: deployment/environment.md
+  - Advanced:
+    - Configuration: advanced/configuration.md
+    - Logging: advanced/logging.md
+    - Multi-Server Proxy: advanced/proxy.md
+    - Server Composition: advanced/composition.md
+    - Performance Tuning: advanced/performance.md
+  - Examples:
+    - Simple Calculator: examples/calculator.md
+    - Weather Service: examples/weather.md
+    - Database Integration: examples/database.md
+    - OAuth Integration: examples/oauth.md
+    - Cloud Deployment: examples/cloud.md
+  - API Reference:
+    - Decorators: api/decorators.md
+    - ChukMCPServer Class: api/server.md
+    - OAuth Module: api/oauth.md
+    - Cloud Module: api/cloud.md
+    - Types: api/types.md
+  - Performance:
+    - Benchmarks: performance/benchmarks.md
+    - Optimization Guide: performance/optimization.md
+    - Comparison: performance/comparison.md
+  - Contributing:
+    - Development Setup: contributing/setup.md
+    - Code Style: contributing/style.md
+    - Testing: contributing/testing.md
+    - Pull Requests: contributing/pull-requests.md
+  - About:
+    - Architecture: about/architecture.md
+    - Changelog: about/changelog.md
+    - License: about/license.md
+    - FAQ: about/faq.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/chrishayuk/chuk-mcp-server
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/chuk-mcp-server/
+  version:
+    provider: mike
+
+copyright: Copyright &copy; 2024 Chris Hay
