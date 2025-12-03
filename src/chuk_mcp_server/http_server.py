@@ -18,6 +18,7 @@ from .endpoint_registry import http_endpoint_registry
 
 # Import optimized endpoints
 from .endpoints import HealthEndpoint, InfoEndpoint, MCPEndpoint, handle_health_ultra_fast, handle_ping, handle_version
+from .middlewares import ContextMiddleware
 from .protocol import MCPProtocolHandler
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,11 @@ class HTTPServer:
             # Remove GZip middleware for benchmarking (it adds overhead)
             # Middleware(GZipMiddleware, minimum_size=2048)
         ]
+
+        for custom_middleware in http_endpoint_registry.get_middleware():
+            middleware.append(Middleware(custom_middleware.middleware_class))
+
+        middleware.append(Middleware(ContextMiddleware))
 
         routes = http_endpoint_registry.get_routes()
         logger.info(f"🔗 Creating Starlette app with {len(routes)} routes")
