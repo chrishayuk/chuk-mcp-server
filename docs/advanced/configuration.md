@@ -106,15 +106,26 @@ Change settings at runtime:
 
 ```python
 from chuk_mcp_server import ChukMCPServer
+from chuk_mcp_server.endpoint_registry import register_middleware
 
 mcp = ChukMCPServer(name="my-server")
 
 # Add custom middleware
-@mcp.app.middleware("http")
-async def custom_middleware(request, call_next):
-    # Custom logic
-    response = await call_next(request)
-    return response
+class CustomMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Custom logic before request
+
+        # Modify scope if needed
+        scope["custom_data"] = "value"
+
+        # Continue to next middleware
+        await self.app(scope, receive, send)
+
+# Register the middleware (priority 50 means it runs earlier)
+register_middleware(CustomMiddleware, priority=50, name="custom_middleware")
 
 # Add custom routes
 @mcp.app.get("/health")

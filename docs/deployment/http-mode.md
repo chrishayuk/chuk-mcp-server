@@ -20,13 +20,13 @@ Access at `http://localhost:8000`
 
 ## HTTP vs STDIO
 
-| Feature | STDIO | HTTP |
-|---------|-------|------|
-| **Use Case** | Claude Desktop | Web APIs, Production |
-| **Transport** | stdin/stdout | HTTP/HTTPS |
-| **Performance** | N/A (local) | 36,000+ RPS |
-| **Testing** | Pipe commands | curl, browser |
-| **Deployment** | Desktop only | Cloud, Docker, etc. |
+| Feature         | STDIO          | HTTP                 |
+| --------------- | -------------- | -------------------- |
+| **Use Case**    | Claude Desktop | Web APIs, Production |
+| **Transport**   | stdin/stdout   | HTTP/HTTPS           |
+| **Performance** | N/A (local)    | 36,000+ RPS          |
+| **Testing**     | Pipe commands  | curl, browser        |
+| **Deployment**  | Desktop only   | Cloud, Docker, etc.  |
 
 ## Configuration
 
@@ -150,9 +150,25 @@ CORS is enabled by default for HTTP mode. Configure if needed:
 
 ```python
 from starlette.middleware.cors import CORSMiddleware
+from chuk_mcp_server.endpoint_registry import register_middleware
 
 # CORS is auto-configured, but you can customize:
-# (Note: Advanced usage - usually not needed)
+class CustomCORSMiddleware:
+    def __init__(self, app):
+        self.app = app
+        self.cors_middleware = CORSMiddleware(
+            app=app,
+            allow_origins=["https://example.com"],
+            allow_methods=["GET", "POST"],
+            allow_headers=["*"],
+            expose_headers=["X-Custom-Header"],
+        )
+
+    async def __call__(self, scope, receive, send):
+        await self.cors_middleware(scope, receive, send)
+
+# Register with high priority so it runs early
+register_middleware(CustomCORSMiddleware, priority=20, name="custom_cors")
 ```
 
 ## Performance

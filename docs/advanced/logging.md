@@ -91,18 +91,40 @@ Log all MCP requests:
 
 ```python
 from chuk_mcp_server import ChukMCPServer
+from chuk_mcp_server.endpoint_registry import register_middleware
 import logging
 
 logger = logging.getLogger(__name__)
 
 mcp = ChukMCPServer(name="my-server")
 
-@mcp.app.middleware("http")
-async def log_requests(request, call_next):
-    logger.info(f"Request: {request.method} {request.url}")
-    response = await call_next(request)
-    logger.info(f"Response: {response.status_code}")
-    return response
+class LoggingMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        # Log request
+        method = scope.get("method", "UNKNOWN")
+        path = scope.get("path", "UNKNOWN")
+        logger.info(f"Request: {method} {path}")
+
+        # Create wrapped send to log responses
+        original_send = send
+
+        async def wrapped_send(message):
+            if message["type"] == "http.response.start":
+                status = message.get("status", 0)
+                logger.info(f"Response: {status}")
+            await original_send(message)
+
+        # Continue processing with wrapped send function
+        await self.app(scope, receive, wrapped_send)
+
+# Register middleware
+register_middleware(LoggingMiddleware, priority=30, name="request_logging")
 
 mcp.run()
 ```

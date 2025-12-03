@@ -192,12 +192,27 @@ def create_tool_handler(func):
 Request/response processing:
 
 ```python
-@app.middleware("http")
-async def process_request(request, call_next):
-    # Pre-processing
-    response = await call_next(request)
-    # Post-processing
-    return response
+from chuk_mcp_server.endpoint_registry import register_middleware
+
+# Define middleware class
+class CustomMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Pre-processing logic
+        if scope["type"] == "http":
+            # Modify scope if needed
+            scope["custom_data"] = "value"
+
+        # Continue to next middleware/application
+        await self.app(scope, receive, send)
+
+        # No post-processing possible with this pattern
+        # (Post-processing would need to be done in the send function)
+
+# Register middleware with priority (lower runs earlier)
+register_middleware(CustomMiddleware, priority=50, name="custom_middleware")
 ```
 
 ## Performance Architecture
@@ -313,11 +328,21 @@ class MyProvider(BaseOAuthProvider):
 Add custom processing:
 
 ```python
-@mcp.app.middleware("http")
-async def custom_middleware(request, call_next):
-    # Your logic
-    response = await call_next(request)
-    return response
+from chuk_mcp_server.endpoint_registry import register_middleware
+
+class LoggingMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Log the request
+        print(f"Request: {scope['method']} {scope['path']}")
+
+        # Pass to the next middleware/application
+        await self.app(scope, receive, send)
+
+# Register with priority (lower numbers run earlier)
+register_middleware(LoggingMiddleware, priority=10, name="logging")
 ```
 
 ## Scalability

@@ -19,6 +19,7 @@ The context management system provides thread-safe, async-safe storage for reque
 │ ├─ context.py: Generic context management                  │
 │ │  ├─ Session ID (MCP session)                            │
 │ │  ├─ User ID (OAuth user)                                │
+│ │  ├─ HTTP Request (Starlette request data)               │
 │ │  ├─ Progress Token                                       │
 │ │  └─ Metadata                                             │
 │ └─ protocol.py: Sets context on each request              │
@@ -46,6 +47,12 @@ The context management system provides thread-safe, async-safe storage for reque
 - **Set by**: Protocol handler after OAuth token validation
 - **Used by**: Consumer tools/resources that need user-specific data
 - **Functions**: `get_user_id()`, `set_user_id()`, `require_user_id()`
+
+### HTTP Request Context
+- **Purpose**: Access HTTP request data in tools and middleware
+- **Set by**: ContextMiddleware (automatically via HTTP server)
+- **Used by**: Tools that need request data
+- **Functions**: `get_http_request()`
 
 ### Progress Token
 - **Purpose**: Enable progress notifications to clients
@@ -96,6 +103,29 @@ async def create_linkedin_post(content: str):
     # Use user-scoped manager
     manager = get_manager_for_user(user_id)
     return manager.create_draft(content)
+```
+
+### Using HTTP Request Context
+
+```python
+# Tool with access to HTTP request data
+from chuk_mcp_server import tool, get_http_request
+
+@tool
+def get_request_info() -> dict:
+    """Tool that returns information about the HTTP request."""
+    request = get_http_request()  # Get the HTTP request from context
+
+    # Access request properties
+    return {
+        "path": request.get("path", ""),
+        "method": request.get("method", ""),
+        "client_host": request.get("client", {}).get("host", ""),
+        "headers": {
+            k.decode("utf-8"): v.decode("utf-8")
+            for k, v in request.get("headers", [])
+        }
+    }
 ```
 
 ### With Context Manager (for complex scenarios)

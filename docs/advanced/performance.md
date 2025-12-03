@@ -228,6 +228,7 @@ Track performance in production:
 
 ```python
 from chuk_mcp_server import ChukMCPServer
+from chuk_mcp_server.endpoint_registry import register_middleware
 from prometheus_client import Counter, Histogram
 import time
 
@@ -237,17 +238,29 @@ request_duration = Histogram('mcp_request_duration_seconds', 'Request duration')
 
 mcp = ChukMCPServer(name="my-server")
 
-@mcp.app.middleware("http")
-async def metrics_middleware(request, call_next):
-    request_count.inc()
-    
-    start = time.perf_counter()
-    response = await call_next(request)
-    duration = time.perf_counter() - start
-    
-    request_duration.observe(duration)
-    
-    return response
+class MetricsMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        request_count.inc()
+        start = time.perf_counter()
+
+        # Create a wrapped send function to capture completion time
+        async def wrapped_send(message):
+            if message["type"] == "http.response.start":
+                duration = time.perf_counter() - start
+                request_duration.observe(duration)
+            await send(message)
+
+        # Pass to the next middleware
+        await self.app(scope, receive, wrapped_send)
+
+# Register middleware with high priority (runs early)
+register_middleware(MetricsMiddleware, priority=10, name="metrics")
 
 mcp.run()
 ```
