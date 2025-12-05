@@ -1,137 +1,23 @@
 """
-Proxy Manager for hosting and managing multiple MCP servers.
+Proxy Manager v2 - Using chuk-tool-processor StreamManager for MCP integration.
 
-This module provides the ProxyManager class which can connect to multiple
-MCP servers (stdio, HTTP, SSE) and expose their tools under a unified namespace.
+This version replaces custom transport classes with chuk-tool-processor's
+production-grade MCP handling (timeouts, retries, circuit breakers, etc).
 """
 
-import json
 import logging
-import subprocess
 from typing import Any
 
-from ..types import ToolHandler
-from .tool_wrapper import create_proxy_tool
-from .transports import HttpProxyTransport, SseProxyTransport, StdioProxyTransport, ProxyTransport
+from chuk_tool_processor.mcp import MCPTool, StreamManager, register_mcp_tools
 
 logger = logging.getLogger(__name__)
 
 
-class StdioServerClient:
-    """Client for communicating with a stdio MCP server."""
-
-    def __init__(self, server_name: str, process: subprocess.Popen[bytes]):
-        self.server_name = server_name
-        self.process = process
-        self.request_id = 0
-
-    async def call_tool(
-        self, tool_name: str, arguments: dict[str, Any], server_name: str | None = None
-    ) -> dict[str, Any]:
-        """Call a tool on the stdio server."""
-        self.request_id += 1
-
-        request = {
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        }
-
-        # Write request to stdin
-        if self.process.stdin is None:
-            raise RuntimeError("Process stdin is not available")
-
-        request_json = json.dumps(request) + "\n"
-        self.process.stdin.write(request_json.encode())
-        self.process.stdin.flush()
-
-        # Read response from stdout
-        if self.process.stdout is None:
-            raise RuntimeError("Process stdout is not available")
-
-        response_line = self.process.stdout.readline().decode().strip()
-        response = json.loads(response_line)
-
-        # Handle JSON-RPC error
-        if "error" in response:
-            return {
-                "isError": True,
-                "error": response["error"].get("message", "Unknown error"),
-            }
-
-        # Return result
-        return {"isError": False, "content": response.get("result", {})}
-
-    async def list_tools(self) -> list[dict[str, Any]]:
-        """List available tools from the stdio server."""
-        self.request_id += 1
-
-        request = {
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": "tools/list",
-            "params": {},
-        }
-
-        # Write request
-        if self.process.stdin is None:
-            raise RuntimeError("Process stdin is not available")
-
-        request_json = json.dumps(request) + "\n"
-        self.process.stdin.write(request_json.encode())
-        self.process.stdin.flush()
-
-        # Read response
-        if self.process.stdout is None:
-            raise RuntimeError("Process stdout is not available")
-
-        response_line = self.process.stdout.readline().decode().strip()
-        response = json.loads(response_line)
-
-        if "error" in response:
-            logger.error(f"Failed to list tools from {self.server_name}: {response['error']}")
-            return []
-
-        result = response.get("result", {})
-        tools: list[dict[str, Any]] = result.get("tools", [])
-        return tools
-
-    async def close(self) -> None:
-        """Close the stdio server connection."""
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-
-
 class ProxyManager:
     """
-    Manages multiple MCP servers and exposes their tools under a unified namespace.
+    Manages MCP servers using chuk-tool-processor StreamManager.
 
-    Configuration example:
-        {
-            "proxy": {
-                "enabled": true,
-                "namespace": "proxy"
-            },
-            "servers": {
-                "time": {
-                    "type": "stdio",
-                    "command": "uvx",
-                    "args": ["mcp-server-time"],
-                    "cwd": "/optional/working/dir"
-                },
-                "weather": {
-                    "type": "stdio",
-                    "command": "python",
-                    "args": ["-m", "weather_server"]
-                }
-            }
-        }
+    Simpler and more reliable than custom transport implementation.
     """
 
     def __init__(self, config: dict[str, Any], protocol_handler: Any = None):
@@ -149,13 +35,13 @@ class ProxyManager:
         self.servers_config = config.get("servers", {})
         self.protocol_handler = protocol_handler
 
-        self.running_servers: dict[str, ProxyTransport] = {}
-        self.proxied_tools: dict[str, ToolHandler] = {}
+        self.stream_managers: dict[str, StreamManager] = {}
+        self.registered_tools: dict[str, list[str]] = {}
 
         logger.info(f"ProxyManager initialized (enabled={self.enabled}, namespace={self.namespace})")
 
     async def start_servers(self) -> None:
-        """Start all configured MCP servers."""
+        """Start all configured MCP servers and register their tools."""
         if not self.enabled:
             logger.info("Proxy mode disabled, skipping server startup")
             return
@@ -172,131 +58,159 @@ class ProxyManager:
             except Exception as e:
                 logger.error(f"Failed to start server {server_name}: {e}")
 
-        # Discover and wrap tools from all servers
-        await self._discover_and_wrap_tools()
-
-        logger.info(f"Proxy started with {len(self.running_servers)} servers, {len(self.proxied_tools)} tools")
+        total_tools = sum(len(tools) for tools in self.registered_tools.values())
+        logger.info(f"Proxy started with {len(self.stream_managers)} servers, {total_tools} tools")
 
     async def _start_server(self, name: str, config: dict[str, Any]) -> None:
-        """Start a single MCP server."""
+        """Start a single MCP server using StreamManager."""
         server_type = config.get("type", "stdio")
 
-        # Create appropriate transport based on type
-        transport: ProxyTransport | None = None
+        stream_manager: StreamManager | None = None
 
-        if server_type == "stdio":
-            transport = StdioProxyTransport(name, config)
-        elif server_type == "http":
-            transport = HttpProxyTransport(name, config)
-        elif server_type == "sse":
-            transport = SseProxyTransport(name, config)
-        else:
-            logger.warning(f"Unknown server type {server_type}, skipping {name}")
-            return
-
-        # Connect to the server
-        if not await transport.connect():
-            logger.error(f"Failed to connect to server {name}")
-            return
-
-        # Initialize the MCP session
         try:
-            await transport.initialize()
+            if server_type == "stdio":
+                # STDIO transport
+                command = config.get("command")
+                args = config.get("args", [])
+                env = config.get("env")
+
+                if not command:
+                    raise ValueError(f"STDIO server '{name}' requires 'command' in config")
+
+                stream_manager = await StreamManager.create_with_stdio(
+                    servers=[
+                        {
+                            "name": name,
+                            "command": command,
+                            "args": args,
+                            "env": env or {},
+                        }
+                    ],
+                    server_names={0: name},
+                    default_timeout=config.get("timeout", 30.0),
+                )
+
+            elif server_type == "http":
+                # HTTP Streamable transport
+                url = config.get("url")
+                if not url:
+                    raise ValueError(f"HTTP server '{name}' requires 'url' in config")
+
+                stream_manager = await StreamManager.create_with_http_streamable(
+                    servers=[
+                        {
+                            "url": url,
+                            "headers": config.get("headers", {}),
+                        }
+                    ],
+                    server_names={0: name},
+                    default_timeout=config.get("timeout", 30.0),
+                )
+
+            elif server_type == "sse":
+                # SSE transport
+                url = config.get("url")
+                if not url:
+                    raise ValueError(f"SSE server '{name}' requires 'url' in config")
+
+                stream_manager = await StreamManager.create_with_sse(
+                    servers=[
+                        {
+                            "url": url,
+                            "headers": config.get("headers", {}),
+                        }
+                    ],
+                    server_names={0: name},
+                    default_timeout=config.get("timeout", 30.0),
+                )
+            else:
+                logger.warning(f"Unknown server type '{server_type}', skipping {name}")
+                return
+
+            # Store stream manager
+            self.stream_managers[name] = stream_manager
+
+            # Register tools using chuk-tool-processor's register_mcp_tools
+            # This creates MCPTool wrappers with built-in resilience
+            # Use the namespace directly (which comes from the prefix in config)
+            namespace = self.namespace
+            registered = await register_mcp_tools(
+                stream_manager=stream_manager,
+                namespace=namespace,
+                default_timeout=config.get("timeout", 30.0),
+                enable_resilience=True,
+            )
+
+            self.registered_tools[name] = registered
+
+            # Also register with our protocol handler if provided
+            if self.protocol_handler:
+                await self._register_with_protocol_handler(namespace, stream_manager)
+
+            logger.info(f"Started server '{name}' with {len(registered)} tools")
+
         except Exception as e:
-            logger.error(f"Failed to initialize server {name}: {e}")
-            await transport.disconnect()
+            logger.error(f"Failed to start server '{name}': {e}")
+            if stream_manager:
+                await stream_manager.close()
+            raise
+
+    async def _register_with_protocol_handler(self, namespace: str, stream_manager: StreamManager) -> None:
+        """Register tools with the protocol handler."""
+        if not self.protocol_handler:
             return
 
-        self.running_servers[name] = transport
-        logger.info(f"Started server: {name}")
+        from .mcp_tool_wrapper import create_mcp_tool_handler
 
-    async def _discover_and_wrap_tools(self) -> None:
-        """Discover tools from all servers and create proxy wrappers."""
-        for server_name, transport in self.running_servers.items():
-            try:
-                # List tools from server
-                tools_result = await transport.list_tools()
-                tools = tools_result.get("tools", [])
+        # Get tools from stream manager
+        tools = stream_manager.get_all_tools()
 
-                logger.debug(f"Discovered {len(tools)} tools from {server_name}")
+        for tool_def in tools:
+            tool_name = tool_def.get("name")
+            if not tool_name:
+                continue
 
-                # Create proxy wrapper for each tool
-                for tool_meta in tools:
-                    tool_name = tool_meta.get("name")
-                    if not tool_name:
-                        continue
+            # Create MCPTool wrapper
+            mcp_tool = MCPTool(
+                tool_name=tool_name,
+                stream_manager=stream_manager,
+                default_timeout=30.0,
+                enable_resilience=True,
+            )
 
-                    # Create namespaced name
-                    namespace = f"{self.namespace}.{server_name}"
-                    full_name = f"{namespace}.{tool_name}"
+            full_name = f"{namespace}.{tool_name}"
 
-                    # Create proxy tool
-                    tool_handler = await create_proxy_tool(namespace, tool_name, transport, tool_meta)
+            # Create ToolHandler with proper signature from inputSchema
+            tool_handler = create_mcp_tool_handler(
+                mcp_tool=mcp_tool,
+                tool_def=tool_def,
+                full_name=full_name,
+            )
 
-                    # Register with protocol handler if available
-                    if self.protocol_handler:
-                        self.protocol_handler.register_tool(tool_handler)
-
-                    self.proxied_tools[full_name] = tool_handler
-
-                    logger.debug(f"Registered proxy tool: {full_name}")
-
-            except Exception as e:
-                logger.error(f"Failed to discover tools from {server_name}: {e}")
+            self.protocol_handler.register_tool(tool_handler)
 
     async def stop_servers(self) -> None:
         """Stop all running MCP servers."""
-        logger.info(f"Stopping {len(self.running_servers)} proxy servers...")
+        logger.info(f"Stopping {len(self.stream_managers)} proxy servers...")
 
-        for server_name, transport in self.running_servers.items():
+        for name, stream_manager in self.stream_managers.items():
             try:
-                await transport.disconnect()
-                logger.info(f"Stopped server: {server_name}")
+                await stream_manager.close()
+                logger.info(f"Stopped server: {name}")
             except Exception as e:
-                logger.error(f"Error stopping server {server_name}: {e}")
+                logger.error(f"Error stopping server {name}: {e}")
 
-        self.running_servers.clear()
-        self.proxied_tools.clear()
+        self.stream_managers.clear()
+        self.registered_tools.clear()
 
-    async def call_tool(self, name: str, **kwargs: Any) -> Any:
-        """
-        Call a proxied tool by name.
+        logger.info("All proxy servers stopped")
 
-        Args:
-            name: Full tool name (e.g., "proxy.time.get_current_time")
-            **kwargs: Tool arguments
-
-        Returns:
-            Tool result
-        """
-        # Extract server and tool name
-        if not name.startswith(f"{self.namespace}."):
-            raise ValueError(f"Tool name must start with {self.namespace}.")
-
-        parts = name[len(self.namespace) + 1 :].split(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid tool name format: {name}")
-
-        server_name, tool_name = parts
-
-        if server_name not in self.running_servers:
-            raise ValueError(f"Server not found: {server_name}")
-
-        transport = self.running_servers[server_name]
-        result = await transport.call_tool(tool_name, kwargs)
-
-        return result
-
-    def get_all_tools(self) -> dict[str, ToolHandler]:
-        """Get all proxied tools."""
-        return dict(self.proxied_tools)
-
-    def get_stats(self) -> dict[str, Any]:
-        """Get proxy statistics."""
+    def get_server_info(self) -> dict[str, Any]:
+        """Get information about running servers."""
         return {
             "enabled": self.enabled,
             "namespace": self.namespace,
-            "servers": len(self.running_servers),
-            "tools": len(self.proxied_tools),
-            "server_names": list(self.running_servers.keys()),
+            "servers": list(self.stream_managers.keys()),
+            "tools_count": sum(len(tools) for tools in self.registered_tools.values()),
+            "tools_by_server": {name: len(tools) for name, tools in self.registered_tools.items()},
         }

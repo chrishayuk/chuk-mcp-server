@@ -157,6 +157,49 @@ def my_tool(x: int) -> int:
 run()  # Automatically adapts to GCP, AWS, Azure, Vercel, etc.
 ```
 
+### Server Composition (Mix Local & Remote Tools)
+
+Combine multiple MCP servers into one unified interface. Import tools from local Python modules or remote servers (STDIO/HTTP/SSE):
+
+```python
+# config.yaml
+composition:
+  import:
+    # Local Python module
+    - name: "echo"
+      type: "module"
+      module: "chuk_mcp_echo.server:echo_service"
+      prefix: "echo"
+
+    # Remote MCP server via STDIO
+    - name: "fetch"
+      type: "stdio"
+      command: "uvx"
+      args: ["mcp-server-fetch"]
+      prefix: "fetch"
+
+    # Remote MCP server via HTTP
+    - name: "weather"
+      type: "http"
+      url: "https://api.weather.com/mcp"
+      prefix: "weather"
+```
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer("composed-server")
+mcp.load_config("config.yaml")
+mcp.run()  # All tools available under unified namespaces
+```
+
+**What you get:**
+- ✅ **Module imports**: Direct Python imports (fastest)
+- ✅ **STDIO proxy**: Connect to subprocess servers (uvx, npx, python -m)
+- ✅ **HTTP proxy**: Connect to remote HTTP MCP servers
+- ✅ **Built-in resilience**: Automatic timeouts, retries, circuit breakers (via chuk-tool-processor)
+- ✅ **Unified namespace**: Tools prefixed by source (e.g., `fetch.fetch`, `echo.echo_text`)
+
 ## 🏆 Performance
 
 ChukMCPServer is built for production:

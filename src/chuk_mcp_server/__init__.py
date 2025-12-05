@@ -142,7 +142,7 @@ from .decorators import prompt, requires_auth, resource, tool
 from .modules import ModuleLoader
 
 # Import proxy functionality
-from .proxy import ProxyManager, create_proxy_tool
+from .proxy import ProxyManager
 from .types import (
     MCPPrompt,
     ServerInfo,

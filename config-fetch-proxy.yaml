@@ -1,0 +1,28 @@
+# ChukMCP Server - Fetch Proxy Demo
+# Demonstrates proxying to MCP fetch server via STDIO/uvx
+
+server:
+  name: "chuk-mcp-server-fetch-proxy"
+  transport: "http"
+
+  http:
+    host: "0.0.0.0"
+    port: 8000
+
+logging:
+  level: "INFO"
+
+# Proxy to fetch server via STDIO
+composition:
+  import:
+    - name: "fetch"
+      enabled: true
+      type: "stdio"
+      command: "uvx"
+      args: ["mcp-server-fetch"]
+      prefix: "fetch"
+      description: "MCP fetch server for web requests via uvx"
+
+  mount: []
+
+modules: {}
