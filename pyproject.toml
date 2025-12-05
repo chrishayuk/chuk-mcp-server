@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.14"
+version = "0.15"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,6 +13,7 @@ dependencies = [
     "chuk-mcp>=0.8.1",
     "chuk-sessions>=0.4.2",
     "httptools>=0.6.4",
+    "httpx>=0.27.0", # Required for HTTP proxy transport
     "orjson>=3.10.18",
     "psutil>=7.0.0",
     "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware

@@ -12,6 +12,7 @@ from typing import Any
 
 from ..types import ToolHandler
 from .tool_wrapper import create_proxy_tool
+from .transports import HttpProxyTransport, SseProxyTransport, StdioProxyTransport, ProxyTransport
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class ProxyManager:
         self.servers_config = config.get("servers", {})
         self.protocol_handler = protocol_handler
 
-        self.running_servers: dict[str, StdioServerClient] = {}
+        self.running_servers: dict[str, ProxyTransport] = {}
         self.proxied_tools: dict[str, ToolHandler] = {}
 
         logger.info(f"ProxyManager initialized (enabled={self.enabled}, namespace={self.namespace})")
@@ -180,79 +181,42 @@ class ProxyManager:
         """Start a single MCP server."""
         server_type = config.get("type", "stdio")
 
-        if server_type != "stdio":
-            logger.warning(f"Server type {server_type} not yet supported, skipping {name}")
+        # Create appropriate transport based on type
+        transport: ProxyTransport | None = None
+
+        if server_type == "stdio":
+            transport = StdioProxyTransport(name, config)
+        elif server_type == "http":
+            transport = HttpProxyTransport(name, config)
+        elif server_type == "sse":
+            transport = SseProxyTransport(name, config)
+        else:
+            logger.warning(f"Unknown server type {server_type}, skipping {name}")
             return
 
-        # Start stdio server
-        command = config.get("command", "python")
-        args = config.get("args", [])
-        cwd = config.get("cwd")
+        # Connect to the server
+        if not await transport.connect():
+            logger.error(f"Failed to connect to server {name}")
+            return
 
-        full_command = [command] + args
+        # Initialize the MCP session
+        try:
+            await transport.initialize()
+        except Exception as e:
+            logger.error(f"Failed to initialize server {name}: {e}")
+            await transport.disconnect()
+            return
 
-        logger.debug(f"Starting stdio server {name}: {' '.join(full_command)}")
-
-        # Start subprocess
-        process = subprocess.Popen(
-            full_command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=cwd,
-            bufsize=0,
-        )
-
-        # Create client
-        client = StdioServerClient(name, process)
-
-        # Send initialize request
-        await self._initialize_server(client)
-
-        self.running_servers[name] = client
+        self.running_servers[name] = transport
         logger.info(f"Started server: {name}")
-
-    async def _initialize_server(self, client: StdioServerClient) -> None:
-        """Send MCP initialize request to a server."""
-        client.request_id += 1
-
-        init_request = {
-            "jsonrpc": "2.0",
-            "id": client.request_id,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "chuk-mcp-server-proxy", "version": "0.5.2"},
-            },
-        }
-
-        # Send request
-        if client.process.stdin is None:
-            raise RuntimeError("Process stdin is not available")
-
-        request_json = json.dumps(init_request) + "\n"
-        client.process.stdin.write(request_json.encode())
-        client.process.stdin.flush()
-
-        # Read response
-        if client.process.stdout is None:
-            raise RuntimeError("Process stdout is not available")
-
-        response_line = client.process.stdout.readline().decode().strip()
-        response = json.loads(response_line)
-
-        if "error" in response:
-            raise RuntimeError(f"Failed to initialize server: {response['error']}")
-
-        logger.debug(f"Initialized server: {client.server_name}")
 
     async def _discover_and_wrap_tools(self) -> None:
         """Discover tools from all servers and create proxy wrappers."""
-        for server_name, client in self.running_servers.items():
+        for server_name, transport in self.running_servers.items():
             try:
                 # List tools from server
-                tools = await client.list_tools()
+                tools_result = await transport.list_tools()
+                tools = tools_result.get("tools", [])
 
                 logger.debug(f"Discovered {len(tools)} tools from {server_name}")
 
@@ -267,7 +231,7 @@ class ProxyManager:
                     full_name = f"{namespace}.{tool_name}"
 
                     # Create proxy tool
-                    tool_handler = await create_proxy_tool(namespace, tool_name, client, tool_meta)
+                    tool_handler = await create_proxy_tool(namespace, tool_name, transport, tool_meta)
 
                     # Register with protocol handler if available
                     if self.protocol_handler:
@@ -284,9 +248,9 @@ class ProxyManager:
         """Stop all running MCP servers."""
         logger.info(f"Stopping {len(self.running_servers)} proxy servers...")
 
-        for server_name, client in self.running_servers.items():
+        for server_name, transport in self.running_servers.items():
             try:
-                await client.close()
+                await transport.disconnect()
                 logger.info(f"Stopped server: {server_name}")
             except Exception as e:
                 logger.error(f"Error stopping server {server_name}: {e}")
@@ -318,13 +282,10 @@ class ProxyManager:
         if server_name not in self.running_servers:
             raise ValueError(f"Server not found: {server_name}")
 
-        client = self.running_servers[server_name]
-        result = await client.call_tool(tool_name, kwargs, server_name)
+        transport = self.running_servers[server_name]
+        result = await transport.call_tool(tool_name, kwargs)
 
-        if result.get("isError"):
-            raise RuntimeError(result.get("error", "Unknown error"))
-
-        return result.get("content")
+        return result
 
     def get_all_tools(self) -> dict[str, ToolHandler]:
         """Get all proxied tools."""
