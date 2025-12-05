@@ -55,6 +55,7 @@ class ToolParameter:
     required: bool = True
     default: Any = None
     enum: list[Any] | None = None
+    items_type: str | None = None  # For array types: the type of items in the array
     _cached_schema: bytes | None = None  # 🚀 Cache orjson-serialized schema
 
     @classmethod
@@ -75,6 +76,7 @@ class ToolParameter:
 
         param_type = "string"  # default
         enum_values = None
+        items_type = None  # Track array item type
 
         # First check for direct basic types (most common case)
         if annotation in type_map:
@@ -103,6 +105,9 @@ class ToolParameter:
             # Handle generic containers
             elif origin in (list, list):
                 param_type = "array"
+                # Extract item type from List[T] or list[T]
+                if args:
+                    items_type = type_map.get(args[0], "string")
             elif origin in (dict, dict):
                 param_type = "object"
             else:
@@ -120,6 +125,9 @@ class ToolParameter:
                     param_type = "string"
             elif origin in (list, list):
                 param_type = "array"
+                # Extract item type from List[T] or list[T]
+                if hasattr(annotation, "__args__") and annotation.__args__:
+                    items_type = type_map.get(annotation.__args__[0], "string")
             elif origin in (dict, dict):
                 param_type = "object"
             else:
@@ -139,6 +147,7 @@ class ToolParameter:
             required=required,
             default=actual_default,
             enum=enum_values,
+            items_type=items_type,
             _cached_schema=None,  # Will be computed on first access
         )
 
@@ -146,17 +155,21 @@ class ToolParameter:
         """Convert to JSON Schema format with orjson optimization."""
         # Check if we can use a pre-computed base schema
         cache_key = (self.type, self.required, self.default)
-        if cache_key in _BASE_SCHEMAS and not self.description and not self.enum:
+        if cache_key in _BASE_SCHEMAS and not self.description and not self.enum and not self.items_type:
             # Return pre-computed schema for maximum speed
             return orjson.loads(_BASE_SCHEMAS[cache_key])  # type: ignore[no-any-return]
 
         # Build custom schema
-        schema = {"type": self.type}
+        schema: dict[str, Any] = {"type": self.type}
+
+        # Add items field for array types
+        if self.type == "array" and self.items_type:
+            schema["items"] = {"type": self.items_type}
 
         if self.description:
             schema["description"] = self.description
         if self.enum:
-            schema["enum"] = self.enum  # type: ignore[assignment]
+            schema["enum"] = self.enum
         if self.default is not None:
             schema["default"] = self.default
 

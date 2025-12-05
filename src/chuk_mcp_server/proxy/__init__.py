@@ -7,6 +7,5 @@ unified namespace.
 """
 
 from .manager import ProxyManager
-from .tool_wrapper import create_proxy_tool
 
-__all__ = ["ProxyManager", "create_proxy_tool"]
+__all__ = ["ProxyManager"]

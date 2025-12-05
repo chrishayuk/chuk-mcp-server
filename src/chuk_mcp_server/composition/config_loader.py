@@ -54,7 +54,7 @@ class CompositionConfigLoader:
 
         return self.config
 
-    def apply_to_manager(self, manager: Any) -> dict[str, Any]:
+    async def apply_to_manager(self, manager: Any) -> dict[str, Any]:
         """
         Apply configuration to a CompositionManager.
 
@@ -83,7 +83,7 @@ class CompositionConfigLoader:
                 continue
 
             try:
-                self._import_server(manager, server_config)
+                await self._import_server(manager, server_config)
                 stats["imported"] += 1
             except Exception as e:
                 logger.error(f"Failed to import server {server_config.get('name')}: {e}")
@@ -120,7 +120,7 @@ class CompositionConfigLoader:
         logger.info(f"Configuration applied: {stats}")
         return stats
 
-    def _import_server(self, manager: Any, config: dict[str, Any]) -> None:
+    async def _import_server(self, manager: Any, config: dict[str, Any]) -> None:
         """
         Import a server based on configuration.
 
@@ -146,8 +146,8 @@ class CompositionConfigLoader:
             "headers": config.get("headers", {}),
         }
 
-        # Use the manager's import_from_config method
-        manager.import_from_config(server_name, server_config, prefix=prefix)
+        # Use the manager's import_from_config method (async)
+        await manager.import_from_config(server_name, server_config, prefix=prefix)
 
         logger.info(f"Imported server '{server_name}' with prefix '{prefix}'")
 
@@ -232,7 +232,7 @@ class CompositionConfigLoader:
         return self.config.get("modules", {})
 
 
-def load_from_config(
+async def load_from_config(
     config_path: str | Path | None = None,
     manager: Any | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -251,6 +251,6 @@ def load_from_config(
 
     stats = {}
     if manager:
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
     return config, stats

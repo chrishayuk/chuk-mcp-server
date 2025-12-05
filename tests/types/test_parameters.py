@@ -121,6 +121,7 @@ def test_tool_parameter_from_annotation_generic_types():
     # Test List[str]
     param_list_str = ToolParameter.from_annotation("names", list[str])
     assert param_list_str.type == "array"
+    assert param_list_str.items_type == "string"
 
     # Test Dict[str, int]
     param_dict_str_int = ToolParameter.from_annotation("mapping", dict[str, int])
@@ -605,6 +606,138 @@ def test_infer_type_fallback_for_unknown():
     assert get_origin(CustomClass) is None
     result2 = infer_type_from_annotation(CustomClass)
     assert result2 == "string"  # Should also hit line 261
+
+
+def test_array_items_type_extraction():
+    """Test that array item types are correctly extracted from List[T] annotations."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test List[str]
+    param_str_list = ToolParameter.from_annotation("names", list[str])
+    assert param_str_list.type == "array"
+    assert param_str_list.items_type == "string"
+
+    # Test List[int]
+    param_int_list = ToolParameter.from_annotation("numbers", list[int])
+    assert param_int_list.type == "array"
+    assert param_int_list.items_type == "integer"
+
+    # Test List[float]
+    param_float_list = ToolParameter.from_annotation("values", list[float])
+    assert param_float_list.type == "array"
+    assert param_float_list.items_type == "number"
+
+    # Test List[bool]
+    param_bool_list = ToolParameter.from_annotation("flags", list[bool])
+    assert param_bool_list.type == "array"
+    assert param_bool_list.items_type == "boolean"
+
+    # Test bare list (no item type specified)
+    param_bare_list = ToolParameter.from_annotation("items", list)
+    assert param_bare_list.type == "array"
+    assert param_bare_list.items_type is None
+
+
+def test_array_json_schema_with_items():
+    """Test that array JSON schemas include the items field."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test List[str] generates proper schema
+    param = ToolParameter.from_annotation("names", list[str])
+    schema = param.to_json_schema()
+
+    assert schema["type"] == "array"
+    assert "items" in schema
+    assert schema["items"] == {"type": "string"}
+
+    # Test List[int] generates proper schema
+    param_int = ToolParameter.from_annotation("numbers", list[int])
+    schema_int = param_int.to_json_schema()
+
+    assert schema_int["type"] == "array"
+    assert "items" in schema_int
+    assert schema_int["items"] == {"type": "integer"}
+
+    # Test bare list doesn't include items field if not specified
+    param_bare = ToolParameter(name="items", type="array")
+    schema_bare = param_bare.to_json_schema()
+
+    assert schema_bare["type"] == "array"
+    assert "items" not in schema_bare
+
+
+def test_array_schema_azure_openai_compatibility():
+    """Test that array schemas are compatible with Azure OpenAI requirements."""
+    from chuk_mcp_server.types.parameters import ToolParameter, build_input_schema
+
+    # Azure OpenAI requires array schemas to have items field
+    params = [
+        ToolParameter.from_annotation("string_list", list[str]),
+        ToolParameter.from_annotation("int_list", list[int]),
+        ToolParameter.from_annotation("message", str),
+    ]
+
+    schema = build_input_schema(params)
+
+    # Check string_list has proper array schema
+    assert schema["properties"]["string_list"]["type"] == "array"
+    assert "items" in schema["properties"]["string_list"]
+    assert schema["properties"]["string_list"]["items"]["type"] == "string"
+
+    # Check int_list has proper array schema
+    assert schema["properties"]["int_list"]["type"] == "array"
+    assert "items" in schema["properties"]["int_list"]
+    assert schema["properties"]["int_list"]["items"]["type"] == "integer"
+
+    # Check regular string parameter
+    assert schema["properties"]["message"]["type"] == "string"
+    assert "items" not in schema["properties"]["message"]
+
+
+def test_array_items_with_typing_list():
+    """Test array items extraction with list[T] annotation."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test list[str]
+    param = ToolParameter.from_annotation("names", list[str])
+    assert param.type == "array"
+    assert param.items_type == "string"
+
+    schema = param.to_json_schema()
+    assert schema["type"] == "array"
+    assert schema["items"] == {"type": "string"}
+
+
+def test_array_items_fallback_to_string():
+    """Test that unknown array item types default to string."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Custom class as list item type
+    class CustomType:
+        pass
+
+    param = ToolParameter.from_annotation("custom_list", list[CustomType])
+    assert param.type == "array"
+    assert param.items_type == "string"  # Should default to string
+
+    schema = param.to_json_schema()
+    assert schema["items"] == {"type": "string"}
+
+
+def test_nested_generic_types():
+    """Test handling of nested generic types."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test List[List[str]] - only extracts first level
+    param = ToolParameter.from_annotation("nested", list[list[str]])
+    assert param.type == "array"
+    # Inner list[str] becomes "string" since we only extract the outer type arg
+    # Note: This is a known limitation - nested generics default to string
+    assert param.items_type == "string"
+
+    schema = param.to_json_schema()
+    assert schema["type"] == "array"
+    assert schema["items"] == {"type": "string"}
 
 
 if __name__ == "__main__":
