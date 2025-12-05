@@ -109,8 +109,13 @@ class HttpProxyTransport(ProxyTransport):
 
     async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send a JSON-RPC request over HTTP."""
-        if not self.client:
-            raise RuntimeError("HTTP client not connected")
+        # Ensure we have a valid client (recreate if needed)
+        if self.client is None:
+            self.client = httpx.AsyncClient(
+                timeout=self.timeout,
+                headers=self.headers,
+                verify=self.verify_ssl,
+            )
 
         self.request_id += 1
 
@@ -154,4 +159,11 @@ class HttpProxyTransport(ProxyTransport):
             raise RuntimeError(f"HTTP request failed: {e}") from e
         except Exception as e:
             logger.error(f"Error sending HTTP request: {e}")
+            # On error, close and clear the client so it will be recreated next time
+            if self.client:
+                try:
+                    await self.client.aclose()
+                except:
+                    pass
+                self.client = None
             raise
