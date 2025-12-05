@@ -99,14 +99,19 @@ async def _proxy_wrapper({func_params}):
         result = await server_client.call_tool(
             tool_name="{tool_name}",
             arguments=kwargs,
-            server_name="{server_name}",
         )
 
+        # Handle legacy StdioServerClient format (dict with isError/content)
         if isinstance(result, dict) and result.get("isError"):
             error_msg = result.get("error", "Unknown MCP error")
             raise RuntimeError(f"Remote tool error: {{error_msg}}")
 
-        return result.get("content") if isinstance(result, dict) else result
+        # Handle legacy format
+        if isinstance(result, dict) and "content" in result:
+            return result.get("content")
+
+        # Handle new transport format (direct result)
+        return result
 
     except Exception as e:
         logger.error(f"Proxy call failed for {server_name}.{tool_name}: {{e}}")
