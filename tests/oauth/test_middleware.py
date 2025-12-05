@@ -643,3 +643,285 @@ class TestOAuthMiddleware:
 
         assert isinstance(response, RedirectResponse)
         assert "state=custom_state_123" in response.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_authorize_error_with_state(self):
+        """Test authorize endpoint error handling preserves state parameter."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        async def authorize_error(params):
+            raise Exception("Something went wrong")
+
+        provider.authorize = authorize_error
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+        )
+
+        mock_request = Mock(spec=Request)
+        mock_request.query_params = {
+            "response_type": "code",
+            "client_id": "test_client",
+            "redirect_uri": "http://localhost/callback",
+            "state": "test_state_456",
+        }
+
+        response = await middleware._authorize_endpoint(mock_request)
+
+        assert isinstance(response, RedirectResponse)
+        assert "state=test_state_456" in response.headers["location"]
+        assert "error=server_error" in response.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_metadata_endpoint_with_scopes_and_docs(self):
+        """Test metadata endpoint with scopes and service documentation."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+            oauth_server_url="http://localhost:8000",
+            scopes_supported=["read", "write", "admin"],
+            service_documentation="https://docs.example.com/api",
+        )
+
+        mock_request = Mock(spec=Request)
+        response = await middleware._metadata_endpoint(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        import json
+
+        body = json.loads(response.body)
+        assert body["scopes_supported"] == ["read", "write", "admin"]
+        assert body["service_documentation"] == "https://docs.example.com/api"
+
+    @pytest.mark.asyncio
+    async def test_protected_resource_endpoint(self):
+        """Test protected resource metadata endpoint."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+            oauth_server_url="http://localhost:8000",
+            scopes_supported=["read", "write"],
+            service_documentation="https://docs.example.com/api",
+        )
+
+        mock_request = Mock(spec=Request)
+        response = await middleware._protected_resource_endpoint(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        import json
+
+        body = json.loads(response.body)
+        assert body["resource"] == "http://localhost:8000"
+        assert body["authorization_servers"] == ["http://localhost:8000"]
+        assert body["bearer_methods_supported"] == ["header"]
+        assert body["resource_signing_alg_values_supported"] == ["RS256"]
+        assert body["scopes_supported"] == ["read", "write"]
+        assert body["resource_documentation"] == "https://docs.example.com/api"
+        assert response.headers["access-control-allow-origin"] == "*"
+
+    @pytest.mark.asyncio
+    async def test_protected_resource_endpoint_minimal(self):
+        """Test protected resource endpoint without optional metadata."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+            oauth_server_url="http://localhost:8000",
+        )
+
+        mock_request = Mock(spec=Request)
+        response = await middleware._protected_resource_endpoint(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        import json
+
+        body = json.loads(response.body)
+        assert body["resource"] == "http://localhost:8000"
+        assert "scopes_supported" not in body
+        assert "resource_documentation" not in body
+
+    @pytest.mark.asyncio
+    async def test_token_endpoint_refresh_missing_params(self):
+        """Test token endpoint refresh grant with missing parameters."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+        )
+
+        # Test missing refresh_token
+        mock_request = Mock(spec=Request)
+        form_data = {
+            "grant_type": "refresh_token",
+            "client_id": "test_client",
+            # Missing refresh_token
+        }
+        mock_request.form = AsyncMock(return_value=form_data)
+
+        response = await middleware._token_endpoint(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+        import json
+
+        body = json.loads(response.body)
+        assert body["error"] == "invalid_request"
+
+        # Test missing client_id
+        mock_request = Mock(spec=Request)
+        form_data = {
+            "grant_type": "refresh_token",
+            "refresh_token": "test_refresh",
+            # Missing client_id
+        }
+        mock_request.form = AsyncMock(return_value=form_data)
+
+        response = await middleware._token_endpoint(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_external_callback_without_state_in_result(self):
+        """Test external callback when result doesn't include state."""
+        mock_server = Mock()
+        mock_server.endpoint = Mock(return_value=lambda f: f)
+        provider = MockOAuthProvider()
+
+        # Provider returns result without state
+        async def handle_external_callback(code, state):
+            return {
+                "code": "mcp_code_123",
+                # No state in result
+                "redirect_uri": "http://localhost/app/callback",
+            }
+
+        provider.handle_external_callback = handle_external_callback
+
+        middleware = OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+            provider_name="Test Provider",
+        )
+
+        mock_request = Mock(spec=Request)
+        mock_request.query_params = {
+            "code": "external_code_123",
+            "state": "test_state",
+        }
+
+        response = await middleware._external_callback_endpoint(mock_request)
+
+        assert isinstance(response, HTMLResponse)
+        assert "Test Provider Authorization Successful" in str(response.body)
+        # State should not be in the redirect URL
+        assert "state=" not in str(response.body)
+
+    @pytest.mark.asyncio
+    async def test_registered_endpoints_are_callable(self):
+        """Test that registered endpoint decorators work when called through the server."""
+        mock_server = Mock()
+        registered_functions = {}
+
+        def mock_endpoint(path, methods=None):
+            def decorator(func):
+                registered_functions[path] = func
+                return func
+
+            return decorator
+
+        mock_server.endpoint = mock_endpoint
+        provider = MockOAuthProvider()
+
+        OAuthMiddleware(
+            mcp_server=mock_server,
+            provider=provider,
+            scopes_supported=["read"],
+            service_documentation="https://docs.example.com",
+        )
+
+        # Test that all endpoints were registered and are callable
+        assert "/.well-known/oauth-authorization-server" in registered_functions
+        assert "/.well-known/oauth-protected-resource" in registered_functions
+        assert "/oauth/authorize" in registered_functions
+        assert "/oauth/token" in registered_functions
+        assert "/oauth/register" in registered_functions
+        assert "/oauth/callback" in registered_functions
+
+        # Test calling the registered functions through the decorator
+        mock_request = Mock(spec=Request)
+        mock_request.query_params = {}
+
+        # Call metadata endpoint through registered function
+        metadata_func = registered_functions["/.well-known/oauth-authorization-server"]
+        response = await metadata_func(mock_request)
+        assert isinstance(response, JSONResponse)
+
+        # Call protected resource endpoint through registered function
+        protected_func = registered_functions["/.well-known/oauth-protected-resource"]
+        response = await protected_func(mock_request)
+        assert isinstance(response, JSONResponse)
+
+        # Call authorize endpoint through registered function
+        mock_request.query_params = {
+            "response_type": "code",
+            "client_id": "test_client",
+            "redirect_uri": "http://localhost/callback",
+        }
+        authorize_func = registered_functions["/oauth/authorize"]
+        response = await authorize_func(mock_request)
+        assert isinstance(response, RedirectResponse)
+
+        # Call token endpoint through registered function
+        mock_request.form = AsyncMock(
+            return_value={
+                "grant_type": "authorization_code",
+                "code": "test_code",
+                "client_id": "test_client",
+                "redirect_uri": "http://localhost/callback",
+            }
+        )
+        token_func = registered_functions["/oauth/token"]
+        response = await token_func(mock_request)
+        assert isinstance(response, JSONResponse)
+
+        # Call register endpoint through registered function
+        mock_request.json = AsyncMock(
+            return_value={
+                "client_name": "Test Client",
+                "redirect_uris": ["http://localhost/callback"],
+            }
+        )
+        register_func = registered_functions["/oauth/register"]
+        response = await register_func(mock_request)
+        assert isinstance(response, JSONResponse)
+
+        # Call external callback endpoint through registered function
+        async def handle_external_callback(code, state):
+            return {"code": "mcp_code", "redirect_uri": "http://localhost/callback"}
+
+        provider.handle_external_callback = handle_external_callback
+        mock_request.query_params = {
+            "code": "external_code",
+            "state": "test_state",
+        }
+        callback_func = registered_functions["/oauth/callback"]
+        response = await callback_func(mock_request)
+        assert isinstance(response, HTMLResponse)

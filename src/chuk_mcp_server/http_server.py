@@ -18,6 +18,7 @@ from .endpoint_registry import http_endpoint_registry
 
 # Import optimized endpoints
 from .endpoints import HealthEndpoint, InfoEndpoint, MCPEndpoint, handle_health_ultra_fast, handle_ping, handle_version
+from .middlewares import ContextMiddleware
 from .protocol import MCPProtocolHandler
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,11 @@ class HTTPServer:
             # Middleware(GZipMiddleware, minimum_size=2048)
         ]
 
+        for custom_middleware in http_endpoint_registry.get_middleware():
+            middleware.append(Middleware(custom_middleware.middleware_class))
+
+        middleware.append(Middleware(ContextMiddleware))
+
         routes = http_endpoint_registry.get_routes()
         logger.info(f"🔗 Creating Starlette app with {len(routes)} routes")
 
@@ -142,6 +148,7 @@ class HTTPServer:
         # Logging is already configured in core.py before this is called
         # Just determine the uvicorn log level based on the passed log_level
         import os
+        import sys
 
         # If debug is explicitly set to True, override log_level
         if debug is True:
@@ -166,7 +173,6 @@ class HTTPServer:
             "port": port,
             # Core performance settings
             "workers": 1,
-            "loop": "uvloop",  # Force uvloop
             "http": "httptools",  # Force httptools
             # Disable overhead features
             "access_log": debug,  # Only show access logs in debug mode
@@ -181,11 +187,14 @@ class HTTPServer:
             "h11_max_incomplete_event_size": 16384,  # Increase buffer
         }
 
-        # Verify performance libraries are available (silently)
-        try:
-            import uvloop  # noqa: F401
-        except ImportError:
-            uvicorn_config.pop("loop", None)
+        # Add uvloop only on non-Windows platforms (uvloop doesn't support Windows)
+        if sys.platform != "win32":
+            try:
+                import uvloop  # noqa: F401
+
+                uvicorn_config["loop"] = "uvloop"
+            except ImportError:
+                pass  # Fall back to default asyncio loop
 
         try:
             import httptools  # noqa: F401

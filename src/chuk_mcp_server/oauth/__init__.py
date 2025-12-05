@@ -30,6 +30,7 @@ Usage:
 
 from .base_provider import BaseOAuthProvider
 from .base_token_store import BaseTokenStore
+from .helpers import configure_storage_from_oauth, setup_google_drive_oauth
 from .middleware import OAuthMiddleware
 from .models import (
     AuthorizationParams,
@@ -52,4 +53,6 @@ __all__ = [
     "TokenStore",
     "BaseOAuthProvider",
     "BaseTokenStore",
+    "setup_google_drive_oauth",
+    "configure_storage_from_oauth",
 ]

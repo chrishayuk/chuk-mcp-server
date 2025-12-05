@@ -30,6 +30,8 @@ Usage:
 from contextvars import ContextVar
 from typing import Any
 
+from starlette.types import Scope
+
 # ============================================================================
 # Context Variables
 # ============================================================================
@@ -38,6 +40,7 @@ _session_id: ContextVar[str | None] = ContextVar("session_id", default=None)
 _user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
 _progress_token: ContextVar[str | int | None] = ContextVar("progress_token", default=None)
 _metadata: ContextVar[dict[str, Any] | None] = ContextVar("metadata", default=None)
+_http_request: ContextVar[Scope | None] = ContextVar("http_request", default=None)
 
 
 # ============================================================================
@@ -292,6 +295,7 @@ def clear_all() -> None:
     _user_id.set(None)
     _progress_token.set(None)
     _metadata.set(None)
+    _http_request.set(None)
 
 
 def get_current_context() -> dict[str, Any]:
@@ -308,6 +312,31 @@ def get_current_context() -> dict[str, Any]:
         "progress_token": _progress_token.get(),
         "metadata": current_meta.copy() if current_meta is not None else {},
     }
+
+
+# ============================================================================
+# HTTP Request Context Functions
+# ============================================================================
+
+
+def get_http_request() -> Scope | None:
+    """
+    Get current http request
+
+    Returns:
+        HTTP Request object
+    """
+    return _http_request.get()
+
+
+def set_http_request(request: Scope) -> None:
+    """
+    Set current http request
+
+    Args:
+        request: HTTP Request object
+    """
+    _http_request.set(request)
 
 
 # ============================================================================

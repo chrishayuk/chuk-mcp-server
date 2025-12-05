@@ -7,7 +7,6 @@ This module handles loading configuration files and applying them to the
 composition manager to create unified multi-server deployments.
 """
 
-import asyncio
 import logging
 import os
 from pathlib import Path
@@ -55,7 +54,7 @@ class CompositionConfigLoader:
 
         return self.config
 
-    def apply_to_manager(self, manager: Any) -> dict[str, Any]:
+    async def apply_to_manager(self, manager: Any) -> dict[str, Any]:
         """
         Apply configuration to a CompositionManager.
 
@@ -84,7 +83,7 @@ class CompositionConfigLoader:
                 continue
 
             try:
-                self._import_server(manager, server_config)
+                await self._import_server(manager, server_config)
                 stats["imported"] += 1
             except Exception as e:
                 logger.error(f"Failed to import server {server_config.get('name')}: {e}")
@@ -121,7 +120,7 @@ class CompositionConfigLoader:
         logger.info(f"Configuration applied: {stats}")
         return stats
 
-    def _import_server(self, manager: Any, config: dict[str, Any]) -> None:
+    async def _import_server(self, manager: Any, config: dict[str, Any]) -> None:
         """
         Import a server based on configuration.
 
@@ -148,18 +147,7 @@ class CompositionConfigLoader:
         }
 
         # Use the manager's import_from_config method (async)
-        # Run it in an event loop since import_from_config is async
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If loop is already running, create a task
-                asyncio.create_task(manager.import_from_config(server_name, server_config, prefix=prefix))
-            else:
-                # If no loop is running, use asyncio.run()
-                asyncio.run(manager.import_from_config(server_name, server_config, prefix=prefix))
-        except RuntimeError:
-            # No event loop, create one
-            asyncio.run(manager.import_from_config(server_name, server_config, prefix=prefix))
+        await manager.import_from_config(server_name, server_config, prefix=prefix)
 
         logger.info(f"Imported server '{server_name}' with prefix '{prefix}'")
 
@@ -244,7 +232,7 @@ class CompositionConfigLoader:
         return self.config.get("modules", {})
 
 
-def load_from_config(
+async def load_from_config(
     config_path: str | Path | None = None,
     manager: Any | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -263,6 +251,6 @@ def load_from_config(
 
     stats = {}
     if manager:
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
     return config, stats

@@ -5,7 +5,7 @@ Tests for composition configuration loader.
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
@@ -173,7 +173,7 @@ class TestCompositionConfigLoader:
         assert loader._substitute_env_vars(None) is None
         assert loader._substitute_env_vars(12.34) == 12.34
 
-    def test_apply_to_manager_empty_config(self, tmp_path):
+    async def test_apply_to_manager_empty_config(self, tmp_path):
         """Test applying empty configuration to manager."""
         config_path = tmp_path / "config.yaml"
         config_path.write_text(yaml.dump({}))
@@ -181,14 +181,14 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         assert stats["imported"] == 0
         assert stats["mounted"] == 0
         assert stats["modules"] == 0
         assert stats["skipped"] == 0
 
-    def test_apply_to_manager_with_import(self, tmp_path):
+    async def test_apply_to_manager_with_import(self, tmp_path):
         """Test applying configuration with import section."""
         config_path = tmp_path / "config.yaml"
         config_data = {
@@ -203,17 +203,19 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
         manager.parent_server = MagicMock()
+        # Make import_from_config async
+        manager.import_from_config = AsyncMock()
 
         with patch("chuk_mcp_server.proxy.manager.ProxyManager") as mock_proxy:
             mock_proxy_instance = MagicMock()
             mock_proxy.return_value = mock_proxy_instance
 
-            stats = loader.apply_to_manager(manager)
+            stats = await loader.apply_to_manager(manager)
 
             assert stats["imported"] == 1
             assert stats["skipped"] == 0
 
-    def test_apply_to_manager_with_disabled_import(self, tmp_path):
+    async def test_apply_to_manager_with_disabled_import(self, tmp_path):
         """Test applying configuration with disabled import."""
         config_path = tmp_path / "config.yaml"
         config_data = {
@@ -224,12 +226,12 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         assert stats["imported"] == 0
         assert stats["skipped"] == 1
 
-    def test_apply_to_manager_import_exception(self, tmp_path):
+    async def test_apply_to_manager_import_exception(self, tmp_path):
         """Test applying configuration when import fails."""
         config_path = tmp_path / "config.yaml"
         config_data = {
@@ -241,14 +243,14 @@ class TestCompositionConfigLoader:
         manager = MagicMock()
         manager.parent_server = MagicMock()
         # Configure the mock to raise an exception when import_from_config is called
-        manager.import_from_config.side_effect = Exception("Import failed")
+        manager.import_from_config = AsyncMock(side_effect=Exception("Import failed"))
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         # Should handle exception and not increment imported
         assert stats["imported"] == 0
 
-    def test_apply_to_manager_with_mount(self, tmp_path):
+    async def test_apply_to_manager_with_mount(self, tmp_path):
         """Test applying configuration with mount section."""
         config_path = tmp_path / "config.yaml"
         config_data = {
@@ -269,13 +271,13 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         assert stats["mounted"] == 1
         assert stats["skipped"] == 0
         manager.mount.assert_called_once()
 
-    def test_apply_to_manager_with_disabled_mount(self, tmp_path):
+    async def test_apply_to_manager_with_disabled_mount(self, tmp_path):
         """Test applying configuration with disabled mount."""
         config_path = tmp_path / "config.yaml"
         config_data = {"composition": {"mount": [{"name": "api", "enabled": False, "type": "http"}]}}
@@ -284,12 +286,12 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         assert stats["mounted"] == 0
         assert stats["skipped"] == 1
 
-    def test_apply_to_manager_mount_exception(self, tmp_path):
+    async def test_apply_to_manager_mount_exception(self, tmp_path):
         """Test applying configuration when mount fails."""
         config_path = tmp_path / "config.yaml"
         config_data = {"composition": {"mount": [{"name": "api", "enabled": True, "type": "http"}]}}
@@ -299,12 +301,12 @@ class TestCompositionConfigLoader:
         manager = MagicMock()
         manager.mount.side_effect = Exception("Mount failed")
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         # Should handle exception and not increment mounted
         assert stats["mounted"] == 0
 
-    def test_apply_to_manager_with_modules(self, tmp_path):
+    async def test_apply_to_manager_with_modules(self, tmp_path):
         """Test applying configuration with modules section."""
         config_path = tmp_path / "config.yaml"
         config_data = {"modules": {"custom_tools": {"module": "my_tools", "enabled": True}}}
@@ -314,12 +316,12 @@ class TestCompositionConfigLoader:
         manager = MagicMock()
         manager.load_module.return_value = {"custom_tools": "loaded"}
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         assert stats["modules"] == 1
         manager.load_module.assert_called_once()
 
-    def test_apply_to_manager_with_disabled_modules(self, tmp_path):
+    async def test_apply_to_manager_with_disabled_modules(self, tmp_path):
         """Test applying configuration with disabled modules."""
         config_path = tmp_path / "config.yaml"
         config_data = {"modules": {"custom_tools": {"module": "my_tools", "enabled": False}}}
@@ -328,13 +330,13 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         # Should not call load_module for disabled modules
         manager.load_module.assert_not_called()
         assert stats["modules"] == 0
 
-    def test_apply_to_manager_modules_exception(self, tmp_path):
+    async def test_apply_to_manager_modules_exception(self, tmp_path):
         """Test applying configuration when module loading fails."""
         config_path = tmp_path / "config.yaml"
         config_data = {"modules": {"custom_tools": {"module": "my_tools", "enabled": True}}}
@@ -344,12 +346,12 @@ class TestCompositionConfigLoader:
         manager = MagicMock()
         manager.load_module.side_effect = Exception("Module load failed")
 
-        stats = loader.apply_to_manager(manager)
+        stats = await loader.apply_to_manager(manager)
 
         # Should handle exception and not set modules count
         assert stats["modules"] == 0
 
-    def test_apply_to_manager_loads_config_if_not_loaded(self, tmp_path):
+    async def test_apply_to_manager_loads_config_if_not_loaded(self, tmp_path):
         """Test apply_to_manager loads config if not already loaded."""
         config_path = tmp_path / "config.yaml"
         config_path.write_text(yaml.dump({}))
@@ -360,12 +362,12 @@ class TestCompositionConfigLoader:
         # Config should be empty before apply
         assert loader.config == {}
 
-        loader.apply_to_manager(manager)
+        await loader.apply_to_manager(manager)
 
         # Config should be loaded after apply
         assert loader.config == {}  # Empty config but loaded
 
-    def test_import_server_stdio(self, tmp_path):
+    async def test_import_server_stdio(self, tmp_path):
         """Test _import_server with stdio server."""
         config_path = tmp_path / "config.yaml"
         config_path.write_text(yaml.dump({}))
@@ -373,6 +375,7 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
         manager.parent_server = MagicMock()
+        manager.import_from_config = AsyncMock()
 
         server_config = {
             "name": "github",
@@ -383,7 +386,7 @@ class TestCompositionConfigLoader:
             "prefix": "gh_",
         }
 
-        loader._import_server(manager, server_config)
+        await loader._import_server(manager, server_config)
 
         # Verify import_from_config was called with correct arguments
         manager.import_from_config.assert_called_once()
@@ -392,7 +395,7 @@ class TestCompositionConfigLoader:
         assert call_args[0][1]["type"] == "stdio"  # config
         assert call_args[1]["prefix"] == "gh_"  # prefix kwarg
 
-    def test_import_server_http(self, tmp_path):
+    async def test_import_server_http(self, tmp_path):
         """Test _import_server with http server."""
         config_path = tmp_path / "config.yaml"
         config_path.write_text(yaml.dump({}))
@@ -400,6 +403,7 @@ class TestCompositionConfigLoader:
         loader = CompositionConfigLoader(config_path)
         manager = MagicMock()
         manager.parent_server = MagicMock()
+        manager.import_from_config = AsyncMock()
 
         server_config = {
             "name": "api",
@@ -409,7 +413,7 @@ class TestCompositionConfigLoader:
             "headers": {"Authorization": "Bearer token"},
         }
 
-        loader._import_server(manager, server_config)
+        await loader._import_server(manager, server_config)
 
         # Verify import_from_config was called with correct arguments
         manager.import_from_config.assert_called_once()
@@ -563,18 +567,18 @@ class TestCompositionConfigLoader:
 class TestLoadFromConfig:
     """Test load_from_config convenience function."""
 
-    def test_load_from_config_without_manager(self, tmp_path):
+    async def test_load_from_config_without_manager(self, tmp_path):
         """Test load_from_config without manager."""
         config_path = tmp_path / "config.yaml"
         config_data = {"server": {"name": "test-server"}}
         config_path.write_text(yaml.dump(config_data))
 
-        config, stats = load_from_config(config_path)
+        config, stats = await load_from_config(config_path)
 
         assert config == config_data
         assert stats == {}
 
-    def test_load_from_config_with_manager(self, tmp_path):
+    async def test_load_from_config_with_manager(self, tmp_path):
         """Test load_from_config with manager."""
         config_path = tmp_path / "config.yaml"
         config_data = {
@@ -586,14 +590,15 @@ class TestLoadFromConfig:
 
         manager = MagicMock()
         manager.parent_server = MagicMock()
+        manager.import_from_config = AsyncMock()
 
         with patch("chuk_mcp_server.proxy.manager.ProxyManager"):
-            config, stats = load_from_config(config_path, manager)
+            config, stats = await load_from_config(config_path, manager)
 
             assert config == config_data
             assert stats["imported"] == 1
 
-    def test_load_from_config_default_path(self, tmp_path, monkeypatch):
+    async def test_load_from_config_default_path(self, tmp_path, monkeypatch):
         """Test load_from_config with default path."""
         # Change to tmp directory
         monkeypatch.chdir(tmp_path)
@@ -602,18 +607,18 @@ class TestLoadFromConfig:
         config_data = {"server": {"name": "test-server"}}
         config_path.write_text(yaml.dump(config_data))
 
-        config, stats = load_from_config()
+        config, stats = await load_from_config()
 
         assert config == config_data
         assert stats == {}
 
-    def test_load_from_config_with_path_string(self, tmp_path):
+    async def test_load_from_config_with_path_string(self, tmp_path):
         """Test load_from_config with string path."""
         config_path = tmp_path / "config.yaml"
         config_data = {"server": {"name": "test-server"}}
         config_path.write_text(yaml.dump(config_data))
 
-        config, stats = load_from_config(str(config_path))
+        config, stats = await load_from_config(str(config_path))
 
         assert config == config_data
         assert stats == {}
