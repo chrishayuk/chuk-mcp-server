@@ -92,8 +92,18 @@ class ToolParameter:
                     non_none_type = next(arg for arg in args if arg is not type(None))
                     param_type = type_map.get(non_none_type, "string")
                 else:
-                    # Multiple union types - default to string
-                    param_type = "string"
+                    # Multiple union types - try to find common JSON Schema type
+                    non_none_args = [arg for arg in args if arg is not type(None)]
+
+                    # Check if all types are numeric (int, float)
+                    if all(arg in (int, float) for arg in non_none_args):
+                        param_type = "number"  # JSON Schema "number" accepts both int and float
+                    # Check if all types map to the same JSON Schema type
+                    elif len({type_map.get(arg) for arg in non_none_args}) == 1:
+                        param_type = type_map.get(non_none_args[0], "string")
+                    else:
+                        # Mixed types - default to string
+                        param_type = "string"
 
             # Handle Literal types for enums
             elif hasattr(typing, "Literal") and origin is typing.Literal:
@@ -117,7 +127,18 @@ class ToolParameter:
                     non_none_type = next(arg for arg in args if arg is not type(None))
                     param_type = type_map.get(non_none_type, "string")
                 else:
-                    param_type = "string"
+                    # Multiple union types - try to find common JSON Schema type
+                    non_none_args = [arg for arg in args if arg is not type(None)]
+
+                    # Check if all types are numeric (int, float)
+                    if all(arg in (int, float) for arg in non_none_args):
+                        param_type = "number"  # JSON Schema "number" accepts both int and float
+                    # Check if all types map to the same JSON Schema type
+                    elif len({type_map.get(arg) for arg in non_none_args}) == 1:
+                        param_type = type_map.get(non_none_args[0], "string")
+                    else:
+                        # Mixed types - default to string
+                        param_type = "string"
             elif origin in (list, list):
                 param_type = "array"
             elif origin in (dict, dict):
@@ -232,8 +253,18 @@ def infer_type_from_annotation(annotation: Any) -> str:
                 non_none_type = next(arg for arg in args if arg is not type(None))
                 return type_map.get(non_none_type, "string")
             else:
-                # Multiple union types - default to string
-                return "string"
+                # Multiple union types - try to find common JSON Schema type
+                non_none_args = [arg for arg in args if arg is not type(None)]
+
+                # Check if all types are numeric (int, float)
+                if all(arg in (int, float) for arg in non_none_args):
+                    return "number"  # JSON Schema "number" accepts both int and float
+                # Check if all types map to the same JSON Schema type
+                elif len({type_map.get(arg) for arg in non_none_args}) == 1:
+                    return type_map.get(non_none_args[0], "string")
+                else:
+                    # Mixed types - default to string
+                    return "string"
 
         # Handle generic containers
         elif origin in (list, list):
@@ -252,7 +283,18 @@ def infer_type_from_annotation(annotation: Any) -> str:
                 non_none_type = next(arg for arg in args if arg is not type(None))
                 return type_map.get(non_none_type, "string")
             else:
-                return "string"
+                # Multiple union types - try to find common JSON Schema type
+                non_none_args = [arg for arg in args if arg is not type(None)]
+
+                # Check if all types are numeric (int, float)
+                if all(arg in (int, float) for arg in non_none_args):
+                    return "number"  # JSON Schema "number" accepts both int and float
+                # Check if all types map to the same JSON Schema type
+                elif len({type_map.get(arg) for arg in non_none_args}) == 1:
+                    return type_map.get(non_none_args[0], "string")
+                else:
+                    # Mixed types - default to string
+                    return "string"
         elif origin in (list, list):
             return "array"
         elif origin in (dict, dict):

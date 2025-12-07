@@ -607,5 +607,148 @@ def test_infer_type_fallback_for_unknown():
     assert result2 == "string"  # Should also hit line 261
 
 
+def test_tool_parameter_union_int_float():
+    """Test ToolParameter with Union[int, float] maps to 'number' type."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Union[int, float] should map to "number"
+    param = ToolParameter.from_annotation("value", Union[int, float])
+    assert param.type == "number", "Union[int, float] should map to JSON Schema 'number' type"
+
+    # Union[float, int] should also work (order shouldn't matter)
+    param_reversed = ToolParameter.from_annotation("value2", Union[float, int])
+    assert param_reversed.type == "number", "Union[float, int] should also map to 'number'"
+
+
+def test_tool_parameter_union_int_float_none():
+    """Test ToolParameter with Union[int, float, None] maps to 'number' type."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Union[int, float, None] should still map to "number" (ignoring None)
+    param = ToolParameter.from_annotation("optional_value", Union[int, float, None])
+    assert param.type == "number", "Union[int, float, None] should map to 'number'"
+
+    # Union[float, int, None] should also work
+    param_reversed = ToolParameter.from_annotation("optional_value2", Union[float, int, None])
+    assert param_reversed.type == "number"
+
+
+def test_infer_type_union_int_float():
+    """Test type inference with Union[int, float]."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Union[int, float] should infer as "number"
+    assert infer_type_from_annotation(Union[int, float]) == "number"
+    assert infer_type_from_annotation(Union[float, int]) == "number"
+
+
+def test_infer_type_union_int_float_none():
+    """Test type inference with Union[int, float, None]."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Union[int, float, None] should infer as "number"
+    assert infer_type_from_annotation(Union[int, float, None]) == "number"
+    assert infer_type_from_annotation(Union[float, int, None]) == "number"
+
+
+def test_tool_parameter_union_same_json_type():
+    """Test that Union of types mapping to the same JSON Schema type works."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Union[int, int] should map to "integer" (same type)
+    param_int_int = ToolParameter.from_annotation("int_union", Union[int, int])
+    assert param_int_int.type == "integer"
+
+    # Union[str, str] should map to "string"
+    param_str_str = ToolParameter.from_annotation("str_union", Union[str, str])
+    assert param_str_str.type == "string"
+
+
+def test_tool_parameter_union_mixed_types():
+    """Test that Union with truly mixed types defaults to string."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Union[str, int] should default to "string" (mixed types)
+    param = ToolParameter.from_annotation("mixed", Union[str, int])
+    assert param.type == "string"
+
+    # Union[str, int, bool] should also default to "string"
+    param_three = ToolParameter.from_annotation("mixed_three", Union[str, int, bool])
+    assert param_three.type == "string"
+
+
+def test_extract_parameters_with_numeric_union():
+    """Test extracting parameters from function with Union[int, float]."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    def math_function(x: Union[int, float], y: Union[int, float] = 0.0):
+        """A function accepting numeric types."""
+        pass
+
+    params = extract_parameters_from_function(math_function)
+
+    assert len(params) == 2
+
+    # First parameter should be number type, required
+    assert params[0].name == "x"
+    assert params[0].type == "number"
+    assert params[0].required is True
+
+    # Second parameter should be number type, optional with default
+    assert params[1].name == "y"
+    assert params[1].type == "number"
+    assert params[1].required is False
+    assert params[1].default == 0.0
+
+
+def test_build_schema_with_numeric_union():
+    """Test building JSON schema with Union[int, float] parameters."""
+    from chuk_mcp_server.types.parameters import ToolParameter, build_input_schema
+
+    params = [
+        ToolParameter("x", "number", required=True),
+        ToolParameter("y", "number", required=False, default=0.0),
+    ]
+
+    schema = build_input_schema(params)
+
+    assert schema["type"] == "object"
+    assert schema["properties"]["x"]["type"] == "number"
+    assert schema["properties"]["y"]["type"] == "number"
+    assert schema["properties"]["y"]["default"] == 0.0
+    assert "x" in schema["required"]
+    assert "y" not in schema["required"]
+
+
+def test_math_server_sqrt_signature():
+    """Test real-world math server sqrt function signature."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    # Simulate the sqrt function from chuk-mcp-math-server
+    async def sqrt(x: Union[int, float]) -> float:
+        """Calculate the square root of a number."""
+        return x**0.5
+
+    params = extract_parameters_from_function(sqrt)
+
+    assert len(params) == 1
+    assert params[0].name == "x"
+    assert params[0].type == "number", "sqrt parameter 'x' should have type 'number' not 'string'"
+    assert params[0].required is True
+
+
+def test_modern_union_syntax():
+    """Test Union using modern Python 3.10+ syntax (int | float)."""
+    from chuk_mcp_server.types.parameters import ToolParameter, infer_type_from_annotation
+
+    # Test modern union syntax: int | float
+    param = ToolParameter.from_annotation("value", int | float)
+    assert param.type == "number"
+
+    # Test inference with modern syntax
+    assert infer_type_from_annotation(int | float) == "number"
+    assert infer_type_from_annotation(float | int) == "number"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
