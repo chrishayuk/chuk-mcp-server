@@ -74,6 +74,7 @@ class TokenStore(BaseTokenStore):
         self.refresh_token_ttl = int(os.getenv("OAUTH_REFRESH_TOKEN_TTL", "86400"))  # 1 day
         self.client_registration_ttl = int(os.getenv("OAUTH_CLIENT_REGISTRATION_TTL", "31536000"))  # 1 year
         self.external_token_ttl = int(os.getenv("OAUTH_EXTERNAL_TOKEN_TTL", "86400"))  # 1 day
+        self.pending_auth_ttl = int(os.getenv("OAUTH_PENDING_AUTH_TTL", "600"))  # 10 minutes
 
     # ============================================================================
     # MCP Authorization Codes
@@ -474,3 +475,70 @@ class TokenStore(BaseTokenStore):
                     return False
 
             return True
+
+    # ============================================================================
+    # Pending Authorization Storage (for OAuth state management)
+    # ============================================================================
+
+    async def store_pending_authorization(
+        self,
+        state: str,
+        data: dict[str, Any],
+    ) -> None:
+        """
+        Store pending authorization data for OAuth state management.
+
+        This is used to persist OAuth state across server restarts and
+        multiple instances. The state parameter links the authorization
+        request to the callback.
+
+        Args:
+            state: State parameter (used as key)
+            data: Authorization data to store (client_id, redirect_uri, etc.)
+        """
+        async with get_session() as session:
+            await session.setex(
+                f"{self.sandbox_id}:pending_auth:{state}",
+                self.pending_auth_ttl,
+                orjson.dumps(data),
+            )
+
+    async def get_pending_authorization(
+        self,
+        state: str,
+    ) -> dict[str, Any] | None:
+        """
+        Retrieve pending authorization data by state.
+
+        Args:
+            state: State parameter
+
+        Returns:
+            Authorization data dict or None if not found/expired
+        """
+        async with get_session() as session:
+            data_json = await session.get(f"{self.sandbox_id}:pending_auth:{state}")
+            if not data_json:
+                return None
+            return orjson.loads(data_json)
+
+    async def delete_pending_authorization(
+        self,
+        state: str,
+    ) -> bool:
+        """
+        Delete pending authorization (after successful callback).
+
+        Args:
+            state: State parameter
+
+        Returns:
+            True if deleted, False if not found
+        """
+        async with get_session() as session:
+            key = f"{self.sandbox_id}:pending_auth:{state}"
+            exists = await session.get(key)
+            if exists:
+                await session.delete(key)
+                return True
+            return False
