@@ -315,13 +315,13 @@ typecheck:
 		exit 1; \
 	fi
 
-# Security check (matches CI) - Skip B104 as 0.0.0.0 binding is intentional for cloud
+# Security check (matches CI) - Skip B104 (0.0.0.0 binding intentional), B608 (false positive on f-string templates)
 security:
 	@echo "Running security checks..."
 	@if command -v uv >/dev/null 2>&1; then \
-		uv run bandit -r src/ -ll --skip B104 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
+		uv run bandit -r src/ -ll --skip B104,B608 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
 	elif command -v bandit >/dev/null 2>&1; then \
-		bandit -r src/ -ll --skip B104 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
+		bandit -r src/ -ll --skip B104,B608 --quiet 2>&1 | grep -v "WARNING.*Test in comment" || true; \
 	else \
 		echo "  ⚠ Bandit not found. Install with: pip install bandit"; \
 		exit 1; \

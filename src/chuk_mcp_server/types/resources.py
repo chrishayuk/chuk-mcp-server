@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import orjson
+from pydantic import BaseModel
 
 # types
 from .base import MCPError, MCPResource
@@ -139,6 +140,10 @@ class ResourceHandler:
         """Format content based on MIME type with orjson optimization."""
         mime_type = self.mime_type or "text/plain"
 
+        # Handle Pydantic models by converting to dict first
+        if isinstance(result, BaseModel):
+            result = result.model_dump()
+
         if mime_type == "application/json":
             if isinstance(result, dict | list):
                 # 🚀 Use orjson for 2-3x faster JSON serialization
@@ -146,6 +151,8 @@ class ResourceHandler:
             else:
                 return orjson.dumps(result).decode()
         elif mime_type == "text/markdown" or mime_type == "text/plain":
+            if isinstance(result, dict | list):
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
             return str(result)
         else:
             # For unknown MIME types, convert to string with orjson

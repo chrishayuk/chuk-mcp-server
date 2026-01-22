@@ -10,6 +10,7 @@ with orjson optimization for maximum performance.
 from typing import Any
 
 import orjson
+from pydantic import BaseModel
 
 from .base import AudioContent, EmbeddedResource, ImageContent, TextContent, content_to_dict, create_text_content
 
@@ -25,7 +26,13 @@ def format_content(content: Any) -> list[dict[str, Any]]:
         text_content = create_text_content(json_str)
         return [content_to_dict(text_content)]
     elif isinstance(content, TextContent | ImageContent | AudioContent | EmbeddedResource):
+        # Check MCP content types before generic BaseModel
         return [content_to_dict(content)]
+    elif isinstance(content, BaseModel):
+        # Handle other Pydantic models by converting to dict first
+        json_str = orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
+        text_content = create_text_content(json_str)
+        return [content_to_dict(text_content)]
     elif isinstance(content, list):
         result = []
         for item in content:
@@ -40,6 +47,8 @@ def format_content_as_text(content: Any) -> str:
     """Format any content as plain text."""
     if isinstance(content, str):
         return content
+    elif isinstance(content, BaseModel):
+        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
     elif isinstance(content, dict | list):
         return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
     else:
@@ -56,6 +65,8 @@ def format_content_as_json(content: Any) -> str:
         except orjson.JSONDecodeError:
             # If not valid JSON, wrap in quotes
             return orjson.dumps(content).decode()
+    elif isinstance(content, BaseModel):
+        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
     else:
         return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
 

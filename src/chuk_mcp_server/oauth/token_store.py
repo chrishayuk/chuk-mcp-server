@@ -520,7 +520,8 @@ class TokenStore(BaseTokenStore):
             data_json = await session.get(f"{self.sandbox_id}:pending_auth:{state}")
             if not data_json:
                 return None
-            return orjson.loads(data_json)
+            result: dict[str, Any] = orjson.loads(data_json)
+            return result
 
     async def delete_pending_authorization(
         self,

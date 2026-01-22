@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.15.2"
+version = "0.16"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "MIT"}
@@ -248,4 +248,4 @@ output = "coverage.xml"
 
 [tool.bandit]
 exclude_dirs = ["tests", "examples", "benchmarks", "diagnostics"]
-skips = ["B104"]  # Skip hardcoded_bind_all_interfaces - intentional for cloud deployments
+skips = ["B104", "B608"]  # B104: hardcoded_bind_all_interfaces - intentional for cloud deployments; B608: false positive on f-string templates (no SQL in codebase)

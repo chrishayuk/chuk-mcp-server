@@ -69,37 +69,37 @@ class OAuthMiddleware:
         """Register OAuth endpoints with the MCP server."""
 
         # OAuth server metadata (RFC 8414)
-        @self.mcp.endpoint("/.well-known/oauth-authorization-server", methods=["GET"])
+        @self.mcp.endpoint("/.well-known/oauth-authorization-server", methods=["GET"])  # type: ignore[untyped-decorator]
         async def oauth_metadata(request: Request) -> JSONResponse:
             """OAuth Authorization Server Metadata endpoint."""
             return await self._metadata_endpoint(request)
 
         # Protected Resource Metadata (RFC 9728)
-        @self.mcp.endpoint("/.well-known/oauth-protected-resource", methods=["GET"])
+        @self.mcp.endpoint("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[untyped-decorator]
         async def protected_resource_metadata(request: Request) -> JSONResponse:
             """OAuth Protected Resource Metadata endpoint."""
             return await self._protected_resource_endpoint(request)
 
         # OAuth authorize endpoint
-        @self.mcp.endpoint("/oauth/authorize", methods=["GET"])
+        @self.mcp.endpoint("/oauth/authorize", methods=["GET"])  # type: ignore[untyped-decorator]
         async def oauth_authorize(request: Request) -> Any:
             """OAuth authorization endpoint."""
             return await self._authorize_endpoint(request)
 
         # OAuth token endpoint
-        @self.mcp.endpoint("/oauth/token", methods=["POST"])
+        @self.mcp.endpoint("/oauth/token", methods=["POST"])  # type: ignore[untyped-decorator]
         async def oauth_token(request: Request) -> JSONResponse:
             """OAuth token endpoint."""
             return await self._token_endpoint(request)
 
         # Client registration endpoint (RFC 7591)
-        @self.mcp.endpoint("/oauth/register", methods=["POST"])
+        @self.mcp.endpoint("/oauth/register", methods=["POST"])  # type: ignore[untyped-decorator]
         async def oauth_register(request: Request) -> JSONResponse:
             """Dynamic client registration endpoint."""
             return await self._register_endpoint(request)
 
         # External OAuth provider callback
-        @self.mcp.endpoint(self.callback_path, methods=["GET"])
+        @self.mcp.endpoint(self.callback_path, methods=["GET"])  # type: ignore[untyped-decorator]
         async def external_callback(request: Request) -> Any:
             """External OAuth provider callback endpoint."""
             return await self._external_callback_endpoint(request)

@@ -34,17 +34,17 @@ def create_example_server() -> ChukMCPServer:
     # Add example tools if no tools are registered
     if not server.get_tools():
 
-        @server.tool("echo")  # type: ignore[misc]
+        @server.tool("echo")  # type: ignore[untyped-decorator]
         def echo(message: str) -> str:
             """Echo back the provided message."""
             return f"Echo: {message}"
 
-        @server.tool("add")  # type: ignore[misc]
+        @server.tool("add")  # type: ignore[untyped-decorator]
         def add(a: float, b: float) -> float:
             """Add two numbers together."""
             return a + b
 
-        @server.tool("get_env")  # type: ignore[misc]
+        @server.tool("get_env")  # type: ignore[untyped-decorator]
         def get_env(key: str) -> str | None:
             """Get an environment variable value."""
             return os.environ.get(key)
@@ -52,7 +52,7 @@ def create_example_server() -> ChukMCPServer:
     # Add example resource if no resources are registered
     if not server.get_resources():
 
-        @server.resource("server://info")  # type: ignore[misc]
+        @server.resource("server://info")  # type: ignore[untyped-decorator]
         def server_info() -> dict[str, Any]:
             """Get server information."""
             return {
