@@ -301,10 +301,10 @@ class ToolParameter:
             # Extract full Pydantic JSON schema
             try:
                 pydantic_schema = self.pydantic_model.model_json_schema()
-                # Merge the pydantic schema into our schema
-                # Remove the top-level "$defs" if present (we just want the object schema)
+                # Keep $defs if present - they contain referenced types (enums, nested models)
                 if "$defs" in pydantic_schema:
-                    pydantic_schema.pop("$defs")
+                    defs = pydantic_schema.pop("$defs")
+                    schema["$defs"] = defs
                 schema.update(pydantic_schema)
             except Exception:
                 # If Pydantic schema extraction fails, keep generic object
@@ -358,13 +358,24 @@ def build_input_schema(parameters: list[ToolParameter]) -> dict[str, Any]:
     """Build JSON Schema input schema from parameters."""
     properties = {}
     required = []
+    all_defs = {}
 
     for param in parameters:
-        properties[param.name] = param.to_json_schema()
+        param_schema = param.to_json_schema()
+        # Extract and merge $defs if present
+        if "$defs" in param_schema:
+            defs = param_schema.pop("$defs")
+            all_defs.update(defs)
+        properties[param.name] = param_schema
         if param.required:
             required.append(param.name)
 
-    return {"type": "object", "properties": properties, "required": required if required else None}
+    schema = {"type": "object", "properties": properties, "required": required if required else None}
+    # Add merged $defs if any were found
+    if all_defs:
+        schema["$defs"] = all_defs
+
+    return schema
 
 
 def build_input_schema_bytes(parameters: list[ToolParameter]) -> bytes:
