@@ -41,6 +41,31 @@ _BASE_SCHEMAS = {
 }
 
 # ============================================================================
+# Pydantic Model Detection
+# ============================================================================
+
+
+def _is_pydantic_model(type_annotation: Any) -> bool:
+    """Check if a type annotation is a Pydantic BaseModel subclass."""
+    try:
+        # Import here to avoid hard dependency
+        from pydantic import BaseModel
+
+        # Check if it's a class and subclass of BaseModel (but not BaseModel itself)
+        return (
+            inspect.isclass(type_annotation)
+            and issubclass(type_annotation, BaseModel)
+            and type_annotation is not BaseModel
+        )
+    except ImportError:  # pragma: no cover
+        # Pydantic not available - hard to test without uninstalling pydantic
+        return False
+    except TypeError:
+        # Not a class or can't check subclass
+        return False
+
+
+# ============================================================================
 # Tool Parameter with orjson Optimization
 # ============================================================================
 
@@ -56,6 +81,8 @@ class ToolParameter:
     default: Any = None
     enum: list[Any] | None = None
     items_type: str | None = None  # For array types: the type of items in the array
+    pydantic_model: Any = None  # For Pydantic models: the model class itself
+    pydantic_items_model: Any = None  # For list[PydanticModel]: the model class for array items
     _cached_schema: bytes | None = None  # 🚀 Cache orjson-serialized schema
 
     @classmethod
@@ -77,6 +104,8 @@ class ToolParameter:
         param_type = "string"  # default
         enum_values = None
         items_type = None  # Track array item type
+        pydantic_model = None  # Track Pydantic model for direct types
+        pydantic_items_model = None  # Track Pydantic model for array items
 
         # First check for direct basic types (most common case)
         if annotation in type_map:
@@ -90,12 +119,34 @@ class ToolParameter:
             if origin is Union or (UnionType is not None and origin is UnionType):
                 # Handle Optional[T] and Union types (including T | None syntax)
                 if len(args) == 2 and type(None) in args:
-                    # Optional[T] case
+                    # Optional[T] case - recursively infer type of non-None arg
                     non_none_type = next(arg for arg in args if arg is not type(None))
-                    param_type = type_map.get(non_none_type, "string")
+                    # Check if it's a basic type first
+                    if non_none_type in type_map:
+                        param_type = type_map[non_none_type]
+                    else:
+                        # Recursively process complex types like list[dict]
+                        non_none_origin = typing.get_origin(non_none_type)
+                        non_none_args = typing.get_args(non_none_type)
+
+                        if non_none_origin in (list, list):
+                            param_type = "array"
+                            # Extract item type from List[T] or list[T]
+                            if non_none_args:  # pragma: no branch
+                                item_arg = non_none_args[0]
+                                # Check if item is a Pydantic model
+                                if _is_pydantic_model(item_arg):
+                                    items_type = "object"
+                                    pydantic_items_model = item_arg
+                                else:
+                                    items_type = type_map.get(item_arg, "string")
+                        elif non_none_origin in (dict, dict):
+                            param_type = "object"
+                        else:  # pragma: no cover - defensive fallback
+                            param_type = type_map.get(non_none_type, "string")
                 else:
                     # Multiple union types - try to find common JSON Schema type
-                    non_none_args = [arg for arg in args if arg is not type(None)]
+                    non_none_args = tuple(arg for arg in args if arg is not type(None))
 
                     # Check if all types are numeric (int, float)
                     if all(arg in (int, float) for arg in non_none_args):
@@ -116,12 +167,24 @@ class ToolParameter:
             elif origin in (list, list):
                 param_type = "array"
                 # Extract item type from List[T] or list[T]
-                if args:
-                    items_type = type_map.get(args[0], "string")
+                if args:  # pragma: no branch
+                    item_arg = args[0]
+                    # Check if item is a Pydantic model
+                    if _is_pydantic_model(item_arg):
+                        items_type = "object"
+                        pydantic_items_model = item_arg
+                    else:
+                        items_type = type_map.get(item_arg, "string")
             elif origin in (dict, dict):
                 param_type = "object"
             else:
-                param_type = type_map.get(origin, "string")
+                # origin is None or unknown type
+                # Check if the original annotation is a Pydantic model
+                if _is_pydantic_model(annotation):
+                    param_type = "object"
+                    pydantic_model = annotation
+                else:
+                    param_type = type_map.get(origin, "string")
 
         # Fallback for older typing or direct types (Python 3.7-3.8 compatibility)
         elif hasattr(annotation, "__origin__"):  # pragma: no cover - Python 3.7-3.8 compatibility
@@ -129,11 +192,35 @@ class ToolParameter:
             if origin is Union:
                 args = annotation.__args__
                 if len(args) == 2 and type(None) in args:
+                    # Optional[T] case - recursively infer type of non-None arg
                     non_none_type = next(arg for arg in args if arg is not type(None))
-                    param_type = type_map.get(non_none_type, "string")
+                    # Check if it's a basic type first
+                    if non_none_type in type_map:
+                        param_type = type_map[non_none_type]
+                    else:
+                        # Recursively process complex types like List[dict]
+                        if hasattr(non_none_type, "__origin__"):
+                            non_none_origin = non_none_type.__origin__
+                            if non_none_origin in (list, list):
+                                param_type = "array"
+                                # Extract item type from List[T] or list[T]
+                                if hasattr(non_none_type, "__args__") and non_none_type.__args__:
+                                    item_arg = non_none_type.__args__[0]
+                                    # Check if item is a Pydantic model
+                                    if _is_pydantic_model(item_arg):
+                                        items_type = "object"
+                                        pydantic_items_model = item_arg
+                                    else:
+                                        items_type = type_map.get(item_arg, "string")
+                            elif non_none_origin in (dict, dict):
+                                param_type = "object"
+                            else:
+                                param_type = type_map.get(non_none_origin, "string")
+                        else:
+                            param_type = type_map.get(non_none_type, "string")
                 else:
                     # Multiple union types - try to find common JSON Schema type
-                    non_none_args = [arg for arg in args if arg is not type(None)]
+                    non_none_args = tuple(arg for arg in args if arg is not type(None))
 
                     # Check if all types are numeric (int, float)
                     if all(arg in (int, float) for arg in non_none_args):
@@ -148,14 +235,31 @@ class ToolParameter:
                 param_type = "array"
                 # Extract item type from List[T] or list[T]
                 if hasattr(annotation, "__args__") and annotation.__args__:
-                    items_type = type_map.get(annotation.__args__[0], "string")
+                    item_arg = annotation.__args__[0]
+                    # Check if item is a Pydantic model
+                    if _is_pydantic_model(item_arg):
+                        items_type = "object"
+                        pydantic_items_model = item_arg
+                    else:
+                        items_type = type_map.get(item_arg, "string")
             elif origin in (dict, dict):
                 param_type = "object"
             else:
-                param_type = type_map.get(origin, "string")
+                # origin is None or unknown type
+                # Check if the original annotation is a Pydantic model
+                if _is_pydantic_model(annotation):
+                    param_type = "object"
+                    pydantic_model = annotation
+                else:
+                    param_type = type_map.get(origin, "string")
         else:
             # Handle direct type annotations (int, str, bool, etc.)
-            param_type = type_map.get(annotation, "string")
+            # Check if it's a Pydantic model
+            if _is_pydantic_model(annotation):
+                param_type = "object"
+                pydantic_model = annotation
+            else:
+                param_type = type_map.get(annotation, "string")
 
         # Check if it has a default value
         required = default is inspect.Parameter.empty
@@ -169,6 +273,8 @@ class ToolParameter:
             default=actual_default,
             enum=enum_values,
             items_type=items_type,
+            pydantic_model=pydantic_model,
+            pydantic_items_model=pydantic_items_model,
             _cached_schema=None,  # Will be computed on first access
         )
 
@@ -176,16 +282,51 @@ class ToolParameter:
         """Convert to JSON Schema format with orjson optimization."""
         # Check if we can use a pre-computed base schema
         cache_key = (self.type, self.required, self.default)
-        if cache_key in _BASE_SCHEMAS and not self.description and not self.enum and not self.items_type:
+        if (
+            cache_key in _BASE_SCHEMAS
+            and not self.description
+            and not self.enum
+            and not self.items_type
+            and not self.pydantic_model
+            and not self.pydantic_items_model
+        ):
             # Return pre-computed schema for maximum speed
             return orjson.loads(_BASE_SCHEMAS[cache_key])  # type: ignore[no-any-return]
 
         # Build custom schema
         schema: dict[str, Any] = {"type": self.type}
 
+        # Handle Pydantic model for direct object types
+        if self.type == "object" and self.pydantic_model:
+            # Extract full Pydantic JSON schema
+            try:
+                pydantic_schema = self.pydantic_model.model_json_schema()
+                # Merge the pydantic schema into our schema
+                # Remove the top-level "$defs" if present (we just want the object schema)
+                if "$defs" in pydantic_schema:
+                    pydantic_schema.pop("$defs")
+                schema.update(pydantic_schema)
+            except Exception:
+                # If Pydantic schema extraction fails, keep generic object
+                pass
+
         # Add items field for array types
-        if self.type == "array" and self.items_type:
-            schema["items"] = {"type": self.items_type}
+        if self.type == "array":
+            if self.pydantic_items_model:
+                # Extract Pydantic schema for array items
+                try:
+                    items_schema = self.pydantic_items_model.model_json_schema()
+                    # Remove top-level "$defs" if present
+                    if "$defs" in items_schema:
+                        # Keep $defs at the top level if needed for nested references
+                        defs = items_schema.pop("$defs")
+                        schema["$defs"] = defs
+                    schema["items"] = items_schema
+                except Exception:
+                    # Fallback to generic object
+                    schema["items"] = {"type": "object"}
+            elif self.items_type:
+                schema["items"] = {"type": self.items_type}
 
         if self.description:
             schema["description"] = self.description
