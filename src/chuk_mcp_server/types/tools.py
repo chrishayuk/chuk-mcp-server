@@ -66,17 +66,13 @@ class ToolHandler:
             )
             parameters.append(tool_param)
 
-        # Build JSON schema for the MCP tool using the proper schema type
-        properties = {}
-        required = []
+        # Build JSON schema for the MCP tool using build_input_schema to properly merge $defs
+        from chuk_mcp_server.types.parameters import build_input_schema
 
-        for tool_param in parameters:
-            properties[tool_param.name] = tool_param.to_json_schema()
-            if tool_param.required:
-                required.append(tool_param.name)
+        schema_dict = build_input_schema(parameters)
 
         # Create the proper MCP ToolInputSchema
-        input_schema = MCPToolInputSchema(type="object", properties=properties, required=required if required else None)
+        input_schema = MCPToolInputSchema(**schema_dict)
 
         # Create the MCP tool with the proper schema
         mcp_tool = MCPTool(
