@@ -300,7 +300,7 @@ class ToolParameter:
         if self.type == "object" and self.pydantic_model:
             # Extract full Pydantic JSON schema
             try:
-                pydantic_schema = self.pydantic_model.model_json_schema(mode='serialization')
+                pydantic_schema = self.pydantic_model.model_json_schema(mode="serialization")
                 # Keep $defs if present - they contain referenced types (enums, nested models)
                 if "$defs" in pydantic_schema:
                     defs = pydantic_schema.pop("$defs")
@@ -315,7 +315,7 @@ class ToolParameter:
             if self.pydantic_items_model:
                 # Extract Pydantic schema for array items
                 try:
-                    items_schema = self.pydantic_items_model.model_json_schema(mode='serialization')
+                    items_schema = self.pydantic_items_model.model_json_schema(mode="serialization")
                     # Remove top-level "$defs" if present
                     if "$defs" in items_schema:
                         # Keep $defs at the top level if needed for nested references
