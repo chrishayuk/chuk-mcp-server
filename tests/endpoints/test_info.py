@@ -10,6 +10,12 @@ from starlette.datastructures import QueryParams
 from chuk_mcp_server.endpoints.info import InfoEndpoint
 
 
+class MockState:
+    """Mock request state."""
+
+    pass
+
+
 class MockRequest:
     """Mock request for testing."""
 
@@ -19,6 +25,7 @@ class MockRequest:
         self.headers = {"host": host}
         self.url = MagicMock()
         self.url.scheme = scheme
+        self.state = MockState()
 
 
 class TestInfoEndpoint:

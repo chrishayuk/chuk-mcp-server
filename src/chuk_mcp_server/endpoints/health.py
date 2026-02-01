@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/endpoints/health.py
 """
 Health check endpoint with dynamic fixed-length timestamps
 """
@@ -11,8 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from ..protocol import MCPProtocolHandler
-
-_HEALTH_HEADERS = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache", "Content-Type": "application/json"}
+from .constants import CONTENT_TYPE_JSON, HEADERS_CORS_NOCACHE, SERVER_NAME, STATUS_HEALTHY
 
 _SERVER_START_TIME = time.time()
 
@@ -33,10 +31,10 @@ async def handle_health_ultra_fast(_request: Request) -> Response:
     uptime_seconds = int(current_time - _SERVER_START_TIME)
 
     response_data = {
-        "status": "healthy",
-        "server": "ChukMCPServer",
+        "status": STATUS_HEALTHY,
+        "server": SERVER_NAME,
         "timestamp": timestamp_ms,
         "uptime": uptime_seconds,
     }
 
-    return Response(orjson.dumps(response_data), media_type="application/json", headers=_HEALTH_HEADERS)
+    return Response(orjson.dumps(response_data), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)

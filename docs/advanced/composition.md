@@ -158,7 +158,7 @@ class CalculatorPlugin(MCPPlugin):
         @mcp.tool
         def add(a: int, b: int) -> int:
             return a + b
-        
+
         @mcp.tool
         def subtract(a: int, b: int) -> int:
             return a - b
@@ -229,7 +229,7 @@ from typing import Optional
 class ServerState:
     user_count: int = 0
     cache: dict = None
-    
+
     def __post_init__(self):
         if self.cache is None:
             self.cache = {}

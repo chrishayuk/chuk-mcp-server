@@ -163,15 +163,14 @@ class TestHTTPServer:
                 docs_handler = call[1]["handler"]
                 break
 
-        # Create mock request with query params
+        # Create mock request with state
         mock_request = Mock()
-        mock_request.query_params = Mock()
-        mock_request.query_params._dict = {}
+        mock_request.state = Mock()
 
         response = await docs_handler(mock_request)
 
-        # Should have set format parameter and called info endpoint
-        assert mock_request.query_params._dict["format"] == "docs"
+        # Should have set format_override on request.state and called info endpoint
+        assert mock_request.state.format_override == "docs"
         mock_info_instance.handle_request.assert_called_once_with(mock_request)
         assert isinstance(response, Response)
 

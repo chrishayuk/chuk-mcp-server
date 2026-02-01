@@ -92,7 +92,7 @@ class HTTPServer:
         """Create docs handler."""
 
         async def docs_handler(request: Request) -> Response:
-            request.query_params._dict["format"] = "docs"
+            request.state.format_override = "docs"
             return await info_endpoint.handle_request(request)
 
         return docs_handler

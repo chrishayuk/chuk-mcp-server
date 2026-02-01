@@ -7,6 +7,19 @@ System resource detection and optimization.
 from typing import Any
 
 from .base import ConfigDetector
+from .constants import (
+    CONNECTIONS_PER_GB,
+    CONTAINER_MAX_CONNECTIONS,
+    CPU_UTILIZATION_FACTOR,
+    DEVELOPMENT_MAX_CONNECTIONS,
+    ENV_DEBUG,
+    ENV_LOG_LEVEL,
+    HIGH_CORE_THRESHOLD,
+    MAX_WORKERS_CAP,
+    MEDIUM_CORE_THRESHOLD,
+    PRODUCTION_MAX_CONNECTIONS,
+    SERVERLESS_MAX_CONNECTIONS,
+)
 
 
 class SystemDetector(ConfigDetector):
@@ -38,16 +51,16 @@ class SystemDetector(ConfigDetector):
                 return min(cpu_cores // 2, 4) or 1  # Moderate workers for debugging
             elif is_containerized:
                 # Container: be conservative with resources
-                return min(cpu_cores, 8) if memory_gb >= 2 else min(cpu_cores // 2, 4) or 1
+                return min(cpu_cores, MAX_WORKERS_CAP) if memory_gb >= 2 else min(cpu_cores // 2, 4) or 1
             else:
                 # Production: optimize for throughput
-                if cpu_cores <= 4:
+                if cpu_cores <= MEDIUM_CORE_THRESHOLD:
                     return cpu_cores
-                elif cpu_cores <= 16:
-                    return min(cpu_cores, 8)
+                elif cpu_cores <= HIGH_CORE_THRESHOLD:
+                    return min(cpu_cores, MAX_WORKERS_CAP)
                 else:
                     # High-core systems: use 50-75% of cores
-                    return int(cpu_cores * 0.6)
+                    return int(cpu_cores * CPU_UTILIZATION_FACTOR)
 
         except Exception as e:
             self.logger.debug(f"Error detecting CPU/memory: {e}")
@@ -62,26 +75,26 @@ class SystemDetector(ConfigDetector):
             memory_gb = memory.available / (1024**3)
 
             # Estimate ~1MB per connection (conservative)
-            base_connections = int(memory_gb * 800)  # 800 connections per GB
+            base_connections = int(memory_gb * CONNECTIONS_PER_GB)
 
             # Environment-based limits
             if environment == "serverless":
-                return min(base_connections, 100)  # Serverless limits
+                return min(base_connections, SERVERLESS_MAX_CONNECTIONS)
             elif environment == "development":
-                return min(base_connections, 1000)  # Dev: reasonable limit
+                return min(base_connections, DEVELOPMENT_MAX_CONNECTIONS)
             elif is_containerized:
-                return min(base_connections, 5000)  # Container: moderate
+                return min(base_connections, CONTAINER_MAX_CONNECTIONS)
             else:
-                return min(base_connections, 10000)  # Production: high
+                return min(base_connections, PRODUCTION_MAX_CONNECTIONS)
 
         except Exception as e:
             self.logger.debug(f"Error detecting memory: {e}")
-            return 1000  # Fallback
+            return DEVELOPMENT_MAX_CONNECTIONS  # Fallback
 
     def detect_debug_mode(self, environment: str | None = None) -> bool:
         """Determine if debug mode should be enabled."""
         # Explicit debug flags
-        debug_env = self.get_env_var("DEBUG", "").lower()
+        debug_env = self.get_env_var(ENV_DEBUG, "").lower()
         if debug_env in ["true", "1", "yes", "on"]:
             return True
         elif debug_env in ["false", "0", "no", "off"]:
@@ -93,7 +106,7 @@ class SystemDetector(ConfigDetector):
     def detect_log_level(self, environment: str | None = None) -> str:
         """Determine appropriate log level."""
         # Explicit log level
-        log_level = self.get_env_var("LOG_LEVEL", "").upper()
+        log_level = self.get_env_var(ENV_LOG_LEVEL, "").upper()
         if log_level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             return log_level
 
@@ -120,9 +133,9 @@ class SystemDetector(ConfigDetector):
                 return "development"
             elif environment == "testing":
                 return "testing"
-            elif cpu_cores >= 8 and memory_gb >= 8:
+            elif cpu_cores >= MAX_WORKERS_CAP and memory_gb >= MAX_WORKERS_CAP:
                 return "ultra_high_performance"
-            elif cpu_cores >= 4 and memory_gb >= 4:
+            elif cpu_cores >= MEDIUM_CORE_THRESHOLD and memory_gb >= MEDIUM_CORE_THRESHOLD:
                 return "high_performance"
             else:
                 return "balanced"

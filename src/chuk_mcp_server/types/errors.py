@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/types/errors.py
 """
 Errors - Custom error classes for ChukMCPServer
 

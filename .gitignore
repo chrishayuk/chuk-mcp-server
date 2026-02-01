@@ -74,3 +74,29 @@ uv.lock
 
 # Pre-commit
 .pre-commit-config.yaml.lock
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Documentation build
+site/
+
+# Python version file
+.python-version
+
+# PEP 582
+__pypackages__/
+
+# Profiling
+*.prof
+*.pstats
+
+# Database
+*.sqlite3
+*.db
+
+# Node (for tooling)
+node_modules/

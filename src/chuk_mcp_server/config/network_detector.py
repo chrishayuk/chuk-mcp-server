@@ -8,6 +8,12 @@ import socket
 from typing import Any
 
 from .base import ConfigDetector
+from .constants import (
+    ENV_PORT,
+    PORT_MAX,
+    PORT_MIN,
+    PREFERRED_PORTS,
+)
 
 
 class NetworkDetector(ConfigDetector):
@@ -28,8 +34,6 @@ class NetworkDetector(ConfigDetector):
         "NETLIFY": 8888,
         "RAILWAY_ENVIRONMENT": 8000,
     }
-
-    PREFERRED_PORTS = [8000, 8001, 8080, 3000, 5000, 4000]
 
     def detect(self) -> dict[str, Any]:
         """Detect network configuration (implements abstract method)."""
@@ -59,11 +63,11 @@ class NetworkDetector(ConfigDetector):
                 return port
 
         # Then check environment variable (most common in production)
-        env_port = self.get_env_var("PORT")
+        env_port = self.get_env_var(ENV_PORT)
         if env_port:
             try:
                 port = int(env_port)
-                if 1 <= port <= 65535:  # Valid port range
+                if PORT_MIN <= port <= PORT_MAX:  # Valid port range
                     self.logger.debug(f"Using PORT environment variable: {port}")
                     return port
             except (ValueError, TypeError):
@@ -76,7 +80,7 @@ class NetworkDetector(ConfigDetector):
     def _find_available_port(self) -> int:
         """Find an available port by scanning preferred ports."""
         # Try preferred ports first
-        for port in self.PREFERRED_PORTS:
+        for port in PREFERRED_PORTS:
             if self._is_port_available(port):
                 return port
 

@@ -15,7 +15,7 @@ def divide(a: float, b: float) -> dict:
             "status": "error",
             "error": "Cannot divide by zero"
         }
-    
+
     return {
         "status": "success",
         "result": a / b
@@ -32,7 +32,7 @@ def fetch_user(user_id: int) -> dict:
         user = database.get(user_id)
         if not user:
             return {"status": "not_found"}
-        
+
         return {"status": "success", "user": user}
     except DatabaseError as e:
         return {"status": "error", "error": str(e)}
@@ -45,13 +45,13 @@ def fetch_user(user_id: int) -> dict:
 def update_settings(key: str, value: str) -> dict:
     """Update setting with validation."""
     valid_keys = ["theme", "language"]
-    
+
     if key not in valid_keys:
         return {
             "status": "error",
             "error": f"Invalid key. Must be one of: {', '.join(valid_keys)}"
         }
-    
+
     # Update setting...
     return {"status": "success", "key": key, "value": value}
 ```
@@ -75,7 +75,7 @@ def get_resource(resource_id: str) -> dict:
             "code": ErrorCode.INVALID_INPUT,
             "message": "Resource ID is required"
         }
-    
+
     resource = find_resource(resource_id)
     if not resource:
         return {
@@ -83,7 +83,7 @@ def get_resource(resource_id: str) -> dict:
             "code": ErrorCode.NOT_FOUND,
             "message": f"Resource {resource_id} not found"
         }
-    
+
     return {"status": "success", "resource": resource}
 ```
 

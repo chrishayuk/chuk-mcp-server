@@ -39,14 +39,14 @@ from chuk_mcp_server import ChukMCPServer
 def test_add_tool():
     """Test that add tool works correctly."""
     mcp = ChukMCPServer(name="test-server")
-    
+
     @mcp.tool
     def add(a: int, b: int) -> int:
         return a + b
-    
+
     # Verify tool registered
     assert "add" in mcp._tool_handlers
-    
+
     # Test execution
     handler = mcp._tool_handlers["add"]
     result = handler(a=2, b=3)
@@ -60,16 +60,16 @@ import pytest
 
 class TestAsyncTools:
     """Test async tool functionality."""
-    
+
     @pytest.mark.asyncio
     async def test_async_tool(self):
         """Test async tool execution."""
         mcp = ChukMCPServer(name="test-server")
-        
+
         @mcp.tool
         async def async_add(a: int, b: int) -> int:
             return a + b
-        
+
         handler = mcp._tool_handlers["async_add"]
         result = await handler(a=2, b=3)
         assert result == 5
@@ -105,7 +105,7 @@ def test_with_fixture(mcp_server):
     @mcp_server.tool
     def hello():
         return "world"
-    
+
     assert "hello" in mcp_server._tool_handlers
 ```
 
@@ -126,11 +126,11 @@ class TestExternalAPI:
         mock_response = AsyncMock()
         mock_response.json.return_value = {"temp": 72}
         mock_get.return_value = mock_response
-        
+
         # Test
         from your_module import fetch_weather
         result = await fetch_weather("NYC")
-        
+
         # Verify
         assert result["temp"] == 72
         mock_get.assert_called_once()
@@ -176,14 +176,14 @@ import pytest
 def test_divide_by_zero():
     """Test that divide by zero raises error."""
     from calculator import divide
-    
+
     with pytest.raises(ZeroDivisionError):
         divide(1, 0)
 
 def test_invalid_input():
     """Test invalid input handling."""
     from calculator import process
-    
+
     with pytest.raises(ValueError, match="Expected positive number"):
         process(-1)
 ```
@@ -201,11 +201,11 @@ from chuk_mcp_server import ChukMCPServer
 async def test_full_server():
     """Test complete MCP server."""
     mcp = ChukMCPServer(name="test-server")
-    
+
     @mcp.tool
     def add(a: int, b: int) -> int:
         return a + b
-    
+
     # Start server in test mode
     async with AsyncClient(app=mcp.app, base_url="http://test") as client:
         # Test tool listing
@@ -217,7 +217,7 @@ async def test_full_server():
                 "method": "tools/list"
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert any(t["name"] == "add" for t in data["result"]["tools"])
@@ -277,10 +277,10 @@ import pytest
 def test_performance():
     """Test that operation completes quickly."""
     start = time.perf_counter()
-    
+
     # Operation
     result = expensive_operation()
-    
+
     duration = time.perf_counter() - start
     assert duration < 0.1  # Must complete in 100ms
 ```

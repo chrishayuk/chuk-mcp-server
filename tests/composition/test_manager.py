@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestCompositionManager:
     """Test CompositionManager class."""
@@ -136,9 +138,9 @@ class TestCompositionManager:
         manager = CompositionManager(parent_server)
         manager.mount(source_server, prefix="dynamic", as_proxy=False)
 
-        assert "dynamic" in manager.mounted_servers
-        assert manager.mounted_servers["dynamic"]["as_proxy"] is False
-        assert manager.composition_stats["mounted"] == 1
+        # Dynamic mounting is not yet implemented, so mount returns early
+        assert "dynamic" not in manager.mounted_servers
+        assert manager.composition_stats["mounted"] == 0
 
     def test_mount_as_proxy(self):
         """Test mounting server as proxy."""
@@ -151,9 +153,9 @@ class TestCompositionManager:
         manager = CompositionManager(parent_server)
         manager.mount(source_server, prefix="remote", as_proxy=True)
 
-        assert "remote" in manager.mounted_servers
-        assert manager.mounted_servers["remote"]["as_proxy"] is True
-        assert manager.composition_stats["mounted"] == 1
+        # Proxy mounting is not yet implemented, so mount returns early
+        assert "remote" not in manager.mounted_servers
+        assert manager.composition_stats["mounted"] == 0
 
     def test_load_module(self):
         """Test loading modules."""
@@ -274,7 +276,12 @@ class TestCompositionManager:
 
         parent_server = MagicMock()
 
+        def greeting_prompt(name: str = "world") -> str:
+            return f"Hello, {name}!"
+
         mock_prompt_handler = MagicMock()
+        mock_prompt_handler.handler = greeting_prompt
+        mock_prompt_handler.description = "A greeting prompt"
 
         source_server = MagicMock()
         source_server.protocol.prompts = {"greeting": mock_prompt_handler}
@@ -283,6 +290,7 @@ class TestCompositionManager:
         count = manager._import_prompts(source_server, None, None)
 
         assert count == 1
+        parent_server.protocol.register_prompt.assert_called_once()
 
     def test_import_prompts_no_protocol(self):
         """Test _import_prompts with server without protocol."""
@@ -319,8 +327,8 @@ class TestCompositionManager:
 
         handler = MagicMock(spec=[])  # No tags attribute
 
-        # Should match all when handler has no tags
-        assert manager._matches_tags(handler, ["api"]) is True
+        # Handler has no tags, should not match any requested tags
+        assert manager._matches_tags(handler, ["api"]) is False
 
     def test_matches_tags_empty_handler_tags(self):
         """Test _matches_tags with empty handler tags."""
@@ -332,8 +340,8 @@ class TestCompositionManager:
         handler = MagicMock()
         handler.tags = []
 
-        # Should match all when handler tags are empty
-        assert manager._matches_tags(handler, ["api"]) is True
+        # Handler has empty tags, should not match any requested tags
+        assert manager._matches_tags(handler, ["api"]) is False
 
     def test_get_composition_stats(self):
         """Test get_composition_stats method."""
@@ -413,7 +421,7 @@ class TestCompositionManager:
         assert "unknown" in manager.imported_servers
 
     def test_mount_without_server_info(self):
-        """Test mounting server without server_info."""
+        """Test mounting server without server_info returns early (not implemented)."""
         from chuk_mcp_server.composition.manager import CompositionManager
 
         parent_server = MagicMock()
@@ -422,10 +430,11 @@ class TestCompositionManager:
         manager = CompositionManager(parent_server)
         manager.mount(source_server, prefix="test")
 
-        assert "test" in manager.mounted_servers
+        # Mount is not yet implemented, returns early
+        assert "test" not in manager.mounted_servers
 
     def test_mount_no_prefix_no_server_info(self):
-        """Test mounting server without prefix or server_info."""
+        """Test mounting server without prefix or server_info returns early (not implemented)."""
         from chuk_mcp_server.composition.manager import CompositionManager
 
         parent_server = MagicMock()
@@ -434,7 +443,8 @@ class TestCompositionManager:
         manager = CompositionManager(parent_server)
         manager.mount(source_server)
 
-        assert "unknown" in manager.mounted_servers
+        # Mount is not yet implemented, returns early
+        assert "unknown" not in manager.mounted_servers
 
     def test_import_tools_with_tag_filtering(self):
         """Test importing tools with tag filtering."""
@@ -493,11 +503,21 @@ class TestCompositionManager:
 
         parent_server = MagicMock()
 
+        def user_prompt(name: str = "world") -> str:
+            return f"Hello, {name}!"
+
+        def system_prompt(msg: str = "ok") -> str:
+            return msg
+
         mock_prompt1 = MagicMock()
         mock_prompt1.tags = ["user"]
+        mock_prompt1.handler = user_prompt
+        mock_prompt1.description = "User prompt"
 
         mock_prompt2 = MagicMock()
         mock_prompt2.tags = ["system"]
+        mock_prompt2.handler = system_prompt
+        mock_prompt2.description = "System prompt"
 
         source_server = MagicMock()
         source_server.protocol.prompts = {"prompt1": mock_prompt1, "prompt2": mock_prompt2}
@@ -508,8 +528,8 @@ class TestCompositionManager:
         # Only prompt1 should be imported
         assert count == 1
 
-    def test_mount_dynamic_warning(self):
-        """Test that mount_dynamic logs a warning."""
+    def test_mount_dynamic_raises(self):
+        """Test that mount_dynamic raises NotImplementedError."""
         from chuk_mcp_server.composition.manager import CompositionManager
 
         parent_server = MagicMock()
@@ -517,12 +537,11 @@ class TestCompositionManager:
 
         manager = CompositionManager(parent_server)
 
-        with patch("chuk_mcp_server.composition.manager.logger") as mock_logger:
+        with pytest.raises(NotImplementedError):
             manager._mount_dynamic(source_server, "test")
-            mock_logger.warning.assert_called_once()
 
-    def test_mount_as_proxy_warning(self):
-        """Test that mount_as_proxy logs a warning."""
+    def test_mount_as_proxy_raises(self):
+        """Test that mount_as_proxy raises NotImplementedError."""
         from chuk_mcp_server.composition.manager import CompositionManager
 
         parent_server = MagicMock()
@@ -530,6 +549,5 @@ class TestCompositionManager:
 
         manager = CompositionManager(parent_server)
 
-        with patch("chuk_mcp_server.composition.manager.logger") as mock_logger:
+        with pytest.raises(NotImplementedError):
             manager._mount_as_proxy(source_server, "test")
-            mock_logger.warning.assert_called_once()

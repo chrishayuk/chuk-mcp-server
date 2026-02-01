@@ -48,9 +48,9 @@ def format_content_as_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     elif isinstance(content, BaseModel):
-        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
+        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
     elif isinstance(content, dict | list):
-        return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
+        return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
     else:
         return str(content)
 
@@ -61,14 +61,14 @@ def format_content_as_json(content: Any) -> str:
         # Try to parse and re-format for consistency
         try:
             parsed = orjson.loads(content)
-            return orjson.dumps(parsed, option=orjson.OPT_INDENT_2).decode()
+            return orjson.dumps(parsed, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
         except orjson.JSONDecodeError:
             # If not valid JSON, wrap in quotes
-            return orjson.dumps(content).decode()
+            return orjson.dumps(content).decode()  # type: ignore[no-any-return]
     elif isinstance(content, BaseModel):
-        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
+        return orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
     else:
-        return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
+        return orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
 
 
 __all__ = ["format_content", "format_content_as_text", "format_content_as_json"]

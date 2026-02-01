@@ -8,6 +8,20 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+from .constants import (
+    ENV_GOOGLE_CLIENT_ID,
+    ENV_GOOGLE_CLIENT_SECRET,
+    ENV_GOOGLE_DRIVE_ROOT_FOLDER,
+    ENV_GOOGLE_REDIRECT_URI,
+    ENV_OAUTH_SERVER_URL,
+    GOOGLE_DEFAULT_ROOT_FOLDER,
+    GOOGLE_TOKEN_URL,
+    PATH_AUTHORIZATION_SERVER_METADATA,
+    PATH_AUTHORIZE,
+    PATH_CALLBACK,
+    PATH_TOKEN,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,17 +74,17 @@ def setup_google_drive_oauth(
         run(transport="http", port=8000, post_register_hook=oauth_hook)
     """
     # Try to get credentials from parameters or environment
-    client_id = client_id or os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = client_secret or os.getenv("GOOGLE_CLIENT_SECRET")
+    client_id = client_id or os.getenv(ENV_GOOGLE_CLIENT_ID)
+    client_secret = client_secret or os.getenv(ENV_GOOGLE_CLIENT_SECRET)
 
     # If no credentials, OAuth is not configured
     if not client_id or not client_secret:
-        logger.info("Google Drive OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)")
+        logger.info(f"Google Drive OAuth not configured (missing {ENV_GOOGLE_CLIENT_ID} or {ENV_GOOGLE_CLIENT_SECRET})")
         return None
 
     # Get other config from parameters or environment with defaults
-    final_redirect_uri = redirect_uri or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/oauth/callback")
-    final_oauth_server_url = oauth_server_url or os.getenv("OAUTH_SERVER_URL", "http://localhost:8000")
+    final_redirect_uri = redirect_uri or os.getenv(ENV_GOOGLE_REDIRECT_URI, f"http://localhost:8000{PATH_CALLBACK}")
+    final_oauth_server_url = oauth_server_url or os.getenv(ENV_OAUTH_SERVER_URL, "http://localhost:8000")
     sandbox_id = sandbox_id or f"chuk-mcp-{mcp_server.name}" if hasattr(mcp_server, "name") else "default"
 
     # Import OAuth components (only if google_drive extra is installed)
@@ -108,7 +122,7 @@ def setup_google_drive_oauth(
             mcp_server=mcp_server,
             provider=provider,
             oauth_server_url=final_oauth_server_url,
-            callback_path="/oauth/callback",
+            callback_path=PATH_CALLBACK,
             scopes_supported=[
                 "drive.file",
                 "userinfo.profile",
@@ -121,10 +135,10 @@ def setup_google_drive_oauth(
 
         logger.info(
             f"✓ Google Drive OAuth configured:\n"
-            f"  - Authorization endpoint: {final_oauth_server_url}/oauth/authorize\n"
-            f"  - Token endpoint: {final_oauth_server_url}/oauth/token\n"
+            f"  - Authorization endpoint: {final_oauth_server_url}{PATH_AUTHORIZE}\n"
+            f"  - Token endpoint: {final_oauth_server_url}{PATH_TOKEN}\n"
             f"  - Callback: {final_redirect_uri}\n"
-            f"  - Discovery: {final_oauth_server_url}/.well-known/oauth-authorization-server"
+            f"  - Discovery: {final_oauth_server_url}{PATH_AUTHORIZATION_SERVER_METADATA}"
         )
 
         return oauth
@@ -164,14 +178,14 @@ def configure_storage_from_oauth(access_token_data: dict[str, Any]) -> dict[str,
         "credentials": {
             "token": access_token_data.get("external_access_token"),
             "refresh_token": access_token_data.get("external_refresh_token"),
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+            "token_uri": GOOGLE_TOKEN_URL,
+            "client_id": os.getenv(ENV_GOOGLE_CLIENT_ID),
+            "client_secret": os.getenv(ENV_GOOGLE_CLIENT_SECRET),
             "scopes": [
                 "https://www.googleapis.com/auth/drive.file",
                 "https://www.googleapis.com/auth/userinfo.profile",
             ],
         },
-        "root_folder": os.getenv("GOOGLE_DRIVE_ROOT_FOLDER", "CHUK"),
+        "root_folder": os.getenv(ENV_GOOGLE_DRIVE_ROOT_FOLDER, GOOGLE_DEFAULT_ROOT_FOLDER),
         "user_id": access_token_data.get("user_id"),
     }

@@ -194,40 +194,17 @@ class ChukMCPServer:
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
         # Register global tools
-        for tool in get_global_tools():
-            if hasattr(tool, "handler"):
-                tool_handler = tool
-            else:
-                tool_handler = ToolHandler.from_function(tool.handler, name=tool.name, description=tool.description)
-
+        for tool_handler in get_global_tools():
             self.protocol.register_tool(tool_handler)
             mcp_registry.register_tool(tool_handler.name, tool_handler)
 
         # Register global resources
-        for resource in get_global_resources():
-            if hasattr(resource, "handler"):
-                resource_handler = resource
-            else:
-                resource_handler = ResourceHandler.from_function(
-                    resource.uri,
-                    resource.handler,
-                    name=resource.name,
-                    description=resource.description,
-                    mime_type=resource.mime_type,
-                )
-
+        for resource_handler in get_global_resources():
             self.protocol.register_resource(resource_handler)
             mcp_registry.register_resource(resource_handler.uri, resource_handler)
 
         # Register global prompts
-        for prompt in get_global_prompts():
-            if hasattr(prompt, "handler"):
-                prompt_handler = prompt
-            else:
-                prompt_handler = PromptHandler.from_function(
-                    prompt.handler, name=prompt.name, description=prompt.description
-                )
-
+        for prompt_handler in get_global_prompts():
             self.protocol.register_prompt(prompt_handler)
             mcp_registry.register_prompt(prompt_handler.name, prompt_handler)
 
@@ -532,7 +509,7 @@ class ChukMCPServer:
         mcp_registry.register_prompt(prompt_handler.name, prompt_handler, **kwargs)
         logger.debug(f"Added prompt: {prompt_handler.name}")
 
-    def add_endpoint(self, path: str, handler: Callable, methods: list[str] = None, **kwargs):
+    def add_endpoint(self, path: str, handler: Callable, methods: list[str] | None = None, **kwargs):
         """Manually add a custom HTTP endpoint."""
         http_endpoint_registry.register_endpoint(path, handler, methods=methods, **kwargs)
         logger.debug(f"Added endpoint: {path}")
@@ -763,6 +740,7 @@ class ChukMCPServer:
                 level=logging.CRITICAL,
                 stream=sys.stderr,
                 format="%(message)s",  # Minimal format
+                force=True,  # Override earlier basicConfig
             )
             # Suppress specific noisy loggers
             logging.getLogger("chuk_mcp_server").setLevel(logging.CRITICAL)

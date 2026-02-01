@@ -19,6 +19,21 @@ from typing import Any
 import httpx
 
 from ..base_provider import BaseOAuthProvider
+from ..constants import (
+    DEFAULT_TOKEN_EXPIRY,
+    ERROR_INSUFFICIENT_SCOPE,
+    ERROR_INVALID_CLIENT,
+    ERROR_INVALID_GRANT,
+    ERROR_INVALID_REDIRECT_URI,
+    ERROR_INVALID_TOKEN,
+    GOOGLE_AUTH_URL,
+    GOOGLE_TOKEN_URL,
+    GOOGLE_USERINFO_URL,
+    GRANT_AUTHORIZATION_CODE,
+    GRANT_REFRESH_TOKEN,
+    PROVIDER_GOOGLE_DRIVE,
+    RESPONSE_TYPE_CODE,
+)
 from ..models import (
     AuthorizationParams,
     AuthorizeError,
@@ -39,9 +54,9 @@ class GoogleDriveOAuthClient:
     """
 
     # Google OAuth endpoints
-    AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-    TOKEN_URL = "https://oauth2.googleapis.com/token"
-    USER_INFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+    AUTH_URL = GOOGLE_AUTH_URL
+    TOKEN_URL = GOOGLE_TOKEN_URL
+    USER_INFO_URL = GOOGLE_USERINFO_URL
 
     # Required scopes for Drive access
     SCOPES = [
@@ -78,7 +93,7 @@ class GoogleDriveOAuthClient:
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
-            "response_type": "code",
+            "response_type": RESPONSE_TYPE_CODE,
             "scope": " ".join(self.SCOPES),
             "state": state,
             "access_type": "offline",  # Request refresh token
@@ -106,7 +121,7 @@ class GoogleDriveOAuthClient:
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "redirect_uri": self.redirect_uri,
-                    "grant_type": "authorization_code",
+                    "grant_type": GRANT_AUTHORIZATION_CODE,
                 },
             )
             response.raise_for_status()
@@ -129,7 +144,7 @@ class GoogleDriveOAuthClient:
                     "refresh_token": refresh_token,
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "grant_type": "refresh_token",
+                    "grant_type": GRANT_REFRESH_TOKEN,
                 },
             )
             response.raise_for_status()
@@ -228,7 +243,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
             redirect_uri=params.redirect_uri,
         ):
             raise AuthorizeError(
-                error="invalid_client",
+                error=ERROR_INVALID_CLIENT,
                 error_description="Invalid client_id or redirect_uri",
             )
 
@@ -240,9 +255,9 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
 
         if user_id:
             # User already linked to Google Drive
-            google_token = await self.token_store.get_external_token(user_id, "google_drive")
+            google_token = await self.token_store.get_external_token(user_id, PROVIDER_GOOGLE_DRIVE)
 
-            if google_token and not await self.token_store.is_external_token_expired(user_id, "google_drive"):
+            if google_token and not await self.token_store.is_external_token_expired(user_id, PROVIDER_GOOGLE_DRIVE):
                 # Have valid Google Drive token, create authorization code
                 code = await self.token_store.create_authorization_code(
                     user_id=user_id,
@@ -319,7 +334,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
         if not code_data:
             logger.error("❌ Authorization code validation failed")
             raise TokenError(
-                error="invalid_grant",
+                error=ERROR_INVALID_GRANT,
                 error_description="Invalid or expired authorization code",
             )
 
@@ -333,12 +348,12 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
             scope=code_data["scope"],
         )
 
-        logger.info("✓ Created access token successfully (expires in 3600s)")
+        logger.info(f"✓ Created access token successfully (expires in {DEFAULT_TOKEN_EXPIRY}s)")
 
         return OAuthToken(
             access_token=access_token,
             token_type="Bearer",
-            expires_in=3600,  # 1 hour
+            expires_in=DEFAULT_TOKEN_EXPIRY,
             refresh_token=refresh_token,
             scope=code_data["scope"],
         )
@@ -363,7 +378,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
 
         if not result:
             raise TokenError(
-                error="invalid_grant",
+                error=ERROR_INVALID_GRANT,
                 error_description="Invalid refresh token",
             )
 
@@ -372,7 +387,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
         return OAuthToken(
             access_token=new_access_token,
             token_type="Bearer",
-            expires_in=3600,
+            expires_in=DEFAULT_TOKEN_EXPIRY,
             refresh_token=new_refresh_token,
             scope=scope,
         )
@@ -401,7 +416,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
                 f"❌ Token validation failed: token not found in store (sandbox_id: {self.token_store.sandbox_id})"
             )
             raise TokenError(
-                error="invalid_token",
+                error=ERROR_INVALID_TOKEN,
                 error_description="Invalid or expired access token",
             )
 
@@ -411,15 +426,15 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
         user_id = token_data["user_id"]
 
         # Get Google Drive token
-        google_token_data = await self.token_store.get_external_token(user_id, "google_drive")
+        google_token_data = await self.token_store.get_external_token(user_id, PROVIDER_GOOGLE_DRIVE)
         if not google_token_data:
             raise TokenError(
-                error="insufficient_scope",
+                error=ERROR_INSUFFICIENT_SCOPE,
                 error_description="Google Drive account not linked",
             )
 
         # Check if Google Drive token needs refresh
-        if await self.token_store.is_external_token_expired(user_id, "google_drive"):
+        if await self.token_store.is_external_token_expired(user_id, PROVIDER_GOOGLE_DRIVE):
             # Refresh Google Drive token
             refresh_token = google_token_data.get("refresh_token")
             if refresh_token:
@@ -429,18 +444,18 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
                         user_id=user_id,
                         access_token=new_token["access_token"],
                         refresh_token=new_token.get("refresh_token", refresh_token),
-                        expires_in=new_token.get("expires_in", 3600),
-                        provider="google_drive",
+                        expires_in=new_token.get("expires_in", DEFAULT_TOKEN_EXPIRY),
+                        provider=PROVIDER_GOOGLE_DRIVE,
                     )
-                    google_token_data = await self.token_store.get_external_token(user_id, "google_drive")
+                    google_token_data = await self.token_store.get_external_token(user_id, PROVIDER_GOOGLE_DRIVE)
                 except Exception as e:
                     raise TokenError(
-                        error="invalid_token",
+                        error=ERROR_INVALID_TOKEN,
                         error_description=f"Failed to refresh Google Drive token: {e}",
                     )
             else:
                 raise TokenError(
-                    error="invalid_token",
+                    error=ERROR_INVALID_TOKEN,
                     error_description="Google Drive token expired and no refresh token available",
                 )
 
@@ -467,7 +482,7 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
 
         if not redirect_uris:
             raise RegistrationError(
-                error="invalid_redirect_uri",
+                error=ERROR_INVALID_REDIRECT_URI,
                 error_description="At least one redirect URI required",
             )
 
@@ -526,8 +541,8 @@ class GoogleDriveOAuthProvider(BaseOAuthProvider):
             user_id=user_id,
             access_token=google_token["access_token"],
             refresh_token=google_token.get("refresh_token"),
-            expires_in=google_token.get("expires_in", 3600),
-            provider="google_drive",
+            expires_in=google_token.get("expires_in", DEFAULT_TOKEN_EXPIRY),
+            provider=PROVIDER_GOOGLE_DRIVE,
         )
 
         # Create MCP authorization code

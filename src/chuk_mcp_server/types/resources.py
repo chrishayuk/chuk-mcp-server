@@ -147,17 +147,17 @@ class ResourceHandler:
         if mime_type == "application/json":
             if isinstance(result, dict | list):
                 # 🚀 Use orjson for 2-3x faster JSON serialization
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
             else:
-                return orjson.dumps(result).decode()
+                return orjson.dumps(result).decode()  # type: ignore[no-any-return]
         elif mime_type == "text/markdown" or mime_type == "text/plain":
             if isinstance(result, dict | list):
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
             return str(result)
         else:
             # For unknown MIME types, convert to string with orjson
             if isinstance(result, dict | list):
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
             else:
                 return str(result)
 

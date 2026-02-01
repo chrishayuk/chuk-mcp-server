@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/types/base.py
 """
 Base Types - Direct chuk_mcp imports with no conversion layers
 

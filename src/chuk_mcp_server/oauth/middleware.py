@@ -12,6 +12,7 @@ Adds OAuth endpoints to any MCP server:
 Works with any OAuth provider that implements BaseOAuthProvider.
 """
 
+import html
 import logging
 from typing import Any, Literal, cast
 from urllib.parse import urlencode
@@ -20,6 +21,33 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .base_provider import BaseOAuthProvider
+from .constants import (
+    AUTH_METHOD_CLIENT_SECRET_BASIC,
+    AUTH_METHOD_CLIENT_SECRET_POST,
+    AUTH_METHOD_NONE,
+    CODE_CHALLENGE_PLAIN,
+    CODE_CHALLENGE_S256,
+    ERROR_INVALID_CLIENT_METADATA,
+    ERROR_INVALID_REQUEST,
+    ERROR_SERVER_ERROR,
+    ERROR_UNSUPPORTED_GRANT_TYPE,
+    GRANT_AUTHORIZATION_CODE,
+    GRANT_REFRESH_TOKEN,
+    PARAM_CLIENT_ID,
+    PARAM_CODE,
+    PARAM_CODE_VERIFIER,
+    PARAM_GRANT_TYPE,
+    PARAM_REDIRECT_URI,
+    PARAM_REFRESH_TOKEN,
+    PARAM_RESPONSE_TYPE,
+    PARAM_STATE,
+    PATH_AUTHORIZATION_SERVER_METADATA,
+    PATH_AUTHORIZE,
+    PATH_PROTECTED_RESOURCE,
+    PATH_REGISTER,
+    PATH_TOKEN,
+    RESPONSE_TYPE_CODE,
+)
 from .models import AuthorizationParams
 
 logger = logging.getLogger(__name__)
@@ -69,31 +97,31 @@ class OAuthMiddleware:
         """Register OAuth endpoints with the MCP server."""
 
         # OAuth server metadata (RFC 8414)
-        @self.mcp.endpoint("/.well-known/oauth-authorization-server", methods=["GET"])  # type: ignore[untyped-decorator]
+        @self.mcp.endpoint(PATH_AUTHORIZATION_SERVER_METADATA, methods=["GET"])  # type: ignore[untyped-decorator]
         async def oauth_metadata(request: Request) -> JSONResponse:
             """OAuth Authorization Server Metadata endpoint."""
             return await self._metadata_endpoint(request)
 
         # Protected Resource Metadata (RFC 9728)
-        @self.mcp.endpoint("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[untyped-decorator]
+        @self.mcp.endpoint(PATH_PROTECTED_RESOURCE, methods=["GET"])  # type: ignore[untyped-decorator]
         async def protected_resource_metadata(request: Request) -> JSONResponse:
             """OAuth Protected Resource Metadata endpoint."""
             return await self._protected_resource_endpoint(request)
 
         # OAuth authorize endpoint
-        @self.mcp.endpoint("/oauth/authorize", methods=["GET"])  # type: ignore[untyped-decorator]
+        @self.mcp.endpoint(PATH_AUTHORIZE, methods=["GET"])  # type: ignore[untyped-decorator]
         async def oauth_authorize(request: Request) -> Any:
             """OAuth authorization endpoint."""
             return await self._authorize_endpoint(request)
 
         # OAuth token endpoint
-        @self.mcp.endpoint("/oauth/token", methods=["POST"])  # type: ignore[untyped-decorator]
+        @self.mcp.endpoint(PATH_TOKEN, methods=["POST"])  # type: ignore[untyped-decorator]
         async def oauth_token(request: Request) -> JSONResponse:
             """OAuth token endpoint."""
             return await self._token_endpoint(request)
 
         # Client registration endpoint (RFC 7591)
-        @self.mcp.endpoint("/oauth/register", methods=["POST"])  # type: ignore[untyped-decorator]
+        @self.mcp.endpoint(PATH_REGISTER, methods=["POST"])  # type: ignore[untyped-decorator]
         async def oauth_register(request: Request) -> JSONResponse:
             """Dynamic client registration endpoint."""
             return await self._register_endpoint(request)
@@ -116,17 +144,17 @@ class OAuthMiddleware:
         """
         metadata = {
             "issuer": self.oauth_server_url,
-            "authorization_endpoint": f"{self.oauth_server_url}/oauth/authorize",
-            "token_endpoint": f"{self.oauth_server_url}/oauth/token",
-            "registration_endpoint": f"{self.oauth_server_url}/oauth/register",
-            "grant_types_supported": ["authorization_code", "refresh_token"],
-            "response_types_supported": ["code"],
+            "authorization_endpoint": f"{self.oauth_server_url}{PATH_AUTHORIZE}",
+            "token_endpoint": f"{self.oauth_server_url}{PATH_TOKEN}",
+            "registration_endpoint": f"{self.oauth_server_url}{PATH_REGISTER}",
+            "grant_types_supported": [GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN],
+            "response_types_supported": [RESPONSE_TYPE_CODE],
             "token_endpoint_auth_methods_supported": [
-                "client_secret_post",
-                "client_secret_basic",
-                "none",
+                AUTH_METHOD_CLIENT_SECRET_POST,
+                AUTH_METHOD_CLIENT_SECRET_BASIC,
+                AUTH_METHOD_NONE,
             ],
-            "code_challenge_methods_supported": ["S256", "plain"],
+            "code_challenge_methods_supported": [CODE_CHALLENGE_S256, CODE_CHALLENGE_PLAIN],
         }
 
         # Add optional metadata
@@ -175,15 +203,15 @@ class OAuthMiddleware:
             # Create AuthorizationParams object
             code_challenge_method_value = params.get("code_challenge_method")
             code_challenge_method: Literal["S256", "plain"] | None = None
-            if code_challenge_method_value in ("S256", "plain"):
+            if code_challenge_method_value in (CODE_CHALLENGE_S256, CODE_CHALLENGE_PLAIN):
                 code_challenge_method = cast(Literal["S256", "plain"], code_challenge_method_value)
 
             auth_params = AuthorizationParams(
-                response_type=params.get("response_type", "code"),
-                client_id=params["client_id"],
-                redirect_uri=params["redirect_uri"],
+                response_type=params.get(PARAM_RESPONSE_TYPE, RESPONSE_TYPE_CODE),
+                client_id=params[PARAM_CLIENT_ID],
+                redirect_uri=params[PARAM_REDIRECT_URI],
                 scope=params.get("scope"),
-                state=params.get("state"),
+                state=params.get(PARAM_STATE),
                 code_challenge=params.get("code_challenge"),
                 code_challenge_method=code_challenge_method,
             )
@@ -198,25 +226,44 @@ class OAuthMiddleware:
 
             # We have authorization code, redirect back to client
             redirect_params = {
-                "code": result["code"],
+                PARAM_CODE: result["code"],
             }
-            if result.get("state"):
-                redirect_params["state"] = result["state"]
+            if result.get(PARAM_STATE):
+                redirect_params[PARAM_STATE] = result[PARAM_STATE]
 
             redirect_url = f"{auth_params.redirect_uri}?{urlencode(redirect_params)}"
             return RedirectResponse(redirect_url)
 
         except Exception as e:
-            # Return error response
-            error_params = {
-                "error": "server_error",
-                "error_description": str(e),
-            }
-            if params.get("state"):
-                error_params["state"] = params["state"]
+            # Attempt to redirect with error, but only if redirect_uri is available
+            try:
+                redirect_uri = params.get(PARAM_REDIRECT_URI)
+                if redirect_uri:
+                    error_params = {
+                        "error": ERROR_SERVER_ERROR,
+                        "error_description": str(e),
+                    }
+                    if params.get(PARAM_STATE):
+                        error_params[PARAM_STATE] = params[PARAM_STATE]
 
-            error_url = f"{params['redirect_uri']}?{urlencode(error_params)}"
-            return RedirectResponse(error_url)
+                    error_url = f"{redirect_uri}?{urlencode(error_params)}"
+                    return RedirectResponse(error_url)
+            except Exception:
+                pass
+
+            # Fallback: render error as HTML page (no redirect)
+            return HTMLResponse(
+                f"""
+                <html>
+                    <head><title>Authorization Error</title></head>
+                    <body>
+                        <h1>Authorization Error</h1>
+                        <p>{html.escape(str(e))}</p>
+                    </body>
+                </html>
+                """,
+                status_code=400,
+            )
 
     async def _token_endpoint(self, request: Request) -> JSONResponse:
         """
@@ -234,25 +281,25 @@ class OAuthMiddleware:
                 val = form_data.get(key)
                 return str(val) if val is not None else None
 
-            grant_type = get_form_str("grant_type")
+            grant_type = get_form_str(PARAM_GRANT_TYPE)
 
             logger.debug(f"🔐 Token exchange request - grant_type: {grant_type}")
-            logger.debug(f"🔐 Token exchange - client_id: {get_form_str('client_id')}")
-            code_val = get_form_str("code")
+            logger.debug(f"🔐 Token exchange - client_id: {get_form_str(PARAM_CLIENT_ID)}")
+            code_val = get_form_str(PARAM_CODE)
             logger.debug(f"🔐 Token exchange - code: {code_val[:20]}..." if code_val else "no code")
-            logger.debug(f"🔐 Token exchange - redirect_uri: {get_form_str('redirect_uri')}")
-            logger.debug(f"🔐 Token exchange - code_verifier present: {bool(get_form_str('code_verifier'))}")
+            logger.debug(f"🔐 Token exchange - redirect_uri: {get_form_str(PARAM_REDIRECT_URI)}")
+            logger.debug(f"🔐 Token exchange - code_verifier present: {bool(get_form_str(PARAM_CODE_VERIFIER))}")
 
-            if grant_type == "authorization_code":
+            if grant_type == GRANT_AUTHORIZATION_CODE:
                 # Exchange authorization code for token
-                code = get_form_str("code")
-                client_id = get_form_str("client_id")
-                redirect_uri = get_form_str("redirect_uri")
-                code_verifier = get_form_str("code_verifier")
+                code = get_form_str(PARAM_CODE)
+                client_id = get_form_str(PARAM_CLIENT_ID)
+                redirect_uri = get_form_str(PARAM_REDIRECT_URI)
+                code_verifier = get_form_str(PARAM_CODE_VERIFIER)
 
                 if not code or not client_id or not redirect_uri:
                     return JSONResponse(
-                        {"error": "invalid_request", "error_description": "Missing required parameters"},
+                        {"error": ERROR_INVALID_REQUEST, "error_description": "Missing required parameters"},
                         status_code=400,
                     )
 
@@ -262,15 +309,15 @@ class OAuthMiddleware:
                     redirect_uri=redirect_uri,
                     code_verifier=code_verifier,
                 )
-            elif grant_type == "refresh_token":
+            elif grant_type == GRANT_REFRESH_TOKEN:
                 # Refresh access token
-                refresh_token = get_form_str("refresh_token")
-                client_id = get_form_str("client_id")
+                refresh_token = get_form_str(PARAM_REFRESH_TOKEN)
+                client_id = get_form_str(PARAM_CLIENT_ID)
                 scope = get_form_str("scope")
 
                 if not refresh_token or not client_id:
                     return JSONResponse(
-                        {"error": "invalid_request", "error_description": "Missing required parameters"},
+                        {"error": ERROR_INVALID_REQUEST, "error_description": "Missing required parameters"},
                         status_code=400,
                     )
 
@@ -282,7 +329,7 @@ class OAuthMiddleware:
             else:
                 return JSONResponse(
                     {
-                        "error": "unsupported_grant_type",
+                        "error": ERROR_UNSUPPORTED_GRANT_TYPE,
                         "error_description": f"Grant type {grant_type} not supported",
                     },
                     status_code=400,
@@ -306,7 +353,7 @@ class OAuthMiddleware:
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
             return JSONResponse(
                 {
-                    "error": "invalid_request",
+                    "error": ERROR_INVALID_REQUEST,
                     "error_description": str(e),
                 },
                 status_code=400,
@@ -338,7 +385,7 @@ class OAuthMiddleware:
         except Exception as e:
             return JSONResponse(
                 {
-                    "error": "invalid_client_metadata",
+                    "error": ERROR_INVALID_CLIENT_METADATA,
                     "error_description": str(e),
                 },
                 status_code=400,
@@ -364,9 +411,9 @@ class OAuthMiddleware:
                     <html>
                         <head><title>Authorization Failed</title></head>
                         <body>
-                            <h1>{self.provider_name} Authorization Failed</h1>
-                            <p>Error: {error}</p>
-                            <p>Description: {request.query_params.get("error_description", "Unknown error")}</p>
+                            <h1>{html.escape(self.provider_name)} Authorization Failed</h1>
+                            <p>Error: {html.escape(error)}</p>
+                            <p>Description: {html.escape(request.query_params.get("error_description", "Unknown error"))}</p>
                         </body>
                     </html>
                     """,
@@ -398,26 +445,28 @@ class OAuthMiddleware:
 
             # Redirect back to MCP client with authorization code
             redirect_params = {
-                "code": result["code"],
+                PARAM_CODE: result["code"],
             }
-            if result.get("state"):
-                redirect_params["state"] = result["state"]
+            if result.get(PARAM_STATE):
+                redirect_params[PARAM_STATE] = result[PARAM_STATE]
 
             redirect_url = f"{result['redirect_uri']}?{urlencode(redirect_params)}"
 
             # Return success page with auto-redirect
+            escaped_redirect = html.escape(redirect_url)
+            escaped_provider = html.escape(self.provider_name)
             return HTMLResponse(
                 f"""
                 <html>
                     <head>
                         <title>Authorization Successful</title>
-                        <meta http-equiv="refresh" content="3;url={redirect_url}">
+                        <meta http-equiv="refresh" content="3;url={escaped_redirect}">
                     </head>
                     <body>
-                        <h1>{self.provider_name} Authorization Successful!</h1>
-                        <p>Your {self.provider_name} account has been linked.</p>
+                        <h1>{escaped_provider} Authorization Successful!</h1>
+                        <p>Your {escaped_provider} account has been linked.</p>
                         <p>Redirecting back to the application...</p>
-                        <p>If not redirected, <a href="{redirect_url}">click here</a>.</p>
+                        <p>If not redirected, <a href="{escaped_redirect}">click here</a>.</p>
                     </body>
                 </html>
                 """
@@ -430,7 +479,7 @@ class OAuthMiddleware:
                     <head><title>Error</title></head>
                     <body>
                         <h1>Authorization Error</h1>
-                        <p>{str(e)}</p>
+                        <p>{html.escape(str(e))}</p>
                     </body>
                 </html>
                 """,

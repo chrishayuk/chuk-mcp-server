@@ -11,6 +11,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -44,7 +48,7 @@ jobs:
             echo "Error: Tag version (${{ steps.version.outputs.version }}) does not match pyproject.toml version ($PYPROJECT_VERSION)"
             exit 1
           fi
-          echo "✓ Version matches: ${{ steps.version.outputs.version }}"
+          echo "Version matches: ${{ steps.version.outputs.version }}"
 
       - name: Get previous tag
         id: previous_tag
@@ -82,12 +86,10 @@ jobs:
           cat changelog.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Release ${{ steps.version.outputs.tag }}
           body_path: changelog.md
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

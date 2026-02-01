@@ -8,13 +8,26 @@ communicating with MCP clients over stdin/stdout.
 """
 
 import asyncio
-import json
 import logging
 import sys
 from typing import Any, TextIO
 
 import orjson
 
+from .constants import (
+    DEFAULT_ENCODING,
+    JSONRPC_KEY,
+    JSONRPC_VERSION,
+    KEY_CLIENT_INFO,
+    KEY_ERROR,
+    KEY_ID,
+    KEY_METHOD,
+    KEY_PARAMS,
+    KEY_PROTOCOL_VERSION,
+    MCP_PROTOCOL_VERSION_2025_03,
+    JsonRpcError,
+    McpMethod,
+)
 from .protocol import MCPProtocolHandler
 
 logger = logging.getLogger(__name__)
@@ -73,7 +86,7 @@ class StdioTransport:
                     break
 
                 # Decode and add to buffer
-                buffer += chunk.decode("utf-8")
+                buffer += chunk.decode(DEFAULT_ENCODING)
 
                 # Process complete messages
                 while "\n" in buffer:
@@ -90,9 +103,8 @@ class StdioTransport:
                 # Stdio transport cancelled
                 break
             except Exception as e:
-                # Error in stdio listener - suppress logging in stdio mode
-                pass
-                await self._send_error(None, -32700, f"Parse error: {str(e)}")
+                logger.debug(f"Error in stdio listener: {e}")
+                await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
 
     async def _handle_message(self, message: str) -> None:
         """
@@ -106,16 +118,16 @@ class StdioTransport:
             request_data = orjson.loads(message)
 
             # Extract method and params
-            method = request_data.get("method")
-            params = request_data.get("params", {})
-            request_id = request_data.get("id")
+            method = request_data.get(KEY_METHOD)
+            params = request_data.get(KEY_PARAMS, {})
+            request_id = request_data.get(KEY_ID)
 
             # Debug: Received {method}
 
             # Handle initialize specially to create session
-            if method == "initialize":
-                client_info = params.get("clientInfo", {})
-                protocol_version = params.get("protocolVersion", "2025-03-26")
+            if method == McpMethod.INITIALIZE:
+                client_info = params.get(KEY_CLIENT_INFO, {})
+                protocol_version = params.get(KEY_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION_2025_03)
                 session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
                 self.session_id = session_id
                 # Created stdio session
@@ -127,15 +139,13 @@ class StdioTransport:
             if request_id is not None and response:
                 await self._send_response(response)
 
-        except json.JSONDecodeError as e:
-            # Invalid JSON - send error response
-            pass
-            await self._send_error(None, -32700, f"Parse error: {str(e)}")
+        except (orjson.JSONDecodeError, ValueError) as e:
+            logger.debug(f"Invalid JSON in stdio message: {e}")
+            await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
         except Exception as e:
-            # Error handling message - send error response
-            pass
-            request_id = request_data.get("id") if "request_data" in locals() else None
-            await self._send_error(request_id, -32603, f"Internal error: {str(e)}")
+            logger.debug(f"Error handling stdio message: {e}")
+            request_id = request_data.get(KEY_ID) if "request_data" in locals() else None
+            await self._send_error(request_id, JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
 
     async def _send_response(self, response: dict[str, Any]) -> None:
         """
@@ -146,7 +156,7 @@ class StdioTransport:
         """
         try:
             # Serialize with orjson for performance
-            json_str = orjson.dumps(response).decode("utf-8")
+            json_str = orjson.dumps(response).decode(DEFAULT_ENCODING)
 
             # Write to stdout with newline
             if self.writer:
@@ -155,9 +165,8 @@ class StdioTransport:
 
             # Sent response
 
-        except Exception:
-            # Error sending response - critical failure
-            pass
+        except Exception as e:
+            logger.error(f"Critical error sending stdio response: {e}")
 
     async def _send_error(self, request_id: Any, code: int, message: str) -> None:
         """
@@ -168,7 +177,11 @@ class StdioTransport:
             code: JSON-RPC error code
             message: Error message
         """
-        error_response = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+        error_response = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: request_id,
+            KEY_ERROR: {"code": code, "message": message},
+        }
         await self._send_response(error_response)
 
     async def stop(self) -> None:
@@ -251,6 +264,8 @@ class StdioSyncTransport:
         """Run the STDIO transport synchronously."""
         logger.info("🔌 Starting MCP STDIO transport (sync)")
 
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             while True:
                 try:
@@ -264,22 +279,23 @@ class StdioSyncTransport:
                         continue
 
                     # Process message
-                    asyncio.run(self._handle_message(line))
+                    loop.run_until_complete(self._handle_message(line))
 
                 except KeyboardInterrupt:
                     break
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}")
                     error_response = {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32603, "message": f"Transport error: {str(e)}"},
+                        JSONRPC_KEY: JSONRPC_VERSION,
+                        KEY_ID: None,
+                        KEY_ERROR: {"code": JsonRpcError.INTERNAL_ERROR, "message": f"Transport error: {str(e)}"},
                     }
                     self._send_response(error_response)
 
         except Exception as e:
             logger.error(f"STDIO transport error: {e}")
         finally:
+            loop.close()
             logger.info("🔌 STDIO transport stopped")
 
     async def _handle_message(self, line: str) -> None:
@@ -290,7 +306,7 @@ class StdioSyncTransport:
             line: Raw JSON-RPC message string
         """
         try:
-            message = json.loads(line)
+            message = orjson.loads(line)
 
             # Process with protocol handler
             response, new_session_id = await self.protocol.handle_request(message, self.session_id)
@@ -303,12 +319,12 @@ class StdioSyncTransport:
             if response:
                 self._send_response(response)
 
-        except json.JSONDecodeError as e:
+        except orjson.JSONDecodeError as e:
             logger.error(f"Invalid JSON: {e}")
-            self._send_error(-32700, "Parse error")
+            self._send_error(JsonRpcError.PARSE_ERROR, "Parse error")
         except Exception as e:
             logger.error(f"Message handling error: {e}")
-            self._send_error(-32603, f"Internal error: {str(e)}")
+            self._send_error(JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
 
     def _send_response(self, response: dict[str, Any]) -> None:
         """
@@ -318,7 +334,7 @@ class StdioSyncTransport:
             response: Response dictionary to send
         """
         try:
-            response_line = json.dumps(response, separators=(",", ":"))
+            response_line = orjson.dumps(response).decode(DEFAULT_ENCODING)
             print(response_line, flush=True)
 
         except Exception as e:
@@ -333,5 +349,9 @@ class StdioSyncTransport:
             message: Error message
             request_id: The request ID (if available)
         """
-        error_response = {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+        error_response = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: request_id,
+            KEY_ERROR: {"code": code, "message": message},
+        }
         self._send_response(error_response)

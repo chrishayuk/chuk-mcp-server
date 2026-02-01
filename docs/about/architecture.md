@@ -303,7 +303,7 @@ from chuk_mcp_server.transport.base import Transport
 class MyTransport(Transport):
     async def start(self):
         ...
-    
+
     async def handle_request(self, request):
         ...
 ```
@@ -318,7 +318,7 @@ from chuk_mcp_server.oauth import BaseOAuthProvider
 class MyProvider(BaseOAuthProvider):
     async def authorize(self, params):
         ...
-    
+
     async def exchange_authorization_code(self, code):
         ...
 ```

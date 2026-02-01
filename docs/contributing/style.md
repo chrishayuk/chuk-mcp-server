@@ -125,7 +125,7 @@ def complex_function(param1: str, param2: int) -> dict[str, Any]:
     """
     if param2 < 0:
         raise ValueError("param2 must be non-negative")
-    
+
     return {"status": "success", "data": param1 * param2}
 ```
 
@@ -158,15 +158,15 @@ from chuk_mcp_server import ChukMCPServer
 
 class TestFeature:
     """Test suite for feature."""
-    
+
     def test_basic_case(self):
         """Test basic functionality."""
         assert True
-    
+
     def test_edge_case(self):
         """Test edge cases."""
         assert True
-    
+
     @pytest.mark.asyncio
     async def test_async_case(self):
         """Test async functionality."""
@@ -270,10 +270,10 @@ refactor/type-system
 def process_file(path: str) -> dict:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
-    
+
     if not path.endswith('.json'):
         raise ValueError(f"Expected JSON file, got: {path}")
-    
+
     try:
         with open(path) as f:
             return json.load(f)

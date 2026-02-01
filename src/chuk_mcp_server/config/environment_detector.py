@@ -10,25 +10,30 @@ from pathlib import Path
 from typing import Any
 
 from .base import ConfigDetector
+from .constants import (
+    CI_INDICATORS,
+    DOCKERENV_PATH,
+    ENV_AWS_LAMBDA,
+    ENV_AZURE_FUNCTIONS,
+    ENV_CONTAINER,
+    ENV_ENV,
+    ENV_ENVIRONMENT,
+    ENV_GCP_FUNCTION,
+    ENV_KUBERNETES_HOST,
+    ENV_MCP_STDIO,
+    ENV_MCP_TRANSPORT,
+    ENV_NETLIFY,
+    ENV_NODE_ENV,
+    ENV_PORT,
+    ENV_USE_STDIO,
+    ENV_VERCEL,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class EnvironmentDetector(ConfigDetector):
     """Enhanced environment detector with cloud integration."""
-
-    CI_INDICATORS = {
-        "CI",
-        "CONTINUOUS_INTEGRATION",
-        "GITHUB_ACTIONS",
-        "GITLAB_CI",
-        "JENKINS_HOME",
-        "TRAVIS",
-        "CIRCLECI",
-        "BUILDKITE",
-        "DRONE",
-        "BAMBOO_BUILD_KEY",
-    }
 
     def __init__(self):
         super().__init__()
@@ -59,7 +64,7 @@ class EnvironmentDetector(ConfigDetector):
             return cloud_env
 
         # 5. PORT env var implies production
-        if self.get_env_var("PORT"):
+        if self.get_env_var(ENV_PORT):
             logger.debug("PORT environment variable detected; assuming production")
             return "production"
 
@@ -80,12 +85,12 @@ class EnvironmentDetector(ConfigDetector):
     def detect_transport_mode(self) -> str:
         """Detect the transport mode (stdio or http)."""
         # Check for explicit transport mode env var
-        transport = self.get_env_var("MCP_TRANSPORT")
+        transport = self.get_env_var(ENV_MCP_TRANSPORT)
         if transport:
             return transport.lower()
 
         # Check if running with stdio mode indicators
-        if self.get_env_var("MCP_STDIO") or self.get_env_var("USE_STDIO"):
+        if self.get_env_var(ENV_MCP_STDIO) or self.get_env_var(ENV_USE_STDIO):
             return "stdio"
 
         # Check if we're being piped or redirected (common for stdio)
@@ -115,11 +120,11 @@ class EnvironmentDetector(ConfigDetector):
     def _is_serverless_environment(self) -> bool:
         """Check for serverless environment vars."""
         serverless_vars = [
-            "AWS_LAMBDA_FUNCTION_NAME",
-            "GOOGLE_CLOUD_FUNCTION_NAME",
-            "AZURE_FUNCTIONS_ENVIRONMENT",
-            "VERCEL",
-            "NETLIFY",
+            ENV_AWS_LAMBDA,
+            ENV_GCP_FUNCTION,
+            ENV_AZURE_FUNCTIONS,
+            ENV_VERCEL,
+            ENV_NETLIFY,
         ]
         return any(self.get_env_var(var) for var in serverless_vars)
 
@@ -134,7 +139,9 @@ class EnvironmentDetector(ConfigDetector):
 
     def _get_explicit_environment(self) -> str:
         """Check NODE_ENV, ENV, ENVIRONMENT for explicit setting."""
-        env_var = self.get_env_var("NODE_ENV", self.get_env_var("ENV", self.get_env_var("ENVIRONMENT", ""))).lower()
+        env_var = self.get_env_var(
+            ENV_NODE_ENV, self.get_env_var(ENV_ENV, self.get_env_var(ENV_ENVIRONMENT, ""))
+        ).lower()
         if env_var in ("production", "prod"):
             return "production"
         if env_var in ("staging", "stage"):
@@ -147,7 +154,7 @@ class EnvironmentDetector(ConfigDetector):
 
     def _is_ci_environment(self) -> bool:
         """Detect CI/CD via common env vars."""
-        return any(self.get_env_var(var) for var in self.CI_INDICATORS)
+        return any(self.get_env_var(var) for var in CI_INDICATORS)
 
     def _is_containerized(self) -> bool:
         """Detect container via detector or filesystem hints."""
@@ -158,9 +165,9 @@ class EnvironmentDetector(ConfigDetector):
         except ImportError:
             # Fallback: /.dockerenv or KUBERNETES_SERVICE_HOST or CONTAINER
             return bool(
-                Path("/.dockerenv").exists()
-                or self.get_env_var("KUBERNETES_SERVICE_HOST")
-                or self.get_env_var("CONTAINER")
+                Path(DOCKERENV_PATH).exists()
+                or self.get_env_var(ENV_KUBERNETES_HOST)
+                or self.get_env_var(ENV_CONTAINER)
             )
 
     def _is_development_environment(self) -> bool:
@@ -172,7 +179,7 @@ class EnvironmentDetector(ConfigDetector):
             if (cwd / ".git").exists():
                 return True
             dev_files = ["package.json", "pyproject.toml", "requirements.txt", "Pipfile"]
-            if any((cwd / f).exists() for f in dev_files) and not self.get_env_var("PORT"):
+            if any((cwd / f).exists() for f in dev_files) and not self.get_env_var(ENV_PORT):
                 return True
         except Exception as e:
             logger.debug(f"Error checking development indicators: {e}")
@@ -184,9 +191,9 @@ class EnvironmentDetector(ConfigDetector):
         return {
             "environment": self.detect(),
             "explicit_env_vars": {
-                "NODE_ENV": self.get_env_var("NODE_ENV"),
-                "ENV": self.get_env_var("ENV"),
-                "ENVIRONMENT": self.get_env_var("ENVIRONMENT"),
+                ENV_NODE_ENV: self.get_env_var(ENV_NODE_ENV),
+                ENV_ENV: self.get_env_var(ENV_ENV),
+                ENV_ENVIRONMENT: self.get_env_var(ENV_ENVIRONMENT),
             },
             "ci_detected": self._is_ci_environment(),
             "serverless_detected": self._is_serverless_environment(),

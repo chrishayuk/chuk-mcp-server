@@ -65,7 +65,7 @@ class TestMCPEndpoint:
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert response.headers["Access-Control-Allow-Methods"] == "GET, POST, OPTIONS"
         assert response.headers["Access-Control-Allow-Headers"] == "*"
-        assert response.headers["Access-Control-Allow-Credentials"] == "true"
+        assert "Access-Control-Allow-Credentials" not in response.headers
 
     @pytest.mark.asyncio
     async def test_handle_request_get_server_info(self):
@@ -333,7 +333,7 @@ class TestMCPEndpoint:
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert response.headers["Access-Control-Allow-Methods"] == "GET, POST, OPTIONS"
         assert response.headers["Access-Control-Allow-Headers"] == "*"
-        assert response.headers["Access-Control-Allow-Credentials"] == "true"
+        assert "Access-Control-Allow-Credentials" not in response.headers
 
     def test_sse_headers_without_session(self):
         """Test SSE headers generation without session ID."""
@@ -440,4 +440,4 @@ class TestMCPEndpoint:
             assert response.headers["Mcp-Session-Id"] == "test-session-123"
 
             # Verify session creation logging
-            mock_logger.info.assert_called_with("🔑 Created SSE session: test-ses...")
+            mock_logger.info.assert_called_with("Created SSE session: test-ses...")

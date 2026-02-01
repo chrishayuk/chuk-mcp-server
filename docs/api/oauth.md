@@ -28,16 +28,16 @@ from chuk_mcp_server.oauth import BaseOAuthProvider
 class MyProvider(BaseOAuthProvider):
     async def authorize(self, params):
         ...
-    
+
     async def exchange_authorization_code(self, code, ...):
         ...
-    
+
     async def exchange_refresh_token(self, refresh_token, ...):
         ...
-    
+
     async def validate_access_token(self, token):
         ...
-    
+
     async def register_client(self, metadata):
         ...
 ```

@@ -10,6 +10,10 @@ on:
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -22,19 +26,21 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git info
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.11'
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install dependencies
         run: |
-          pip install mkdocs-material
-          pip install mkdocstrings[python]
-          pip install mkdocs-git-revision-date-localized-plugin
+          uv pip install mkdocs-material mkdocstrings[python] mkdocs-git-revision-date-localized-plugin
 
       - name: Build docs
-        run: mkdocs build --strict
+        run: uv run mkdocs build --strict
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        run: uv run mkdocs gh-deploy --force

@@ -6,25 +6,6 @@ Provides thread-safe, async-safe context storage for request-scoped data includi
 - User ID (OAuth user identifier)
 - Progress token (for progress notifications)
 - Custom metadata
-
-Inspired by chuk-mcp-runtime's MCPRequestContext pattern.
-
-Usage:
-    # In protocol handler (server framework)
-    from chuk_mcp_server.context import RequestContext, set_session_id, set_user_id
-
-    async with RequestContext(session_id="abc123", user_id="user456"):
-        # Context is available throughout request lifecycle
-        await handle_tool_call()
-
-    # In application code (tools, resources, etc.)
-    from chuk_mcp_server.context import get_session_id, get_user_id, require_user_id
-
-    @mcp.tool()
-    async def my_tool():
-        user_id = require_user_id()  # Raises if not authenticated
-        session_id = get_session_id()  # Returns None if not in session
-        ...
 """
 
 from contextvars import ContextVar
@@ -54,13 +35,6 @@ class RequestContext:
 
     Automatically manages context setup and cleanup for request handling.
     Supports nested contexts (inner context takes precedence).
-
-    Example:
-        async with RequestContext(session_id="abc123", user_id="user456"):
-            # Context is set for this block
-            user_id = get_user_id()  # Returns "user456"
-            ...
-        # Context is restored to previous state
     """
 
     def __init__(

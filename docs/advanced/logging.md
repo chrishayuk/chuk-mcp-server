@@ -77,7 +77,7 @@ mcp = ChukMCPServer(name="my-server")
 
 @mcp.tool
 def process_data(data: dict):
-    logger.info("processing_data", 
+    logger.info("processing_data",
                 data_size=len(data),
                 user_id=data.get("user_id"))
     return {"processed": True}
@@ -174,16 +174,16 @@ mcp = ChukMCPServer(name="my-server")
 @mcp.tool
 def slow_operation():
     start = time.time()
-    
+
     # Do work
     result = compute_something()
-    
+
     duration = time.time() - start
     logger.info(f"Operation took {duration:.2f}s")
-    
+
     if duration > 1.0:
         logger.warning(f"Slow operation: {duration:.2f}s")
-    
+
     return result
 
 mcp.run()

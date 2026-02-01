@@ -152,7 +152,7 @@ This is an example MCP server running over STDIO transport.
 ## Available Tools
 
 - `greet`: Greet someone with different styles
-- `calculate`: Safely evaluate mathematical expressions  
+- `calculate`: Safely evaluate mathematical expressions
 - `system_info`: Get basic system information
 - `create_data_structure`: Create and manipulate data structures
 

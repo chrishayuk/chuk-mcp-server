@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/types/__init__.py
 """
 Types - Modular type system with clean public API
 

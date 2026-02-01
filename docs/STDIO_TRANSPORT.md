@@ -120,27 +120,27 @@ def main():
     parser.add_argument("--stdio", action="store_true", help="Run in stdio mode")
     parser.add_argument("--port", type=int, default=8000, help="Port for HTTP mode")
     args = parser.parse_args()
-    
+
     # Create server
     mcp = ChukMCPServer(name="example-server")
-    
+
     # Register tools
     @mcp.tool
     def add(a: int, b: int) -> int:
         """Add two numbers."""
         return a + b
-    
+
     @mcp.tool
     def multiply(a: int, b: int) -> int:
         """Multiply two numbers."""
         return a * b
-    
+
     # Register resources
     @mcp.resource("example://data")
     def get_data() -> str:
         """Get example data."""
         return "Example data content"
-    
+
     # Run server
     if args.stdio:
         print("Starting in stdio mode...", file=sys.stderr)

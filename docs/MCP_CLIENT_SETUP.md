@@ -358,7 +358,7 @@ curl -s http://localhost:8000/health | jq .
 # STDIO mode with debug
 uvx chuk-mcp-server stdio --debug
 
-# HTTP mode with debug  
+# HTTP mode with debug
 uvx chuk-mcp-server http --debug --port 8000
 ```
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/endpoints/info.py
 """
 Server information endpoint with comprehensive documentation
 """
@@ -9,8 +8,24 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from ..protocol import MCPProtocolHandler
-
-INFO_HEADERS = {"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300"}
+from .constants import (
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_MARKDOWN,
+    ERROR_METHOD_NOT_ALLOWED,
+    HEADER_HOST,
+    HEADERS_INFO,
+    MCP_PROTOCOL_FULL,
+    MCP_TRANSPORT,
+    PATH_DOCS,
+    PATH_HEALTH,
+    PATH_INFO,
+    PATH_MCP,
+    PATH_PING,
+    PATH_VERSION,
+    POWERED_BY,
+    SERVER_NAME,
+    HttpStatus,
+)
 
 
 class InfoEndpoint:
@@ -20,21 +35,21 @@ class InfoEndpoint:
     async def handle_request(self, request: Request) -> Response:
         if request.method != "GET":
             return Response(
-                orjson.dumps({"error": "Method not allowed", "code": 405}),
-                status_code=405,
-                media_type="application/json",
-                headers=INFO_HEADERS,
+                orjson.dumps({"error": ERROR_METHOD_NOT_ALLOWED, "code": HttpStatus.METHOD_NOT_ALLOWED}),
+                status_code=HttpStatus.METHOD_NOT_ALLOWED,
+                media_type=CONTENT_TYPE_JSON,
+                headers=HEADERS_INFO,
             )
 
-        base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
+        base_url = f"{request.url.scheme}://{request.headers.get(HEADER_HOST, 'localhost')}"
 
         info = {
             "server": self.protocol.server_info.model_dump(),
             "capabilities": self.protocol.capabilities.model_dump(),
-            "protocol": {"version": "MCP 2025-03-26", "transport": "HTTP with SSE", "inspector_compatible": True},
+            "protocol": {"version": MCP_PROTOCOL_FULL, "transport": MCP_TRANSPORT, "inspector_compatible": True},
             "framework": {
-                "name": "ChukMCPServer",
-                "powered_by": "chuk_mcp",
+                "name": SERVER_NAME,
+                "powered_by": POWERED_BY,
                 "optimizations": [
                     "orjson for JSON serialization",
                     "Unix millisecond timestamps",
@@ -44,12 +59,12 @@ class InfoEndpoint:
                 ],
             },
             "endpoints": {
-                "mcp": f"{base_url}/mcp",
-                "health": f"{base_url}/health",
-                "ping": f"{base_url}/ping",
-                "version": f"{base_url}/version",
-                "info": f"{base_url}/",
-                "documentation": f"{base_url}/docs",
+                "mcp": f"{base_url}{PATH_MCP}",
+                "health": f"{base_url}{PATH_HEALTH}",
+                "ping": f"{base_url}{PATH_PING}",
+                "version": f"{base_url}{PATH_VERSION}",
+                "info": f"{base_url}{PATH_INFO}",
+                "documentation": f"{base_url}{PATH_DOCS}",
             },
             "tools": {"count": len(self.protocol.tools), "available": list(self.protocol.tools.keys())},
             "resources": {"count": len(self.protocol.resources), "available": list(self.protocol.resources.keys())},
@@ -60,16 +75,17 @@ class InfoEndpoint:
                 "mcp_protocol": "5,000+ RPS",
             },
             "quick_start": {
-                "health_check": f"curl {base_url}/health",
-                "ping_test": f"curl {base_url}/ping",
-                "version_info": f"curl {base_url}/version",
+                "health_check": f"curl {base_url}{PATH_HEALTH}",
+                "ping_test": f"curl {base_url}{PATH_PING}",
+                "version_info": f"curl {base_url}{PATH_VERSION}",
             },
         }
 
-        format_type = request.query_params.get("format", "json").lower()
+        format_type = getattr(request.state, "format_override", None) or request.query_params.get("format", "json")
+        format_type = format_type.lower()
 
         if format_type == "docs":
-            docs = f"""# {info["server"]["name"]} - ChukMCPServer
+            docs = f"""# {info["server"]["name"]} - {SERVER_NAME}
 
 **Version:** {info["server"]["version"]}
 **Protocol:** {info["protocol"]["version"]}
@@ -96,9 +112,9 @@ class InfoEndpoint:
 {info["quick_start"]["version_info"]}
 ```
 
-**Powered by ChukMCPServer** 🚀
+**Powered by {SERVER_NAME}** 🚀
 """
 
-            return Response(docs, media_type="text/markdown", headers=INFO_HEADERS)
+            return Response(docs, media_type=CONTENT_TYPE_MARKDOWN, headers=HEADERS_INFO)
         else:
-            return Response(orjson.dumps(info), media_type="application/json", headers=INFO_HEADERS)
+            return Response(orjson.dumps(info), media_type=CONTENT_TYPE_JSON, headers=HEADERS_INFO)

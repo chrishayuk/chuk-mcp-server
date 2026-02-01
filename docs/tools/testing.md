@@ -37,12 +37,12 @@ from unittest.mock import patch, AsyncMock
 async def test_api_call():
     """Test tool with mocked API."""
     tool = mcp._tool_handlers["fetch_weather"].func
-    
+
     with patch("httpx.AsyncClient.get") as mock_get:
         mock_response = AsyncMock()
         mock_response.json.return_value = {"temp": 72}
         mock_get.return_value = mock_response
-        
+
         result = await tool("San Francisco")
         assert result["temp"] == 72
 ```

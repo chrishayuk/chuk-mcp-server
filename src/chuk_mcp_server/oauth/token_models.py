@@ -43,7 +43,7 @@ class AuthorizationCodeData:
 
     def to_json_bytes(self) -> bytes:
         """🚀 Get orjson-serialized bytes for maximum performance."""
-        return orjson.dumps(self.to_dict())
+        return orjson.dumps(self.to_dict())  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AuthorizationCodeData":
@@ -84,7 +84,7 @@ class AccessTokenData:
 
     def to_json_bytes(self) -> bytes:
         """🚀 Get orjson-serialized bytes for maximum performance."""
-        return orjson.dumps(self.to_dict())
+        return orjson.dumps(self.to_dict())  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AccessTokenData":
@@ -124,7 +124,7 @@ class RefreshTokenData:
 
     def to_json_bytes(self) -> bytes:
         """🚀 Get orjson-serialized bytes for maximum performance."""
-        return orjson.dumps(self.to_dict())
+        return orjson.dumps(self.to_dict())  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RefreshTokenData":
@@ -191,7 +191,7 @@ class ExternalTokenData:
 
     def to_json_bytes(self) -> bytes:
         """🚀 Get orjson-serialized bytes for maximum performance."""
-        return orjson.dumps(self.to_dict())
+        return orjson.dumps(self.to_dict())  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ExternalTokenData":
@@ -244,7 +244,7 @@ class ClientData:
 
     def to_json_bytes(self) -> bytes:
         """🚀 Get orjson-serialized bytes for maximum performance."""
-        return orjson.dumps(self.to_dict())
+        return orjson.dumps(self.to_dict())  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ClientData":

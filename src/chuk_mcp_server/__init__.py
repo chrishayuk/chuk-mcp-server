@@ -61,6 +61,7 @@ Azure Functions:
 All platforms work with ZERO configuration! 🚀
 """
 
+import logging
 import sys
 from typing import Any
 
@@ -107,7 +108,7 @@ except ImportError:
     _ARTIFACTS_TYPES_AVAILABLE = False
 
     # Create stub functions that provide helpful error messages
-    from typing import Any, NoReturn
+    from typing import NoReturn
 
     def _artifact_not_available(*args: Any, **kwargs: Any) -> NoReturn:
         raise RuntimeError(
@@ -168,7 +169,7 @@ def Capabilities(**kwargs: Any) -> dict[str, Any]:
     return create_server_capabilities(**kwargs)  # type: ignore[no-any-return]
 
 
-__version__ = "2.1.0"  # Enhanced cloud support version
+__version__ = "0.16"
 
 # ============================================================================
 # Global Magic with Cloud Support
@@ -369,9 +370,8 @@ def _auto_export_cloud_handlers() -> None:
         current_module.cloud_handler = handler  # type: ignore
         current_module.mcp_handler = handler  # type: ignore
 
-    except Exception:
-        # Silently ignore errors during auto-export
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug(f"Cloud handler auto-export skipped: {e}")
 
 
 # Auto-export handlers when module is imported
@@ -438,7 +438,6 @@ __all__ = [
     "NamespaceInfo",  # Namespace information model
     # 🌐 PROXY FUNCTIONALITY
     "ProxyManager",  # Multi-server proxy manager
-    "create_proxy_tool",  # Create proxy tool wrapper
     # 📦 MODULE LOADING
     "ModuleLoader",  # Dynamic tool module loader
 ]
@@ -542,5 +541,5 @@ def show_cloud_examples() -> None:
 # Show enhanced examples in interactive environments
 
 if hasattr(sys, "ps1"):  # Interactive Python
-    print("🌟 ChukMCPServer v2.1.0 - Enhanced Cloud Support")
+    print("🌟 ChukMCPServer v0.16 - Enhanced Cloud Support")
     print("Type show_cloud_examples() to see cloud deployment examples!")

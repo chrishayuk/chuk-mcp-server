@@ -196,12 +196,16 @@ class CompositionManager:
         """
         server_name = prefix or getattr(server, "server_info", {}).get("name", "unknown")
 
-        if as_proxy:
-            # Mount as proxy - use ProxyManager
-            self._mount_as_proxy(server, prefix)
-        else:
-            # Mount as dynamic link
-            self._mount_dynamic(server, prefix)
+        try:
+            if as_proxy:
+                # Mount as proxy - use ProxyManager
+                self._mount_as_proxy(server, prefix)
+            else:
+                # Mount as dynamic link
+                self._mount_dynamic(server, prefix)
+        except NotImplementedError as e:
+            logger.warning(str(e))
+            return
 
         # Track mounted server
         self.mounted_servers[server_name] = {
@@ -292,18 +296,28 @@ class CompositionManager:
                 if tags and not self._matches_tags(resource_handler, tags):
                     continue
 
-                # Apply prefix to URI (if needed in future)
-                # Note: Resource URI prefixing is not yet implemented
-                # Future implementation would use:
-                # if prefix:
-                #     if "://" in resource_uri:
-                #         protocol, path = resource_uri.split("://", 1)
-                #         new_uri = f"{protocol}://{prefix}/{path}"
-                #     else:
-                #         new_uri = f"{prefix}/{resource_uri}"
+                # Apply prefix to URI
+                if prefix:
+                    if "://" in resource_uri:
+                        protocol, path = resource_uri.split("://", 1)
+                        new_uri = f"{protocol}://{prefix}/{path}"
+                    else:
+                        new_uri = f"{prefix}/{resource_uri}"
 
-                # Register the resource in parent server
-                self.parent_server.protocol.register_resource(resource_handler)
+                    # Create a new resource handler with the prefixed URI
+                    from ..types import ResourceHandler
+
+                    prefixed_handler = ResourceHandler.from_function(
+                        uri=new_uri,
+                        func=resource_handler.handler,
+                        name=resource_handler.name,
+                        description=resource_handler.description,
+                        mime_type=resource_handler.mime_type,
+                    )
+                    self.parent_server.protocol.register_resource(prefixed_handler)
+                else:
+                    # No prefix, register as-is
+                    self.parent_server.protocol.register_resource(resource_handler)
 
                 imported += 1
 
@@ -320,34 +334,39 @@ class CompositionManager:
                 if tags and not self._matches_tags(prompt_handler, tags):
                     continue
 
-                # Apply prefix (if needed in future)
-                # Note: Prompt prefixing is not yet implemented
-                # Future implementation would use:
-                # new_name = f"{prefix}.{prompt_name}" if prefix else prompt_name
+                # Apply prefix to create new name
+                new_name = f"{prefix}.{prompt_name}" if prefix else prompt_name
 
-                # Register the prompt in parent server
-                # (Implementation depends on prompt handler structure)
+                # Create a new prompt handler with the prefixed name
+                from ..types import PromptHandler
+
+                prefixed_handler = PromptHandler.from_function(
+                    prompt_handler.handler,
+                    name=new_name,
+                    description=prompt_handler.description,
+                )
+
+                # Register the prefixed prompt in parent server
+                self.parent_server.protocol.register_prompt(prefixed_handler)
+
                 imported += 1
 
         return imported
 
     def _mount_dynamic(self, server: Any, prefix: str | None) -> None:
         """Mount a server with dynamic delegation."""
-        # TODO: Implement dynamic mounting
-        # This requires creating wrapper functions that delegate to the mounted server
-        logger.warning("Dynamic mounting not yet fully implemented")
+        raise NotImplementedError("Dynamic mounting is not yet implemented")
 
     def _mount_as_proxy(self, server: Any, prefix: str | None) -> None:
         """Mount a server as a proxy."""
-        # TODO: Integrate with ProxyManager
-        logger.warning("Proxy mounting not yet fully implemented")
+        raise NotImplementedError("Proxy mounting is not yet implemented")
 
     def _matches_tags(self, handler: Any, tags: list[str]) -> bool:
         """Check if a handler matches any of the specified tags."""
         # Get tags from handler metadata
         handler_tags = getattr(handler, "tags", [])
         if not handler_tags:
-            return True  # No tags means match all
+            return False  # Handler has no tags, cannot match requested tags
 
         # Check if any tag matches
         return any(tag in handler_tags for tag in tags)

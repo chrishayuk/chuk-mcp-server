@@ -18,7 +18,7 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
-        
+
         # SSE support (for MCP streaming)
         proxy_buffering off;
         proxy_set_header X-Accel-Buffering no;
@@ -45,7 +45,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # SSE support
         proxy_buffering off;
         proxy_set_header X-Accel-Buffering no;
@@ -78,7 +78,7 @@ Configuration:
     ProxyPreserveHost On
     ProxyPass / http://localhost:8000/
     ProxyPassReverse / http://localhost:8000/
-    
+
     # SSE support
     ProxyPass / http://localhost:8000/ disablereuse=on
 </VirtualHost>
@@ -159,7 +159,7 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
-        
+
         # SSE support
         proxy_buffering off;
         proxy_set_header X-Accel-Buffering no;

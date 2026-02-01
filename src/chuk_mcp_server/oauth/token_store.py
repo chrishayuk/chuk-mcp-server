@@ -35,6 +35,23 @@ import orjson
 from chuk_sessions import get_session
 
 from .base_token_store import BaseTokenStore
+from .constants import (
+    CODE_CHALLENGE_PLAIN,
+    CODE_CHALLENGE_S256,
+    ENV_ACCESS_TOKEN_TTL,
+    ENV_AUTH_CODE_TTL,
+    ENV_CLIENT_REGISTRATION_TTL,
+    ENV_EXTERNAL_TOKEN_TTL,
+    ENV_PENDING_AUTH_TTL,
+    ENV_REFRESH_TOKEN_TTL,
+    TOKEN_EXPIRY_BUFFER_MINUTES,
+    TTL_ACCESS_TOKEN,
+    TTL_AUTH_CODE,
+    TTL_CLIENT_REGISTRATION,
+    TTL_EXTERNAL_TOKEN,
+    TTL_PENDING_AUTH,
+    TTL_REFRESH_TOKEN,
+)
 from .token_models import (
     AccessTokenData,
     AuthorizationCodeData,
@@ -69,12 +86,12 @@ class TokenStore(BaseTokenStore):
         self.sandbox_id = sandbox_id
 
         # Load TTL configuration from environment with defaults
-        self.auth_code_ttl = int(os.getenv("OAUTH_AUTH_CODE_TTL", "300"))  # 5 minutes
-        self.access_token_ttl = int(os.getenv("OAUTH_ACCESS_TOKEN_TTL", "900"))  # 15 minutes
-        self.refresh_token_ttl = int(os.getenv("OAUTH_REFRESH_TOKEN_TTL", "86400"))  # 1 day
-        self.client_registration_ttl = int(os.getenv("OAUTH_CLIENT_REGISTRATION_TTL", "31536000"))  # 1 year
-        self.external_token_ttl = int(os.getenv("OAUTH_EXTERNAL_TOKEN_TTL", "86400"))  # 1 day
-        self.pending_auth_ttl = int(os.getenv("OAUTH_PENDING_AUTH_TTL", "600"))  # 10 minutes
+        self.auth_code_ttl = int(os.getenv(ENV_AUTH_CODE_TTL, str(TTL_AUTH_CODE)))
+        self.access_token_ttl = int(os.getenv(ENV_ACCESS_TOKEN_TTL, str(TTL_ACCESS_TOKEN)))
+        self.refresh_token_ttl = int(os.getenv(ENV_REFRESH_TOKEN_TTL, str(TTL_REFRESH_TOKEN)))
+        self.client_registration_ttl = int(os.getenv(ENV_CLIENT_REGISTRATION_TTL, str(TTL_CLIENT_REGISTRATION)))
+        self.external_token_ttl = int(os.getenv(ENV_EXTERNAL_TOKEN_TTL, str(TTL_EXTERNAL_TOKEN)))
+        self.pending_auth_ttl = int(os.getenv(ENV_PENDING_AUTH_TTL, str(TTL_PENDING_AUTH)))
 
     # ============================================================================
     # MCP Authorization Codes
@@ -162,7 +179,7 @@ class TokenStore(BaseTokenStore):
                     return None
 
                 # Verify code challenge
-                if code_data.code_challenge_method == "S256":
+                if code_data.code_challenge_method == CODE_CHALLENGE_S256:
                     # PKCE uses base64url encoding, not hex
                     import base64
 
@@ -170,7 +187,7 @@ class TokenStore(BaseTokenStore):
                     verifier_challenge = base64.urlsafe_b64encode(verifier_hash).decode().rstrip("=")
                     if verifier_challenge != code_data.code_challenge:
                         return None
-                elif code_data.code_challenge_method == "plain":
+                elif code_data.code_challenge_method == CODE_CHALLENGE_PLAIN:
                     if code_verifier != code_data.code_challenge:
                         return None
 
@@ -397,7 +414,7 @@ class TokenStore(BaseTokenStore):
                 return True
 
             token_data = ExternalTokenData.from_dict(orjson.loads(token_json))
-            return token_data.is_expired(buffer_minutes=5)
+            return token_data.is_expired(buffer_minutes=TOKEN_EXPIRY_BUFFER_MINUTES)
 
     # ============================================================================
     # Client Registration

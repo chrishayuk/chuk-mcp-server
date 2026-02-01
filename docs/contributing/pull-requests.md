@@ -52,10 +52,10 @@ def test_your_feature():
     """Test your new feature."""
     # Arrange
     mcp = ChukMCPServer(name="test")
-    
+
     # Act
     result = your_feature()
-    
+
     # Assert
     assert result == expected
 ```

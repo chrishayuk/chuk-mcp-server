@@ -381,7 +381,7 @@ def build_input_schema(parameters: list[ToolParameter]) -> dict[str, Any]:
 def build_input_schema_bytes(parameters: list[ToolParameter]) -> bytes:
     """Build orjson-serialized input schema for maximum performance."""
     schema = build_input_schema(parameters)
-    return orjson.dumps(schema)
+    return orjson.dumps(schema)  # type: ignore[no-any-return]
 
 
 # ============================================================================

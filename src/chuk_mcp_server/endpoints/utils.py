@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/endpoints/utils.py
 """
 Optimized endpoint utilities with pre-computed responses and zero-allocation patterns
 """
@@ -9,32 +8,62 @@ from typing import Any
 import orjson
 from starlette.responses import Response
 
-# Pre-computed header combinations (avoid dictionary operations in hot paths)
-_CORS_NOCACHE = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache", "Content-Type": "application/json"}
-
-_CORS_SHORT_CACHE = {
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=300",
-    "Content-Type": "application/json",
-}
-
-_CORS_LONG_CACHE = {
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=3600, immutable",
-    "Content-Type": "application/json",
-}
+from .constants import (
+    CONTENT_TYPE_JSON,
+    CORS_ALLOW_ALL,
+    ERROR_BAD_REQUEST,
+    ERROR_EMPTY_BODY,
+    ERROR_INTERNAL,
+    ERROR_INVALID_JSON,
+    ERROR_JSON_PARSE,
+    ERROR_METHOD_NOT_ALLOWED,
+    ERROR_NOT_FOUND,
+    ERROR_TYPE_BAD_REQUEST,
+    ERROR_TYPE_INTERNAL,
+    ERROR_TYPE_METHOD_NOT_ALLOWED,
+    ERROR_TYPE_NOT_FOUND,
+    HEADER_ALLOW,
+    HEADER_CONTENT_TYPE,
+    HEADER_CORS_HEADERS,
+    HEADER_CORS_MAX_AGE,
+    HEADER_CORS_METHODS,
+    HEADER_CORS_ORIGIN,
+    HEADER_MCP_SESSION_ID,
+    HEADERS_CORS_LONG_CACHE,
+    HEADERS_CORS_NOCACHE,
+    HEADERS_CORS_SHORT_CACHE,
+    METHOD_GET,
+    METHOD_OPTIONS,
+    METHOD_POST,
+    STATUS_SUCCESS,
+    HttpStatus,
+)
 
 # Pre-built common error responses for maximum performance
 _ERROR_RESPONSES = {
-    400: orjson.dumps({"error": "Bad request", "code": 400, "type": "bad_request"}),
-    404: orjson.dumps({"error": "Not found", "code": 404, "type": "not_found"}),
-    405: orjson.dumps({"error": "Method not allowed", "code": 405, "type": "method_not_allowed"}),
-    500: orjson.dumps({"error": "Internal server error", "code": 500, "type": "internal_error"}),
+    HttpStatus.BAD_REQUEST: orjson.dumps(
+        {"error": ERROR_BAD_REQUEST, "code": HttpStatus.BAD_REQUEST, "type": ERROR_TYPE_BAD_REQUEST}
+    ),
+    HttpStatus.NOT_FOUND: orjson.dumps(
+        {"error": ERROR_NOT_FOUND, "code": HttpStatus.NOT_FOUND, "type": ERROR_TYPE_NOT_FOUND}
+    ),
+    HttpStatus.METHOD_NOT_ALLOWED: orjson.dumps(
+        {
+            "error": ERROR_METHOD_NOT_ALLOWED,
+            "code": HttpStatus.METHOD_NOT_ALLOWED,
+            "type": ERROR_TYPE_METHOD_NOT_ALLOWED,
+        }
+    ),
+    HttpStatus.INTERNAL_SERVER_ERROR: orjson.dumps(
+        {"error": ERROR_INTERNAL, "code": HttpStatus.INTERNAL_SERVER_ERROR, "type": ERROR_TYPE_INTERNAL}
+    ),
 }
 
 
 def json_response_fast(
-    data: dict[str, Any] | list[Any] | str | int | float | bool, status_code: int = 200, cache_level: str = "none"
+    data: dict[str, Any] | list[Any] | str | int | float | bool,
+    status_code: int = HttpStatus.OK,
+    cache_level: str = "none",
 ) -> Response:
     """
     Ultra-fast JSON response using pre-computed headers.
@@ -49,29 +78,29 @@ def json_response_fast(
     """
     # Select pre-computed headers based on cache level
     if cache_level == "short":
-        headers = _CORS_SHORT_CACHE
+        headers = HEADERS_CORS_SHORT_CACHE
     elif cache_level == "long":
-        headers = _CORS_LONG_CACHE
+        headers = HEADERS_CORS_LONG_CACHE
     else:
-        headers = _CORS_NOCACHE
+        headers = HEADERS_CORS_NOCACHE
 
-    return Response(orjson.dumps(data), status_code=status_code, media_type="application/json", headers=headers)
+    return Response(orjson.dumps(data), status_code=status_code, media_type=CONTENT_TYPE_JSON, headers=headers)
 
 
-def json_response_bytes(data_bytes: bytes, status_code: int = 200, cache_level: str = "none") -> Response:
+def json_response_bytes(data_bytes: bytes, status_code: int = HttpStatus.OK, cache_level: str = "none") -> Response:
     """
     Maximum performance JSON response using pre-serialized bytes.
 
     Use this when you have pre-computed JSON bytes.
     """
     if cache_level == "short":
-        headers = _CORS_SHORT_CACHE
+        headers = HEADERS_CORS_SHORT_CACHE
     elif cache_level == "long":
-        headers = _CORS_LONG_CACHE
+        headers = HEADERS_CORS_LONG_CACHE
     else:
-        headers = _CORS_NOCACHE
+        headers = HEADERS_CORS_NOCACHE
 
-    return Response(data_bytes, status_code=status_code, media_type="application/json", headers=headers)
+    return Response(data_bytes, status_code=status_code, media_type=CONTENT_TYPE_JSON, headers=headers)
 
 
 def error_response_fast(code: int, message: str | None = None) -> Response:
@@ -83,16 +112,18 @@ def error_response_fast(code: int, message: str | None = None) -> Response:
     """
     if code in _ERROR_RESPONSES and message is None:
         # Use pre-built response for maximum speed
-        return Response(_ERROR_RESPONSES[code], status_code=code, media_type="application/json", headers=_CORS_NOCACHE)
+        return Response(
+            _ERROR_RESPONSES[code], status_code=code, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE
+        )
     else:
         # Custom error message
         error_data = {"error": message or "Error", "code": code}
         return Response(
-            orjson.dumps(error_data), status_code=code, media_type="application/json", headers=_CORS_NOCACHE
+            orjson.dumps(error_data), status_code=code, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE
         )
 
 
-def success_response_fast(data: Any = None, message: str = "success", cache_level: str = "none") -> Response:
+def success_response_fast(data: Any = None, message: str = STATUS_SUCCESS, cache_level: str = "none") -> Response:
     """
     Fast success response with optional data.
     """
@@ -103,19 +134,31 @@ def success_response_fast(data: Any = None, message: str = "success", cache_leve
 
 # Ultra-fast pre-built responses for common scenarios
 _NOT_FOUND_RESPONSE = Response(
-    _ERROR_RESPONSES[404], status_code=404, media_type="application/json", headers=_CORS_NOCACHE
+    _ERROR_RESPONSES[HttpStatus.NOT_FOUND],
+    status_code=HttpStatus.NOT_FOUND,
+    media_type=CONTENT_TYPE_JSON,
+    headers=HEADERS_CORS_NOCACHE,
 )
 
 _METHOD_NOT_ALLOWED_RESPONSE = Response(
-    _ERROR_RESPONSES[405], status_code=405, media_type="application/json", headers=_CORS_NOCACHE
+    _ERROR_RESPONSES[HttpStatus.METHOD_NOT_ALLOWED],
+    status_code=HttpStatus.METHOD_NOT_ALLOWED,
+    media_type=CONTENT_TYPE_JSON,
+    headers=HEADERS_CORS_NOCACHE,
 )
 
 _INTERNAL_ERROR_RESPONSE = Response(
-    _ERROR_RESPONSES[500], status_code=500, media_type="application/json", headers=_CORS_NOCACHE
+    _ERROR_RESPONSES[HttpStatus.INTERNAL_SERVER_ERROR],
+    status_code=HttpStatus.INTERNAL_SERVER_ERROR,
+    media_type=CONTENT_TYPE_JSON,
+    headers=HEADERS_CORS_NOCACHE,
 )
 
 _BAD_REQUEST_RESPONSE = Response(
-    _ERROR_RESPONSES[400], status_code=400, media_type="application/json", headers=_CORS_NOCACHE
+    _ERROR_RESPONSES[HttpStatus.BAD_REQUEST],
+    status_code=HttpStatus.BAD_REQUEST,
+    media_type=CONTENT_TYPE_JSON,
+    headers=HEADERS_CORS_NOCACHE,
 )
 
 
@@ -128,9 +171,14 @@ def method_not_allowed_response(allowed_methods: list[str] | None = None) -> Res
     """Pre-built 405 response with optional Allow header"""
     if allowed_methods:
         # Need custom headers, create new response
-        headers = _CORS_NOCACHE.copy()
-        headers["Allow"] = ", ".join(allowed_methods)
-        return Response(_ERROR_RESPONSES[405], status_code=405, media_type="application/json", headers=headers)
+        headers = HEADERS_CORS_NOCACHE.copy()
+        headers[HEADER_ALLOW] = ", ".join(allowed_methods)
+        return Response(
+            _ERROR_RESPONSES[HttpStatus.METHOD_NOT_ALLOWED],
+            status_code=HttpStatus.METHOD_NOT_ALLOWED,
+            media_type=CONTENT_TYPE_JSON,
+            headers=headers,
+        )
     else:
         return _METHOD_NOT_ALLOWED_RESPONSE
 
@@ -153,15 +201,15 @@ def validate_json_request_fast(request_body: bytes) -> tuple[bool, dict[str, Any
         (is_valid, parsed_data_or_error_message)
     """
     if not request_body:
-        return False, "Empty request body"
+        return False, ERROR_EMPTY_BODY
 
     try:
         parsed_data = orjson.loads(request_body)
         return True, parsed_data
     except orjson.JSONDecodeError:
-        return False, "Invalid JSON format"
+        return False, ERROR_INVALID_JSON
     except Exception:
-        return False, "JSON parsing error"
+        return False, ERROR_JSON_PARSE
 
 
 def create_cors_preflight_response_fast(allowed_methods: list[str] | None = None, max_age: int = 3600) -> Response:
@@ -171,16 +219,16 @@ def create_cors_preflight_response_fast(allowed_methods: list[str] | None = None
     Uses pre-computed headers for common scenarios.
     """
     if allowed_methods is None:
-        allowed_methods = ["GET", "POST", "OPTIONS"]
+        allowed_methods = [METHOD_GET, METHOD_POST, METHOD_OPTIONS]
 
     headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": ", ".join(allowed_methods),
-        "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id",
-        "Access-Control-Max-Age": str(max_age),
+        HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+        HEADER_CORS_METHODS: ", ".join(allowed_methods),
+        HEADER_CORS_HEADERS: f"{HEADER_CONTENT_TYPE}, {HEADER_MCP_SESSION_ID}",
+        HEADER_CORS_MAX_AGE: str(max_age),
     }
 
-    return Response("", status_code=204, headers=headers)
+    return Response("", status_code=HttpStatus.NO_CONTENT, headers=headers)
 
 
 # Response object pool for heavy reuse scenarios
@@ -195,7 +243,7 @@ class ResponsePool:
         self.pool: list[Response] = []
         self.pool_size = pool_size
 
-    def get_response(self, content: bytes, status_code: int = 200) -> Response:
+    def get_response(self, content: bytes, status_code: int = HttpStatus.OK) -> Response:
         """Get a response object from the pool or create new one."""
         if self.pool:
             response = self.pool.pop()
@@ -203,14 +251,16 @@ class ResponsePool:
             response.status_code = status_code
             return response
         else:
-            return Response(content, status_code=status_code, media_type="application/json", headers=_CORS_NOCACHE)
+            return Response(
+                content, status_code=status_code, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE
+            )
 
     def return_response(self, response: Response) -> None:
         """Return a response object to the pool."""
         if len(self.pool) < self.pool_size:
             # Reset response for reuse
             response.body = b""
-            response.status_code = 200
+            response.status_code = HttpStatus.OK
             self.pool.append(response)
 
 
@@ -218,7 +268,7 @@ class ResponsePool:
 _response_pool = ResponsePool()
 
 
-def pooled_json_response(data: dict[str, Any] | list[Any], status_code: int = 200) -> Response:
+def pooled_json_response(data: dict[str, Any] | list[Any], status_code: int = HttpStatus.OK) -> Response:
     """
     JSON response using object pooling for maximum performance.
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/endpoints/__init__.py
 """
 Endpoints - Clean imports for optimized endpoint handlers
 

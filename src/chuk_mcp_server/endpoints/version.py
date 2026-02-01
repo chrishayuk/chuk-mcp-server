@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/endpoints/version.py
 """
 Version information endpoint with pre-cached static response
 """
@@ -8,11 +7,19 @@ import orjson
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .constants import (
+    CONTENT_TYPE_JSON,
+    FRAMEWORK_DESCRIPTION,
+    HEADERS_CORS_LONG_CACHE,
+    MCP_PROTOCOL_VERSION,
+    SERVER_NAME,
+)
+
 _VERSION_INFO = {
-    "name": "ChukMCPServer",
+    "name": SERVER_NAME,
     "version": "1.0.0",
-    "framework": "ChukMCPServer with chuk_mcp",
-    "protocol": {"name": "MCP", "version": "2025-03-26"},
+    "framework": FRAMEWORK_DESCRIPTION,
+    "protocol": {"name": "MCP", "version": MCP_PROTOCOL_VERSION},
     "features": [
         "High-performance HTTP endpoints",
         "MCP protocol support",
@@ -29,14 +36,8 @@ _VERSION_INFO = {
     },
 }
 
-_VERSION_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=3600, immutable",
-    "Content-Type": "application/json",
-}
-
 _CACHED_VERSION_RESPONSE = Response(
-    orjson.dumps(_VERSION_INFO), media_type="application/json", headers=_VERSION_HEADERS
+    orjson.dumps(_VERSION_INFO), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_LONG_CACHE
 )
 
 

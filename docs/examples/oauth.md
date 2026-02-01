@@ -16,7 +16,7 @@ mcp = ChukMCPServer("oauth-example")
 async def get_profile(_external_access_token: str | None = None) -> dict:
     """Get user profile (requires auth)."""
     import httpx
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             "https://www.googleapis.com/oauth2/v2/userinfo",

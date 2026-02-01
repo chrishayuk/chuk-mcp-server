@@ -162,13 +162,13 @@ logger = logging.getLogger(__name__)
 @tool
 async def slow_tool():
     start = time.perf_counter()
-    
+
     # Your logic
     result = await compute_something()
-    
+
     duration = time.perf_counter() - start
     logger.info(f"slow_tool took {duration:.3f}s")
-    
+
     return result
 ```
 
