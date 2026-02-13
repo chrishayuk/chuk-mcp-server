@@ -74,6 +74,7 @@ def tool(
     idempotent_hint: bool | None = None,
     open_world_hint: bool | None = None,
     output_schema: dict[str, Any] | None = None,
+    icons: list[dict[str, Any]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a function as an MCP tool.
@@ -103,6 +104,7 @@ def tool(
             idempotent_hint=idempotent_hint,
             open_world_hint=open_world_hint,
             output_schema=output_schema,
+            icons=icons,
         )
 
         # Register globally
@@ -134,7 +136,11 @@ def tool(
 
 
 def resource(
-    uri: str, name: str | None = None, description: str | None = None, mime_type: str = "text/plain"
+    uri: str,
+    name: str | None = None,
+    description: str | None = None,
+    mime_type: str = "text/plain",
+    icons: list[dict[str, Any]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a function as an MCP resource.
@@ -152,7 +158,7 @@ def resource(
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Create resource from function
         mcp_resource = ResourceHandler.from_function(
-            uri=uri, func=func, name=name, description=description, mime_type=mime_type
+            uri=uri, func=func, name=name, description=description, mime_type=mime_type, icons=icons
         )
 
         # Register globally
@@ -176,7 +182,9 @@ def resource(
 
 
 def prompt(
-    name: str | None = None, description: str | None = None
+    name: str | None = None,
+    description: str | None = None,
+    icons: list[dict[str, Any]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a function as an MCP prompt.
@@ -193,7 +201,7 @@ def prompt(
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Create prompt from function
-        mcp_prompt = PromptHandler.from_function(func, name=name, description=description)
+        mcp_prompt = PromptHandler.from_function(func, name=name, description=description, icons=icons)
 
         # Register globally
         _global_prompts.append(mcp_prompt)
@@ -228,6 +236,7 @@ def resource_template(
     name: str | None = None,
     description: str | None = None,
     mime_type: str | None = None,
+    icons: list[dict[str, Any]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a function as an MCP resource template (RFC 6570).
@@ -254,6 +263,7 @@ def resource_template(
             name=name,
             description=description,
             mime_type=mime_type,
+            icons=icons,
         )
 
         # Register globally

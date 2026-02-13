@@ -415,11 +415,11 @@ class TestHandleRequestRouting:
 
     @pytest.mark.asyncio
     async def test_method_not_allowed(self):
-        """Non-GET/POST/OPTIONS methods return 405."""
+        """Non-GET/POST/DELETE/OPTIONS methods return 405."""
         protocol = _make_protocol()
         endpoint = MCPEndpoint(protocol)
 
-        req = _mock_request(method="DELETE")
+        req = _mock_request(method="PATCH")
         response = await endpoint.handle_request(req)
         assert response.status_code == 405
 

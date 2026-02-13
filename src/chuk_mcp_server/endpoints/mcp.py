@@ -37,6 +37,7 @@ from .constants import (
     HEADER_CORS_HEADERS,
     HEADER_CORS_METHODS,
     HEADER_CORS_ORIGIN,
+    HEADER_MCP_PROTOCOL_VERSION,
     HEADER_MCP_SESSION_ID,
     HEADERS_CORS_ONLY,
     JSONRPC_VERSION,
@@ -65,6 +66,14 @@ class MCPEndpoint:
         # Pending server-to-client requests awaiting responses via /mcp/respond
         self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
+    def _get_protocol_version(self, session_id: str | None) -> str:
+        """Get the negotiated protocol version for a session."""
+        if session_id:
+            session = self.protocol.session_manager.get_session(session_id)
+            if session:
+                return str(session.get("protocol_version", MCP_PROTOCOL_VERSION))
+        return MCP_PROTOCOL_VERSION
+
     async def handle_request(self, request: Request) -> Response:
         """Main MCP endpoint handler."""
 
@@ -72,7 +81,7 @@ class MCPEndpoint:
         if request.method == "OPTIONS":
             return self._cors_response()
 
-        # Handle GET - return server info
+        # Handle GET - return server info / SSE stream
         if request.method == "GET":
             return await self._handle_get(request)
 
@@ -80,7 +89,30 @@ class MCPEndpoint:
         if request.method == "POST":
             return await self._handle_post(request)
 
+        # Handle DELETE - session termination (MCP 2025-11-25)
+        if request.method == "DELETE":
+            return await self._handle_delete(request)
+
         return Response(ERROR_METHOD_NOT_ALLOWED, status_code=HttpStatus.METHOD_NOT_ALLOWED)
+
+    async def _handle_delete(self, request: Request) -> Response:
+        """Handle DELETE - terminate session (MCP 2025-11-25)."""
+        session_id = request.headers.get(HEADER_MCP_SESSION_ID.lower())
+        if not session_id:
+            return self._error_response(None, JsonRpcErrorCode.INVALID_REQUEST, "Missing session ID")
+
+        protocol_version = self._get_protocol_version(session_id)
+        terminated = self.protocol.terminate_session(session_id)
+        if not terminated:
+            return self._error_response(
+                None, JsonRpcErrorCode.INVALID_REQUEST, f"Unknown session: {session_id}", session_id
+            )
+
+        headers: dict[str, str] = {
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+            HEADER_MCP_PROTOCOL_VERSION: protocol_version,
+        }
+        return Response("", status_code=HttpStatus.OK, headers=headers)
 
     def _cors_response(self) -> Response:
         """Return CORS preflight response."""
@@ -88,7 +120,7 @@ class MCPEndpoint:
             "",
             headers={
                 HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
-                HEADER_CORS_METHODS: "GET, POST, OPTIONS",
+                HEADER_CORS_METHODS: "GET, POST, DELETE, OPTIONS",
                 HEADER_CORS_HEADERS: CORS_ALLOW_ALL,
             },
         )
@@ -173,12 +205,22 @@ class MCPEndpoint:
         # Process the request through protocol handler
         response, new_session_id = await self.protocol.handle_request(request_data, session_id, oauth_token)
 
+        effective_session = new_session_id or session_id
+        protocol_version = self._get_protocol_version(effective_session)
+
         # Handle notifications (no response)
         if response is None:
-            return Response("", status_code=HttpStatus.ACCEPTED, headers=HEADERS_CORS_ONLY)
+            headers = {
+                HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+                HEADER_MCP_PROTOCOL_VERSION: protocol_version,
+            }
+            return Response("", status_code=HttpStatus.ACCEPTED, headers=headers)
 
         # Build response headers
-        headers: dict[str, str] = {HEADER_CORS_ORIGIN: CORS_ALLOW_ALL}
+        headers = {
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+            HEADER_MCP_PROTOCOL_VERSION: protocol_version,
+        }
         if new_session_id:
             headers[HEADER_MCP_SESSION_ID] = new_session_id
 
@@ -264,6 +306,17 @@ class MCPEndpoint:
             headers=self._sse_headers(created_session_id),
         )
 
+    def _emit_sse_event(self, event_type: str, data: dict[str, Any], session_id: str | None) -> tuple[str, ...]:
+        """Build SSE event lines with optional event ID for resumability."""
+        lines: list[str] = [event_type]
+        if session_id:
+            event_id = self.protocol.next_sse_event_id(session_id)
+            self.protocol.buffer_sse_event(session_id, event_id, data)
+            lines.append(f"id: {event_id}\r\n")
+        lines.append(f"data: {orjson.dumps(data).decode()}\r\n")
+        lines.append(SSE_LINE_END)
+        return tuple(lines)
+
     async def _sse_stream_generator(
         self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
     ):
@@ -278,7 +331,6 @@ class MCPEndpoint:
         if is_tool_call:
             # Bidirectional mode: use queue for server-to-client messages
             sse_queue: asyncio.Queue[Any] = asyncio.Queue()
-            _sentinel = ("_final_", None)
 
             async def _send_fn(request: dict[str, Any]) -> dict[str, Any]:
                 return await self._send_to_client_http(request, sse_queue)
@@ -311,15 +363,13 @@ class MCPEndpoint:
                         # Final response from tool execution
                         response = item[1]
                         if response:
-                            yield SSE_EVENT_MESSAGE
-                            yield f"data: {orjson.dumps(response).decode()}\r\n"
-                            yield SSE_LINE_END
+                            for line in self._emit_sse_event(SSE_EVENT_MESSAGE, response, session_id):
+                                yield line
                         break
                     else:
                         # Server-to-client request or notification
-                        yield "event: server_request\r\n"
-                        yield f"data: {orjson.dumps(item).decode()}\r\n"
-                        yield "\r\n"
+                        for line in self._emit_sse_event("event: server_request\r\n", item, session_id):
+                            yield line
             finally:
                 if not task.done():
                     task.cancel()
@@ -332,9 +382,8 @@ class MCPEndpoint:
 
                 if response:
                     logger.debug(f"Streaming SSE response for {method}")
-                    yield SSE_EVENT_MESSAGE
-                    yield f"data: {orjson.dumps(response).decode()}\r\n"
-                    yield SSE_LINE_END
+                    for line in self._emit_sse_event(SSE_EVENT_MESSAGE, response, session_id):
+                        yield line
 
             except Exception as e:
                 logger.error(f"SSE stream error: {e}")
@@ -346,9 +395,8 @@ class MCPEndpoint:
                         "message": str(e),
                     },
                 }
-                yield SSE_EVENT_ERROR
-                yield f"data: {orjson.dumps(error_response).decode()}\r\n"
-                yield SSE_LINE_END
+                for line in self._emit_sse_event(SSE_EVENT_ERROR, error_response, session_id):
+                    yield line
 
     def _sse_headers(self, session_id: str | None) -> dict[str, str]:
         """Build SSE response headers."""
@@ -356,6 +404,7 @@ class MCPEndpoint:
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
             HEADER_CACHE_CONTROL: CACHE_NO_CACHE,
             HEADER_CONNECTION: CONNECTION_KEEP_ALIVE,
+            HEADER_MCP_PROTOCOL_VERSION: self._get_protocol_version(session_id),
         }
 
         if session_id:
@@ -363,7 +412,7 @@ class MCPEndpoint:
 
         return headers
 
-    def _error_response(self, msg_id: Any, code: int, message: str) -> Response:
+    def _error_response(self, msg_id: Any, code: int, message: str, session_id: str | None = None) -> Response:
         """Create error response."""
         error_response = {
             JSONRPC_VERSION_KEY: JSONRPC_VERSION,
@@ -377,9 +426,14 @@ class MCPEndpoint:
             else HttpStatus.INTERNAL_SERVER_ERROR
         )
 
+        headers = {
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+            HEADER_MCP_PROTOCOL_VERSION: self._get_protocol_version(session_id),
+        }
+
         return Response(
             orjson.dumps(error_response),
             status_code=status_code,
             media_type=CONTENT_TYPE_JSON,
-            headers=HEADERS_CORS_ONLY,
+            headers=headers,
         )

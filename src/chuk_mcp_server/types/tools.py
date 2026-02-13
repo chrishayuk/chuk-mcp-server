@@ -36,6 +36,7 @@ class ToolHandler:
     auth_scopes: list[str] | None = None  # Optional list of required scopes
     annotations: dict[str, bool] | None = None  # MCP tool annotations (hints)
     output_schema: dict[str, Any] | None = None  # MCP structured output schema
+    icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
 
     @classmethod
     def from_function(
@@ -48,10 +49,17 @@ class ToolHandler:
         idempotent_hint: bool | None = None,
         open_world_hint: bool | None = None,
         output_schema: dict[str, Any] | None = None,
+        icons: list[dict[str, Any]] | None = None,
     ) -> "ToolHandler":
         """Create ToolHandler from a function with orjson optimization."""
+        from chuk_mcp_server.constants import TOOL_NAME_PATTERN
+
         tool_name = name or func.__name__
         tool_description = description or func.__doc__ or f"Execute {tool_name}"
+
+        # Validate tool name per MCP 2025-11-25 spec
+        if not TOOL_NAME_PATTERN.match(tool_name):
+            raise ValueError(f"Invalid tool name '{tool_name}': must match ^[a-zA-Z0-9_\\-.]{{1,128}}$")
 
         # Check for authorization metadata (set by @requires_auth decorator)
         requires_auth = getattr(func, "_requires_auth", False)
@@ -112,6 +120,7 @@ class ToolHandler:
             auth_scopes=auth_scopes,
             annotations=annotations,
             output_schema=output_schema,
+            icons=icons,
         )
 
         # Pre-compute and cache both formats during creation for maximum performance
@@ -132,6 +141,10 @@ class ToolHandler:
             # Add output schema if present (MCP 2025-06-18)
             if self.output_schema:
                 fmt["outputSchema"] = self.output_schema.copy()
+
+            # Add icons if present (MCP 2025-11-25)
+            if self.icons:
+                fmt["icons"] = [icon.copy() for icon in self.icons]
 
             self._cached_mcp_format = fmt
 
@@ -154,6 +167,7 @@ class ToolHandler:
         if self._cached_mcp_bytes is None:
             self._ensure_cached_formats()
         # Deep copy via orjson round-trip (faster than copy.deepcopy, uses cached bytes)
+        assert self._cached_mcp_bytes is not None
         result: dict[str, Any] = orjson.loads(self._cached_mcp_bytes)
         return result
 
@@ -331,6 +345,11 @@ class ToolHandler:
             # Re-raise validation errors as-is
             raise
         except Exception as e:
+            # Let URLElicitationRequiredError propagate unwrapped (MCP 2025-11-25)
+            from .errors import URLElicitationRequiredError
+
+            if isinstance(e, URLElicitationRequiredError):
+                raise
             # Wrap other errors in ToolExecutionError
             raise ToolExecutionError(self.name, e) from e
 

@@ -145,23 +145,23 @@ The server currently targets **MCP specification 2025-06-18**. The latest specif
 | Spec Area | Status |
 |-----------|--------|
 | **Lifecycle** (initialize, ping) | Implemented |
-| **Tools** (list, call) | Implemented (missing annotations, structured output, pagination) |
-| **Resources** (list, read, subscribe) | Implemented (missing templates, links, pagination, content annotations) |
-| **Prompts** (list, get) | Implemented (missing pagination) |
-| **Sampling** (createMessage) | Implemented (missing tool calling) |
-| **Elicitation** (create) | Partial (form mode only, missing URL mode) |
+| **Tools** (list, call) | Implemented (annotations, structured output, pagination, icons, name validation) |
+| **Resources** (list, read, subscribe) | Implemented (templates, links, pagination, content annotations, icons) |
+| **Prompts** (list, get) | Implemented (pagination, icons) |
+| **Sampling** (createMessage) | Implemented (including tool calling) |
+| **Elicitation** (create) | Implemented (form mode + URL mode + defaults) |
 | **Roots** (list) | Implemented |
 | **Progress** (notifications) | Implemented |
 | **Completions** (complete) | Implemented |
-| **Logging** (setLevel) | Partial (handler exists, no `notifications/message` emission) |
-| **Cancellation** | Not implemented |
-| **Tasks** | Not implemented |
-| **Pagination** | Not implemented |
-| **Streamable HTTP** | Not implemented |
-| **Content annotations** | Not implemented |
-| **Tool annotations** | Not implemented |
-| **Structured output** | Not implemented |
-| **Icons** | Not implemented |
+| **Logging** (setLevel, notifications/message) | Implemented |
+| **Cancellation** | Implemented |
+| **Tasks** | Implemented |
+| **Pagination** | Implemented |
+| **Streamable HTTP** | Implemented |
+| **Content annotations** | Implemented |
+| **Tool annotations** | Implemented |
+| **Structured output** | Implemented |
+| **Icons** | Implemented |
 
 ---
 
@@ -201,14 +201,14 @@ Close all gaps against MCP specification 2025-06-18. Implement the protocol feat
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Structured tool output | Planned | `outputSchema` on tool definitions, `structuredContent` in tool results for typed JSON responses |
-| Tool annotations | Planned | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata via `@tool` decorator |
-| Pagination | Planned | Cursor-based pagination for `tools/list`, `resources/list`, `prompts/list`, `resources/templates/list` |
-| Resource templates | Planned | `resources/templates/list` method for URI template-based resource discovery (RFC 6570) |
-| Resource links | Planned | Return `ResourceLink` objects alongside tool content to reference server resources |
-| Content annotations | Planned | `audience`, `priority`, `lastModified` annotations on content types |
-| Request cancellation | Planned | `notifications/cancelled` support for cancelling in-flight requests in both directions |
-| Log message notifications | Planned | Emit `notifications/message` to clients for server-side log events (completes logging support) |
+| Structured tool output | **Done** | `outputSchema` on tool definitions, `structuredContent` in tool results for typed JSON responses |
+| Tool annotations | **Done** | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata via `@tool` decorator |
+| Pagination | **Done** | Cursor-based pagination for `tools/list`, `resources/list`, `prompts/list`, `resources/templates/list` |
+| Resource templates | **Done** | `resources/templates/list` method for URI template-based resource discovery (RFC 6570) |
+| Resource links | **Done** | Return `ResourceLink` objects alongside tool content to reference server resources |
+| Content annotations | **Done** | `audience`, `priority`, `lastModified` annotations on content types |
+| Request cancellation | **Done** | `notifications/cancelled` support for cancelling in-flight requests in both directions |
+| Log message notifications | **Done** | Emit `notifications/message` to clients for server-side log events (completes logging support) |
 
 ---
 
@@ -218,14 +218,14 @@ Upgrade to the latest MCP specification. Implement the new transport, tasks syst
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Streamable HTTP transport | Planned | Single MCP endpoint (POST+GET), `MCP-Session-Id` header, session DELETE, `MCP-Protocol-Version` header, SSE resumability with event IDs |
-| Tasks system | Planned | `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `notifications/tasks/status` for durable long-running request state machines |
-| URL mode elicitation | Planned | Direct users to external URLs for sensitive interactions (OAuth flows, payment, credentials), `URLElicitationRequiredError` (-32042) |
-| Tool calling in sampling | Planned | `tools` array and `toolChoice` parameter in `sampling/createMessage` for client-side tool loops |
-| Icons | Planned | `icons` field on `Implementation`, `Tool`, `Prompt`, `Resource`, `ResourceTemplate` for richer UI rendering |
-| Enhanced Implementation info | Planned | `title`, `description`, `icons`, `websiteUrl` in `serverInfo` during initialize |
-| Elicitation defaults | Planned | `default` values on primitive types in elicitation `requestedSchema` |
-| Tool name validation | Planned | Enforce 1-128 character naming rules (alphanumeric + underscore/hyphen/dot, case-sensitive) |
+| Streamable HTTP transport | **Done** | Single MCP endpoint (POST+GET), `MCP-Session-Id` header, session DELETE, `MCP-Protocol-Version` header, SSE resumability with event IDs |
+| Tasks system | **Done** | `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `notifications/tasks/status` for durable long-running request state machines |
+| URL mode elicitation | **Done** | Direct users to external URLs for sensitive interactions (OAuth flows, payment, credentials), `URLElicitationRequiredError` (-32042) |
+| Tool calling in sampling | **Done** | `tools` array and `toolChoice` parameter in `sampling/createMessage` for client-side tool loops |
+| Icons | **Done** | `icons` field on `Implementation`, `Tool`, `Prompt`, `Resource`, `ResourceTemplate` for richer UI rendering |
+| Enhanced Implementation info | **Done** | `title`, `description`, `icons`, `websiteUrl` in `serverInfo` during initialize |
+| Elicitation defaults | **Done** | `default` values on primitive types in elicitation `requestedSchema` |
+| Tool name validation | **Done** | Enforce 1-128 character naming rules (alphanumeric + underscore/hyphen/dot, case-sensitive) |
 
 ---
 

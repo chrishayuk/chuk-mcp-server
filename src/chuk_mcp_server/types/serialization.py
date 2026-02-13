@@ -19,13 +19,15 @@ if TYPE_CHECKING:
 def serialize_tools_list(tools: list["ToolHandler"]) -> bytes:
     """🚀 Ultra-fast tools list serialization with orjson."""
     tools_data = [tool.to_mcp_format() for tool in tools]
-    return orjson.dumps({"tools": tools_data})  # type: ignore[no-any-return]
+    result: bytes = orjson.dumps({"tools": tools_data})
+    return result
 
 
 def serialize_resources_list(resources: list["ResourceHandler"]) -> bytes:
     """🚀 Ultra-fast resources list serialization with orjson."""
     resources_data = [resource.to_mcp_format() for resource in resources]
-    return orjson.dumps({"resources": resources_data})  # type: ignore[no-any-return]
+    result: bytes = orjson.dumps({"resources": resources_data})
+    return result
 
 
 def serialize_tools_list_from_bytes(tools: list["ToolHandler"]) -> bytes:
@@ -38,17 +40,20 @@ def serialize_tools_list_from_bytes(tools: list["ToolHandler"]) -> bytes:
     for tool_byte in tool_bytes:
         tools_list.append(orjson.loads(tool_byte))
 
-    return orjson.dumps({"tools": tools_list})  # type: ignore[no-any-return]
+    result: bytes = orjson.dumps({"tools": tools_list})
+    return result
 
 
 def serialize_mcp_response(response_data: dict[str, Any]) -> bytes:
     """Serialize MCP response with orjson for maximum performance."""
-    return orjson.dumps(response_data)  # type: ignore[no-any-return]
+    result: bytes = orjson.dumps(response_data)
+    return result
 
 
 def deserialize_mcp_request(request_bytes: bytes) -> dict[str, Any]:
     """Deserialize MCP request with orjson for maximum performance."""
-    return orjson.loads(request_bytes)  # type: ignore[no-any-return]
+    result: dict[str, Any] = orjson.loads(request_bytes)
+    return result
 
 
 __all__ = [

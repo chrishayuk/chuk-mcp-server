@@ -3,6 +3,7 @@
 Top-level constants shared across the chuk_mcp_server package.
 """
 
+import re
 from enum import IntEnum
 
 # ---------------------------------------------------------------------------
@@ -179,3 +180,28 @@ KEY_OPEN_WORLD_HINT = "openWorldHint"
 # ---------------------------------------------------------------------------
 MCP_ERROR_RESOURCE_NOT_FOUND = -32002
 MCP_ERROR_URL_ELICITATION_REQUIRED = -32042
+
+
+# ---------------------------------------------------------------------------
+# Tool name validation (MCP 2025-11-25)
+# ---------------------------------------------------------------------------
+TOOL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]{1,128}$")
+
+
+# ---------------------------------------------------------------------------
+# Tasks system (MCP 2025-11-25)
+# ---------------------------------------------------------------------------
+class McpTaskMethod:
+    TASKS_GET = "tasks/get"
+    TASKS_RESULT = "tasks/result"
+    TASKS_LIST = "tasks/list"
+    TASKS_CANCEL = "tasks/cancel"
+    NOTIFICATIONS_TASKS_STATUS = "notifications/tasks/status"
+
+
+# ---------------------------------------------------------------------------
+# MCP protocol version (2025-11-25)
+# ---------------------------------------------------------------------------
+MCP_PROTOCOL_VERSION_2025_11 = "2025-11-25"
+HEADER_MCP_PROTOCOL_VERSION = "MCP-Protocol-Version"
+HEADER_LAST_EVENT_ID = "Last-Event-ID"

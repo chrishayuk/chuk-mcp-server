@@ -202,5 +202,86 @@ class TestProtocolElicitation:
         assert get_elicitation_fn() is None
 
 
+@pytest.mark.asyncio
+class TestElicitationDefaults:
+    """Test elicitation with default values in schemas (MCP 2025-11-25)."""
+
+    async def test_schema_with_default_values_passthrough(self):
+        """Default values in JSON Schema are passed through to the client."""
+        server_info = ServerInfo(name="test", version="1.0.0")
+        capabilities = create_server_capabilities()
+        handler = MCPProtocolHandler(server_info, capabilities)
+
+        captured_request = {}
+
+        async def mock_send(request):
+            captured_request.update(request)
+            return {
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"name": "Alice", "age": 30},
+            }
+
+        handler._send_to_client = mock_send
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "default": "Anonymous"},
+                "age": {"type": "integer", "default": 25},
+                "active": {"type": "boolean", "default": True},
+            },
+        }
+
+        await handler.send_elicitation_request(
+            message="Enter details",
+            schema=schema,
+        )
+
+        # Verify defaults are preserved in the schema sent to client
+        sent_schema = captured_request["params"]["requestedSchema"]
+        assert sent_schema["properties"]["name"]["default"] == "Anonymous"
+        assert sent_schema["properties"]["age"]["default"] == 25
+        assert sent_schema["properties"]["active"]["default"] is True
+
+    async def test_schema_with_enum_and_default(self):
+        """Enum fields with defaults are properly handled."""
+        server_info = ServerInfo(name="test", version="1.0.0")
+        capabilities = create_server_capabilities()
+        handler = MCPProtocolHandler(server_info, capabilities)
+
+        captured_request = {}
+
+        async def mock_send(request):
+            captured_request.update(request)
+            return {
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"priority": "high"},
+            }
+
+        handler._send_to_client = mock_send
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "priority": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high"],
+                    "default": "medium",
+                },
+            },
+        }
+
+        await handler.send_elicitation_request(
+            message="Select priority",
+            schema=schema,
+        )
+
+        sent_schema = captured_request["params"]["requestedSchema"]
+        assert sent_schema["properties"]["priority"]["default"] == "medium"
+        assert sent_schema["properties"]["priority"]["enum"] == ["low", "medium", "high"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

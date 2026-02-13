@@ -33,13 +33,18 @@ class ResourceHandler:
     cache_ttl: int | None = None  # Cache TTL in seconds
     _cached_mcp_format: dict[str, Any] | None = None  # Cache the MCP format dict
     _cached_mcp_bytes: bytes | None = None  # 🚀 Cache orjson-serialized bytes
+    icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
 
     def __post_init__(self) -> None:
         self._cached_content: str | None = None
         self._cache_timestamp: float | None = None
         # Pre-cache both dict and orjson formats for resources
         if self._cached_mcp_format is None:
-            self._cached_mcp_format = self.mcp_resource.model_dump(exclude_none=True)
+            fmt = self.mcp_resource.model_dump(exclude_none=True)
+            # Add icons if present (MCP 2025-11-25)
+            if self.icons:
+                fmt["icons"] = [icon.copy() for icon in self.icons]
+            self._cached_mcp_format = fmt
         if self._cached_mcp_bytes is None:
             self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
 
@@ -52,6 +57,7 @@ class ResourceHandler:
         description: str | None = None,
         mime_type: str = "text/plain",
         cache_ttl: int | None = None,
+        icons: list[dict[str, Any]] | None = None,
     ) -> "ResourceHandler":
         """Create ResourceHandler from a function."""
         resource_name = name or func.__name__.replace("_", " ").title()
@@ -66,6 +72,7 @@ class ResourceHandler:
             cache_ttl=cache_ttl,
             _cached_mcp_format=None,  # Will be computed in __post_init__
             _cached_mcp_bytes=None,  # Will be computed in __post_init__
+            icons=icons,
         )
 
     @property
@@ -221,6 +228,7 @@ class ResourceTemplateHandler:
     mime_type: str | None = None
     _cached_mcp_format: dict[str, Any] | None = None
     _cached_mcp_bytes: bytes | None = None
+    icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
 
     def __post_init__(self) -> None:
         if self._cached_mcp_format is None:
@@ -232,6 +240,9 @@ class ResourceTemplateHandler:
                 fmt["description"] = self.description
             if self.mime_type is not None:
                 fmt["mimeType"] = self.mime_type
+            # Add icons if present (MCP 2025-11-25)
+            if self.icons:
+                fmt["icons"] = [icon.copy() for icon in self.icons]
             self._cached_mcp_format = fmt
         if self._cached_mcp_bytes is None:
             self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
@@ -244,6 +255,7 @@ class ResourceTemplateHandler:
         name: str | None = None,
         description: str | None = None,
         mime_type: str | None = None,
+        icons: list[dict[str, Any]] | None = None,
     ) -> "ResourceTemplateHandler":
         """Create ResourceTemplateHandler from a function."""
         template_name = name or func.__name__.replace("_", " ").title()
@@ -255,12 +267,14 @@ class ResourceTemplateHandler:
             handler=func,
             description=template_description,
             mime_type=mime_type,
+            icons=icons,
         )
 
     def to_mcp_format(self) -> dict[str, Any]:
         """Convert to MCP resource template format."""
         if self._cached_mcp_bytes is None:
             self.__post_init__()
+        assert self._cached_mcp_bytes is not None
         result: dict[str, Any] = orjson.loads(self._cached_mcp_bytes)
         return result
 

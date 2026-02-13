@@ -34,14 +34,13 @@ from .constants import (
     PARAM_USER_ID,
     JsonRpcError,
     McpMethod,
+    McpTaskMethod,
 )
 from .types import (
     PromptHandler,
     ResourceHandler,
     ServerCapabilities,
-    # Direct chuk_mcp types (no conversion needed)
     ServerInfo,
-    # Framework handlers
     ToolHandler,
     format_content,
 )
@@ -114,10 +113,17 @@ class SessionManager:
 class MCPProtocolHandler:
     """Core MCP protocol handler powered by chuk_mcp."""
 
-    def __init__(self, server_info: ServerInfo, capabilities: ServerCapabilities, oauth_provider_getter=None):
+    def __init__(
+        self,
+        server_info: ServerInfo,
+        capabilities: ServerCapabilities,
+        oauth_provider_getter: Any = None,
+        extra_server_info: dict[str, Any] | None = None,
+    ):
         # Use chuk_mcp types directly - no conversion needed
         self.server_info = server_info
         self.capabilities = capabilities
+        self._extra_server_info = extra_server_info
         self.session_manager = SessionManager()
 
         # Tool, resource, and prompt registries (now use handlers)
@@ -142,6 +148,13 @@ class MCPProtocolHandler:
 
         # In-flight request tracking for cancellation support
         self._in_flight_requests: dict[Any, asyncio.Task[Any]] = {}
+
+        # Task store for MCP 2025-11-25 Tasks system
+        self._task_store: dict[str, dict[str, Any]] = {}
+
+        # SSE event buffer for resumability (session_id → list of (event_id, data))
+        self._sse_event_buffers: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+        self._sse_event_counters: dict[str, int] = {}
 
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
@@ -289,6 +302,15 @@ class MCPProtocolHandler:
             elif method == McpMethod.NOTIFICATIONS_ROOTS_LIST_CHANGED:
                 logger.debug("Roots list changed notification received")
                 return None, None  # Notification, no response
+            # Tasks system (MCP 2025-11-25)
+            elif method == McpTaskMethod.TASKS_GET:
+                return await self._handle_tasks_get(params, msg_id)
+            elif method == McpTaskMethod.TASKS_RESULT:
+                return await self._handle_tasks_result(params, msg_id)
+            elif method == McpTaskMethod.TASKS_LIST:
+                return await self._handle_tasks_list(params, msg_id)
+            elif method == McpTaskMethod.TASKS_CANCEL:
+                return await self._handle_tasks_cancel(params, msg_id)
             else:
                 return self._create_error_response(
                     msg_id, JsonRpcError.METHOD_NOT_FOUND, f"Method not found: {method}"
@@ -313,9 +335,14 @@ class MCPProtocolHandler:
             session["client_capabilities"] = client_capabilities
 
         # Build response using chuk_mcp types directly
+        server_info_dict = self.server_info.model_dump(exclude_none=True)
+        # Merge extra server info fields (MCP 2025-11-25: description, icons, websiteUrl)
+        if self._extra_server_info:
+            server_info_dict.update(self._extra_server_info)
+
         result = {
             KEY_PROTOCOL_VERSION: protocol_version,
-            KEY_SERVER_INFO: self.server_info.model_dump(exclude_none=True),
+            KEY_SERVER_INFO: server_info_dict,
             KEY_CAPABILITIES: self.capabilities.model_dump(exclude_none=True),
         }
 
@@ -529,6 +556,27 @@ class MCPProtocolHandler:
             return response, None
 
         except Exception as e:
+            # Check for URL elicitation required (MCP 2025-11-25)
+            from .types.errors import URLElicitationRequiredError
+
+            if isinstance(e, URLElicitationRequiredError):
+                from .constants import MCP_ERROR_URL_ELICITATION_REQUIRED
+
+                error_data: dict[str, Any] = {"url": e.url}
+                if e.description is not None:
+                    error_data["description"] = e.description
+                if e.mime_type is not None:
+                    error_data["mimeType"] = e.mime_type
+                return {
+                    JSONRPC_KEY: JSONRPC_VERSION,
+                    KEY_ID: msg_id,
+                    KEY_ERROR: {
+                        "code": MCP_ERROR_URL_ELICITATION_REQUIRED,
+                        "message": str(e),
+                        "data": error_data,
+                    },
+                }, None
+
             logger.error(f"Tool execution error for {tool_name}: {e}")
             return self._create_error_response(
                 msg_id, JsonRpcError.INTERNAL_ERROR, f"Tool execution error: {str(e)}"
@@ -599,6 +647,8 @@ class MCPProtocolHandler:
         stop_sequences: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         include_context: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: dict[str, Any] | str | None = None,
     ) -> dict[str, Any]:
         """
         Send a sampling/createMessage request to the MCP client.
@@ -646,6 +696,10 @@ class MCPProtocolHandler:
             params["metadata"] = metadata
         if include_context is not None:
             params["includeContext"] = include_context
+        if tools is not None:
+            params["tools"] = tools
+        if tool_choice is not None:
+            params["toolChoice"] = tool_choice
 
         # Build JSON-RPC request
         request_id = f"sampling-{uuid.uuid4().hex[:12]}"
@@ -1113,6 +1167,157 @@ class MCPProtocolHandler:
             result[KEY_NEXT_CURSOR] = base64.b64encode(str(next_offset).encode()).decode()
 
         return result
+
+    # ================================================================
+    # Session termination (MCP 2025-11-25 Streamable HTTP)
+    # ================================================================
+
+    def terminate_session(self, session_id: str) -> bool:
+        """Terminate a session and clean up resources.
+
+        Args:
+            session_id: The session ID to terminate.
+
+        Returns:
+            True if the session was found and terminated, False otherwise.
+        """
+        session = self.session_manager.get_session(session_id)
+        if session is None:
+            return False
+
+        # Clean up subscriptions
+        self._resource_subscriptions.pop(session_id, None)
+
+        # Clean up SSE buffers
+        self._sse_event_buffers.pop(session_id, None)
+        self._sse_event_counters.pop(session_id, None)
+
+        # Remove session
+        self.session_manager.sessions.pop(session_id, None)
+        logger.debug(f"Terminated session {session_id[:8]}...")
+        return True
+
+    def next_sse_event_id(self, session_id: str) -> int:
+        """Get next SSE event ID for a session."""
+        counter = self._sse_event_counters.get(session_id, 0) + 1
+        self._sse_event_counters[session_id] = counter
+        return counter
+
+    def buffer_sse_event(self, session_id: str, event_id: int, data: dict[str, Any]) -> None:
+        """Buffer an SSE event for resumability."""
+        buf = self._sse_event_buffers.setdefault(session_id, [])
+        buf.append((event_id, data))
+        # Keep only last 100 events
+        if len(buf) > 100:
+            self._sse_event_buffers[session_id] = buf[-100:]
+
+    def get_missed_events(self, session_id: str, last_event_id: int) -> list[tuple[int, dict[str, Any]]]:
+        """Get events after the given event ID for resumability."""
+        buf = self._sse_event_buffers.get(session_id, [])
+        return [(eid, data) for eid, data in buf if eid > last_event_id]
+
+    # ================================================================
+    # Tasks system (MCP 2025-11-25)
+    # ================================================================
+
+    def _create_task(self, request_id: Any, tool_name: str) -> str:
+        """Create a task for a tool execution."""
+        task_id = str(uuid.uuid4()).replace("-", "")[:16]
+        self._task_store[task_id] = {
+            "id": task_id,
+            "status": "working",
+            "requestId": request_id,
+            "toolName": tool_name,
+            "createdAt": time.time(),
+            "updatedAt": time.time(),
+            "result": None,
+            "error": None,
+            "message": None,
+        }
+        return task_id
+
+    def _update_task_status(
+        self,
+        task_id: str,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+        message: str | None = None,
+    ) -> None:
+        """Update a task's status."""
+        task = self._task_store.get(task_id)
+        if task is None:
+            return
+        task["status"] = status
+        task["updatedAt"] = time.time()
+        if result is not None:
+            task["result"] = result
+        if error is not None:
+            task["error"] = error
+        if message is not None:
+            task["message"] = message
+
+    async def _handle_tasks_get(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle tasks/get request."""
+        task_id = params.get("id", "")
+        task = self._task_store.get(task_id)
+        if task is None:
+            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+
+    async def _handle_tasks_result(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle tasks/result request."""
+        task_id = params.get("id", "")
+        task = self._task_store.get(task_id)
+        if task is None:
+            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
+        if task["status"] not in ("completed", "failed"):
+            return self._create_error_response(
+                msg_id, JsonRpcError.INVALID_PARAMS, f"Task {task_id} is not yet complete (status: {task['status']})"
+            ), None
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+
+    async def _handle_tasks_list(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle tasks/list request with pagination."""
+        tasks_list = list(self._task_store.values())
+        result = self._paginate(tasks_list, "tasks", params)
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}, None
+
+    async def _handle_tasks_cancel(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle tasks/cancel request."""
+        task_id = params.get("id", "")
+        task = self._task_store.get(task_id)
+        if task is None:
+            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
+        if task["status"] in ("completed", "failed", "cancelled"):
+            return self._create_error_response(
+                msg_id, JsonRpcError.INVALID_PARAMS, f"Task {task_id} is already in terminal state: {task['status']}"
+            ), None
+        self._update_task_status(task_id, "cancelled")
+        # Also cancel the in-flight request if tracked
+        request_id = task.get("requestId")
+        if request_id is not None:
+            in_flight = self._in_flight_requests.pop(request_id, None)
+            if in_flight is not None:
+                in_flight.cancel()
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+
+    async def send_task_status_notification(self, task_id: str) -> None:
+        """Send a notifications/tasks/status to the client."""
+        if self._send_to_client is None:
+            return
+        task = self._task_store.get(task_id)
+        if task is None:
+            return
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpTaskMethod.NOTIFICATIONS_TASKS_STATUS,
+            KEY_PARAMS: task,
+        }
+        try:
+            await self._send_to_client(notification)
+        except Exception as e:
+            logger.debug(f"Failed to send task status notification: {e}")
 
     def _create_error_response(self, msg_id: Any, code: int, message: str) -> dict[str, Any]:
         """Create error response."""

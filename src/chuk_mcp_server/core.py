@@ -65,7 +65,9 @@ class ChukMCPServer:
         name: str | None = None,
         version: str = "1.0.0",
         title: str | None = None,
-        description: str | None = None,  # noqa: ARG002
+        description: str | None = None,
+        icons: list[dict[str, Any]] | None = None,
+        website_url: str | None = None,
         capabilities=None,
         tools: bool = True,
         resources: bool = True,
@@ -147,8 +149,19 @@ class ChukMCPServer:
         self.smart_containerized = smart_defaults["containerized"]
         self.smart_transport_mode = smart_defaults.get("transport_mode", "http")
 
+        # Build extra server info fields for MCP 2025-11-25
+        extra_server_info: dict[str, Any] = {}
+        if description is not None:
+            extra_server_info["description"] = description
+        if icons is not None:
+            extra_server_info["icons"] = icons
+        if website_url is not None:
+            extra_server_info["websiteUrl"] = website_url
+
         # Create protocol handler with direct chuk_mcp types
-        self.protocol = MCPProtocolHandler(self.server_info, self.capabilities)
+        self.protocol = MCPProtocolHandler(
+            self.server_info, self.capabilities, extra_server_info=extra_server_info or None
+        )
 
         # Register any globally decorated functions
         self._register_global_functions()
@@ -250,9 +263,16 @@ class ChukMCPServer:
             tool_name = name or func.__name__
             tool_description = description or func.__doc__ or f"Execute {tool_name}"
 
-            # Extract annotation and output_schema kwargs
+            # Extract annotation, output_schema, and icons kwargs
             annotation_kwargs = {}
-            for key in ("read_only_hint", "destructive_hint", "idempotent_hint", "open_world_hint", "output_schema"):
+            for key in (
+                "read_only_hint",
+                "destructive_hint",
+                "idempotent_hint",
+                "open_world_hint",
+                "output_schema",
+                "icons",
+            ):
                 if key in kwargs:
                     annotation_kwargs[key] = kwargs.pop(key)
 
@@ -307,9 +327,19 @@ class ChukMCPServer:
             resource_description = description or func.__doc__ or f"Resource: {uri}"
             resource_mime_type = mime_type or "application/json"  # Simple default
 
+            # Extract icons kwarg for resource handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
+
             # Create resource handler from function
             resource_handler = ResourceHandler.from_function(
-                uri=uri, func=func, name=resource_name, description=resource_description, mime_type=resource_mime_type
+                uri=uri,
+                func=func,
+                name=resource_name,
+                description=resource_description,
+                mime_type=resource_mime_type,
+                **handler_kwargs,
             )
 
             # Register in protocol handler (for MCP functionality)
@@ -346,6 +376,7 @@ class ChukMCPServer:
         name: str | None = None,
         description: str | None = None,
         mime_type: str | None = None,
+        **kwargs,
     ):
         """
         Resource template decorator for parameterized resources (RFC 6570).
@@ -357,12 +388,18 @@ class ChukMCPServer:
         """
 
         def decorator(func: Callable) -> Callable:
+            # Extract icons kwarg for template handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
+
             template_handler = ResourceTemplateHandler.from_function(
                 uri_template=uri_template,
                 func=func,
                 name=name,
                 description=description,
                 mime_type=mime_type,
+                **handler_kwargs,
             )
 
             # Register in protocol handler
@@ -395,8 +432,15 @@ class ChukMCPServer:
             prompt_name = name or func.__name__
             prompt_description = description or func.__doc__ or f"Prompt: {prompt_name}"
 
+            # Extract icons kwarg for prompt handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
+
             # Create prompt handler from function
-            prompt_handler = PromptHandler.from_function(func, name=prompt_name, description=prompt_description)
+            prompt_handler = PromptHandler.from_function(
+                func, name=prompt_name, description=prompt_description, **handler_kwargs
+            )
 
             # Register in protocol handler (for MCP functionality)
             self.protocol.register_prompt(prompt_handler)

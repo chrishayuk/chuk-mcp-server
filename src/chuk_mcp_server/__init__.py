@@ -171,11 +171,10 @@ from .types import (
 from .types import (
     ResourceHandler as Resource,
 )
-
-# Import types for advanced usage
 from .types import (
     ToolHandler as Tool,
 )
+from .types.errors import URLElicitationRequiredError
 
 
 # Create backward compatibility
@@ -478,6 +477,8 @@ __all__ = [
     "ModuleLoader",  # Dynamic tool module loader
     # 🧪 TESTING
     "ToolRunner",  # Test harness for invoking tools without transport
+    # ⚠️ ERRORS
+    "URLElicitationRequiredError",  # URL mode elicitation (MCP 2025-11-25)
 ]
 
 # ============================================================================

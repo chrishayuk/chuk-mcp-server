@@ -510,6 +510,8 @@ async def create_message(
     stop_sequences: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
     include_context: str | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]:
     """
     Request the MCP client to sample from its LLM.
@@ -549,6 +551,8 @@ async def create_message(
         stop_sequences=stop_sequences,
         metadata=metadata,
         include_context=include_context,
+        tools=tools,
+        tool_choice=tool_choice,
     )
     return result
 

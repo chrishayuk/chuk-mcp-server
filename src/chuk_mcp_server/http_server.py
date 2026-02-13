@@ -78,7 +78,7 @@ class HTTPServer:
             ("/ping", handle_ping, ["GET"], "ping"),
             ("/version", handle_version, ["GET"], "version"),
             ("/health", handle_health_ultra_fast, ["GET"], "health_fast"),
-            ("/mcp", mcp_endpoint.handle_request, ["GET", "POST", "OPTIONS"], "mcp_protocol"),
+            ("/mcp", mcp_endpoint.handle_request, ["GET", "POST", "DELETE", "OPTIONS"], "mcp_protocol"),
             ("/mcp/respond", mcp_endpoint.handle_respond, ["POST", "OPTIONS"], "mcp_respond"),
             ("/", info_endpoint.handle_request, ["GET"], "server_info"),
             ("/info", info_endpoint.handle_request, ["GET"], "server_info_explicit"),
@@ -128,7 +128,7 @@ class HTTPServer:
             Middleware(
                 CORSMiddleware,
                 allow_origins=["*"],
-                allow_methods=["GET", "POST", "OPTIONS"],
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
                 allow_headers=["*"],
                 expose_headers=["Mcp-Session-Id"],
                 max_age=86400,  # Long cache for preflight
