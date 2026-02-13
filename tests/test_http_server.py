@@ -69,7 +69,7 @@ class TestHTTPServer:
         mock_registry.clear_endpoints.assert_called_once()
 
         # Should have registered endpoints
-        assert mock_registry.register_endpoint.call_count == 7  # 7 endpoints
+        assert mock_registry.register_endpoint.call_count == 9  # 9 endpoints
 
     @patch("chuk_mcp_server.http_server.http_endpoint_registry")
     @patch("chuk_mcp_server.http_server.MCPEndpoint")

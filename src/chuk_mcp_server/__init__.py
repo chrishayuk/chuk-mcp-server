@@ -71,9 +71,23 @@ from .cloud import detect_cloud_provider, is_cloud_environment
 # Import context management
 from .context import (
     RequestContext,
+    add_resource_link,
+    create_elicitation,
+    create_message,
+    get_elicitation_fn,
+    get_progress_notify_fn,
+    get_roots_fn,
+    get_sampling_fn,
     get_session_id,
     get_user_id,
+    list_roots,
     require_user_id,
+    send_log,
+    send_progress,
+    set_elicitation_fn,
+    set_progress_notify_fn,
+    set_roots_fn,
+    set_sampling_fn,
     set_session_id,
     set_user_id,
 )
@@ -139,11 +153,12 @@ except ImportError:
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
-from .decorators import prompt, requires_auth, resource, tool
+from .decorators import prompt, requires_auth, resource, resource_template, tool
 from .modules import ModuleLoader
 
 # Import proxy functionality
 from .proxy import ProxyManager
+from .testing import ToolRunner
 from .types import (
     MCPPrompt,
     ServerInfo,
@@ -169,7 +184,7 @@ def Capabilities(**kwargs: Any) -> dict[str, Any]:
     return create_server_capabilities(**kwargs)  # type: ignore[no-any-return]
 
 
-__version__ = "0.16"
+__version__ = "0.18"
 
 # ============================================================================
 # Global Magic with Cloud Support
@@ -388,6 +403,7 @@ __all__ = [
     # 🪄 MAGIC DECORATORS
     "tool",
     "resource",
+    "resource_template",
     "prompt",
     "requires_auth",
     "run",
@@ -420,6 +436,26 @@ __all__ = [
     "require_user_id",  # Require authenticated user
     "set_session_id",  # Set session context
     "set_user_id",  # Set user context
+    # 🤖 SAMPLING (server → client LLM requests)
+    "create_message",  # Request client LLM sampling
+    "get_sampling_fn",  # Get sampling function
+    "set_sampling_fn",  # Set sampling function
+    # 💬 ELICITATION (server → client user input)
+    "create_elicitation",  # Request structured user input
+    "get_elicitation_fn",  # Get elicitation function
+    "set_elicitation_fn",  # Set elicitation function
+    # 📊 PROGRESS (server → client notifications)
+    "send_progress",  # Send progress update
+    "get_progress_notify_fn",  # Get progress notify function
+    "set_progress_notify_fn",  # Set progress notify function
+    # 📁 ROOTS (server → client filesystem roots)
+    "list_roots",  # Request client filesystem roots
+    "get_roots_fn",  # Get roots function
+    "set_roots_fn",  # Set roots function
+    # 📝 LOGGING (server → client log notifications)
+    "send_log",  # Send log notification to client
+    # 🔗 RESOURCE LINKS (tool → resource references)
+    "add_resource_link",  # Add resource link from tool execution
     # 📦 ARTIFACT/WORKSPACE CONTEXT (Optional - requires chuk-artifacts)
     "get_artifact_store",  # Get artifact store from context
     "set_artifact_store",  # Set artifact store in context
@@ -440,6 +476,8 @@ __all__ = [
     "ProxyManager",  # Multi-server proxy manager
     # 📦 MODULE LOADING
     "ModuleLoader",  # Dynamic tool module loader
+    # 🧪 TESTING
+    "ToolRunner",  # Test harness for invoking tools without transport
 ]
 
 # ============================================================================

@@ -87,7 +87,10 @@ Restart Claude Desktop - your tools are now available!
 - **🔒 Type Safe**: Automatic schema generation from Python type hints
 - **💬 Prompts Support**: Create reusable prompt templates
 - **🔄 Context Management**: Track sessions and users
-- **📦 Dual Transport**: STDIO (Claude Desktop) + HTTP (Web APIs)
+- **📦 Dual Transport**: STDIO (Claude Desktop) + HTTP (Web APIs), both with bidirectional support
+- **🧩 Full MCP Protocol**: Sampling, elicitation, progress, roots, subscriptions, completions
+- **🧪 ToolRunner**: Test tools without transport overhead
+- **📄 OpenAPI**: Auto-generated OpenAPI 3.1.0 spec at `/openapi.json`
 
 ## 📚 Documentation
 

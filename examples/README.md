@@ -91,6 +91,17 @@ Smart configuration, logging, and transport options.
 
 **Best for:** Production configuration, debugging, deployment
 
+### 🔌 Protocol Features
+
+Demonstrations of MCP protocol capabilities.
+
+| Example | Description | Key Features |
+|---------|-------------|--------------|
+| **[protocol_features_demo.py](protocol_features_demo.py)** | All v0.17 protocol features | Completions, subscriptions, elicitation, progress, roots |
+| **[demo_logging_setlevel.py](demo_logging_setlevel.py)** | Dynamic log level changes | MCP logging/setLevel protocol |
+
+**Best for:** Understanding MCP protocol, building advanced integrations
+
 ### 🎯 Advanced
 
 Advanced patterns and architectures.
@@ -264,7 +275,7 @@ Have a cool example? Add it!
 ## 📊 Example Statistics
 
 - **Total Examples:** 26 Python files
-- **Categories:** 7 (Basic, Async, Context, Composition, Proxy, Config, Advanced)
+- **Categories:** 8 (Basic, Async, Context, Composition, Proxy, Config, Protocol, Advanced)
 - **Test Coverage:** Examples are tested in CI
 - **Documentation:** All major features have examples
 

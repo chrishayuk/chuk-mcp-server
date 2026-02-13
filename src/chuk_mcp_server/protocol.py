@@ -4,9 +4,11 @@
 ChukMCPServer Protocol Handler - Core MCP protocol implementation with chuk_mcp
 """
 
+import asyncio
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from .constants import (
@@ -126,6 +128,21 @@ class MCPProtocolHandler:
         # OAuth provider getter function (optional)
         self.oauth_provider_getter = oauth_provider_getter
 
+        # Transport callback for sending requests to the client (set by transport layer)
+        self._send_to_client: Callable[..., Any] | None = None
+
+        # Completion providers registry (ref_type → provider callable)
+        self.completion_providers: dict[str, Callable[..., Any]] = {}
+
+        # Resource template registry
+        self.resource_templates: dict[str, Any] = {}
+
+        # Resource subscription tracking (session_id → set of URIs)
+        self._resource_subscriptions: dict[str, set[str]] = {}
+
+        # In-flight request tracking for cancellation support
+        self._in_flight_requests: dict[Any, asyncio.Task[Any]] = {}
+
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
 
@@ -143,6 +160,25 @@ class MCPProtocolHandler:
         """Register a prompt handler."""
         self.prompts[prompt.name] = prompt
         logger.debug(f"Registered prompt: {prompt.name}")
+
+    def register_resource_template(self, template: Any) -> None:
+        """Register a resource template handler."""
+        self.resource_templates[template.uri_template] = template
+        logger.debug(f"Registered resource template: {template.uri_template}")
+
+    def get_resource_templates_list(self) -> list[dict[str, Any]]:
+        """Get list of resource templates in MCP format."""
+        return [t.to_mcp_format() for t in self.resource_templates.values()]
+
+    def register_completion_provider(self, ref_type: str, provider: Callable[..., Any]) -> None:
+        """Register a completion provider for a reference type.
+
+        Args:
+            ref_type: Reference type (e.g., "ref/resource" or "ref/prompt")
+            provider: Async callable that returns completion suggestions
+        """
+        self.completion_providers[ref_type] = provider
+        logger.debug(f"Registered completion provider: {ref_type}")
 
     def get_tools_list(self) -> list[dict[str, Any]]:
         """Get list of tools in MCP format."""
@@ -226,19 +262,33 @@ class MCPProtocolHandler:
             elif method == McpMethod.PING:
                 return await self._handle_ping(msg_id)
             elif method == McpMethod.TOOLS_LIST:
-                return await self._handle_tools_list(msg_id)
+                return await self._handle_tools_list(params, msg_id)
             elif method == McpMethod.TOOLS_CALL:
                 return await self._handle_tools_call(params, msg_id, oauth_token)
             elif method == McpMethod.RESOURCES_LIST:
-                return await self._handle_resources_list(msg_id)
+                return await self._handle_resources_list(params, msg_id)
             elif method == McpMethod.RESOURCES_READ:
                 return await self._handle_resources_read(params, msg_id)
             elif method == McpMethod.PROMPTS_LIST:
-                return await self._handle_prompts_list(msg_id)
+                return await self._handle_prompts_list(params, msg_id)
             elif method == McpMethod.PROMPTS_GET:
                 return await self._handle_prompts_get(params, msg_id)
             elif method == McpMethod.LOGGING_SET_LEVEL:
                 return await self._handle_logging_set_level(params, msg_id)
+            elif method == McpMethod.COMPLETION_COMPLETE:
+                return await self._handle_completion_complete(params, msg_id)
+            elif method == McpMethod.RESOURCES_TEMPLATES_LIST:
+                return await self._handle_resources_templates_list(params, msg_id)
+            elif method == McpMethod.RESOURCES_SUBSCRIBE:
+                return await self._handle_resources_subscribe(params, msg_id)
+            elif method == McpMethod.RESOURCES_UNSUBSCRIBE:
+                return await self._handle_resources_unsubscribe(params, msg_id)
+            elif method == McpMethod.NOTIFICATIONS_CANCELLED:
+                self._handle_cancelled_notification(params)
+                return None, None  # Notification, no response
+            elif method == McpMethod.NOTIFICATIONS_ROOTS_LIST_CHANGED:
+                logger.debug("Roots list changed notification received")
+                return None, None  # Notification, no response
             else:
                 return self._create_error_response(
                     msg_id, JsonRpcError.METHOD_NOT_FOUND, f"Method not found: {method}"
@@ -252,9 +302,15 @@ class MCPProtocolHandler:
         """Handle initialize request using chuk_mcp."""
         client_info = params.get(KEY_CLIENT_INFO, {})
         protocol_version = params.get(KEY_PROTOCOL_VERSION, MCP_DEFAULT_PROTOCOL_VERSION)
+        client_capabilities = params.get(KEY_CAPABILITIES, {})
 
         # Create session
         session_id = self.session_manager.create_session(client_info, protocol_version)
+
+        # Store client capabilities on the session
+        session = self.session_manager.get_session(session_id)
+        if session is not None:
+            session["client_capabilities"] = client_capabilities
 
         # Build response using chuk_mcp types directly
         result = {
@@ -266,21 +322,25 @@ class MCPProtocolHandler:
         response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}
 
         client_name = client_info.get("name", "unknown")
-        logger.debug(f"🤝 Initialized session {session_id[:8]}... for {client_name} (v{protocol_version})")
+        sampling_supported = "sampling" in client_capabilities
+        logger.debug(
+            f"🤝 Initialized session {session_id[:8]}... for {client_name} "
+            f"(v{protocol_version}, sampling={'yes' if sampling_supported else 'no'})"
+        )
         return response, session_id
 
     async def _handle_ping(self, msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle ping request."""
         return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: {}}, None
 
-    async def _handle_tools_list(self, msg_id: Any) -> tuple[dict[str, Any], None]:
-        """Handle tools/list request."""
+    async def _handle_tools_list(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle tools/list request with pagination support."""
         tools_list = self.get_tools_list()
-        result = {"tools": tools_list}
+        result = self._paginate(tools_list, "tools", params)
 
         response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}
 
-        logger.debug(f"📋 Returning {len(tools_list)} tools")
+        logger.debug(f"Returning {len(result['tools'])} tools")
         return response, None
 
     async def _handle_tools_call(
@@ -291,7 +351,10 @@ class MCPProtocolHandler:
         arguments = params.get("arguments", {})
 
         if tool_name not in self.tools:
-            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown tool: {tool_name}"), None
+            from .errors import format_unknown_tool_error
+
+            error_msg = format_unknown_tool_error(tool_name, list(self.tools.keys()))
+            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, error_msg), None
 
         try:
             tool_handler = self.tools[tool_name]
@@ -358,13 +421,109 @@ class MCPProtocolHandler:
                         msg_id, JsonRpcError.INTERNAL_ERROR, f"OAuth validation failed: {str(e)}"
                     ), None
 
-            # Execute the tool
-            result = await tool_handler.execute(arguments)
+            # Set up server-to-client context if client supports it
+            from .context import (
+                set_elicitation_fn,
+                set_log_fn,
+                set_progress_notify_fn,
+                set_progress_token,
+                set_resource_links,
+                set_roots_fn,
+                set_sampling_fn,
+            )
+
+            if self._client_supports_sampling(params):
+                set_sampling_fn(self.send_sampling_request)
+            else:
+                set_sampling_fn(None)
+
+            if self._client_supports_elicitation(params):
+                set_elicitation_fn(self.send_elicitation_request)
+            else:
+                set_elicitation_fn(None)
+
+            if self._client_supports_roots(params):
+                set_roots_fn(self.send_roots_request)
+            else:
+                set_roots_fn(None)
+
+            # Extract progress token from request _meta and inject notify fn
+            progress_token = params.get("_meta", {}).get("progressToken")
+            set_progress_token(progress_token)
+            if progress_token and self._send_to_client:
+
+                async def _progress_notify(
+                    progress_token: str | int,
+                    progress: float,
+                    total: float | None = None,
+                    message: str | None = None,
+                ) -> None:
+                    await self.send_progress_notification(progress_token, progress, total, message)
+
+                set_progress_notify_fn(_progress_notify)
+            else:
+                set_progress_notify_fn(None)
+
+            # Set up log notification fn (always available if transport exists)
+            if self._send_to_client:
+                set_log_fn(
+                    lambda level="info", data=None, logger_name=None: self.send_log_notification(
+                        level=level, data=data, logger_name=logger_name
+                    )
+                )
+            else:
+                set_log_fn(None)
+
+            # Initialize resource links collection for this tool call
+            set_resource_links(None)
+
+            # Track in-flight request for cancellation support
+            task = asyncio.current_task()
+            if task is not None and msg_id is not None:
+                self._in_flight_requests[msg_id] = task
+
+            try:
+                # Execute the tool
+                result = await tool_handler.execute(arguments)
+            except asyncio.CancelledError:
+                logger.debug(f"Tool execution cancelled for {tool_name} (request {msg_id})")
+                return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Request cancelled"), None
+            finally:
+                # Remove from in-flight tracking
+                self._in_flight_requests.pop(msg_id, None)
+                # Always clear all server-to-client fns after tool execution
+                set_sampling_fn(None)
+                set_elicitation_fn(None)
+                set_roots_fn(None)
+                set_progress_notify_fn(None)
+                set_progress_token(None)
+                set_log_fn(None)
 
             # Format response content using chuk_mcp content formatting
             content = format_content(result)
 
-            response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: {"content": content}}
+            # Build result dict
+            tool_result: dict[str, Any] = {"content": content}
+
+            # Add structured content if tool has output_schema and result is a dict/model
+            if tool_handler.output_schema is not None and result is not None:
+                from pydantic import BaseModel as _BaseModel
+
+                if isinstance(result, dict):
+                    tool_result["structuredContent"] = result
+                elif isinstance(result, _BaseModel):
+                    tool_result["structuredContent"] = result.model_dump()
+
+            # Add resource links if any were accumulated during execution
+            from .context import get_resource_links
+
+            links = get_resource_links()
+            if links:
+                tool_result["_meta"] = tool_result.get("_meta", {})
+                tool_result["_meta"]["links"] = links
+            set_resource_links(None)
+
+            response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: tool_result}
 
             logger.debug(f"🔧 Executed tool {tool_name}")
             return response, None
@@ -375,14 +534,399 @@ class MCPProtocolHandler:
                 msg_id, JsonRpcError.INTERNAL_ERROR, f"Tool execution error: {str(e)}"
             ), None
 
-    async def _handle_resources_list(self, msg_id: Any) -> tuple[dict[str, Any], None]:
-        """Handle resources/list request."""
+    def _client_supports_sampling(self, tool_call_params: dict[str, Any]) -> bool:
+        """Check if the current session's client supports sampling."""
+        if self._send_to_client is None:
+            return False
+
+        # Find the session and check client capabilities
+        from .context import get_session_id
+
+        session_id = get_session_id()
+        if not session_id:
+            return False
+
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return False
+
+        client_caps = session.get("client_capabilities", {})
+        return "sampling" in client_caps
+
+    def _client_supports_elicitation(self, tool_call_params: dict[str, Any]) -> bool:  # noqa: ARG002
+        """Check if the current session's client supports elicitation."""
+        if self._send_to_client is None:
+            return False
+
+        from .context import get_session_id
+
+        session_id = get_session_id()
+        if not session_id:
+            return False
+
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return False
+
+        client_caps = session.get("client_capabilities", {})
+        return "elicitation" in client_caps
+
+    def _client_supports_roots(self, tool_call_params: dict[str, Any]) -> bool:  # noqa: ARG002
+        """Check if the current session's client supports roots."""
+        if self._send_to_client is None:
+            return False
+
+        from .context import get_session_id
+
+        session_id = get_session_id()
+        if not session_id:
+            return False
+
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return False
+
+        client_caps = session.get("client_capabilities", {})
+        return "roots" in client_caps
+
+    async def send_sampling_request(
+        self,
+        messages: list[Any],
+        max_tokens: int = 1000,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        model_preferences: Any = None,
+        stop_sequences: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        include_context: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Send a sampling/createMessage request to the MCP client.
+
+        Args:
+            messages: List of sampling messages (dicts with role and content)
+            max_tokens: Maximum tokens for the response
+            system_prompt: Optional system prompt
+            temperature: Optional temperature
+            model_preferences: Optional model preferences
+            stop_sequences: Optional stop sequences
+            metadata: Optional metadata
+            include_context: Optional context inclusion
+
+        Returns:
+            Dict with the client's sampling response (role, content, model, stopReason)
+
+        Raises:
+            RuntimeError: If transport callback is not available or client doesn't support sampling
+        """
+        if self._send_to_client is None:
+            raise RuntimeError("No transport callback available for sending sampling requests")
+
+        # Build the sampling/createMessage params
+        params: dict[str, Any] = {
+            "messages": [
+                m if isinstance(m, dict) else (m.model_dump() if hasattr(m, "model_dump") else dict(m))
+                for m in messages
+            ],
+            "maxTokens": max_tokens,
+        }
+
+        if system_prompt is not None:
+            params["systemPrompt"] = system_prompt
+        if temperature is not None:
+            params["temperature"] = temperature
+        if model_preferences is not None:
+            if hasattr(model_preferences, "model_dump"):
+                params["modelPreferences"] = model_preferences.model_dump()
+            else:
+                params["modelPreferences"] = model_preferences
+        if stop_sequences is not None:
+            params["stopSequences"] = stop_sequences
+        if metadata is not None:
+            params["metadata"] = metadata
+        if include_context is not None:
+            params["includeContext"] = include_context
+
+        # Build JSON-RPC request
+        request_id = f"sampling-{uuid.uuid4().hex[:12]}"
+        request = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: request_id,
+            KEY_METHOD: McpMethod.SAMPLING_CREATE_MESSAGE,
+            KEY_PARAMS: params,
+        }
+
+        # Send to client and await response
+        response = await self._send_to_client(request)
+
+        # Validate response
+        if KEY_ERROR in response:
+            error = response[KEY_ERROR]
+            raise RuntimeError(f"Sampling request failed: {error.get('message', 'Unknown error')}")
+
+        result = response.get(KEY_RESULT, {})
+        return result
+
+    async def send_elicitation_request(
+        self,
+        message: str,
+        schema: dict[str, Any],
+        title: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Send an elicitation/create request to the MCP client.
+
+        Args:
+            message: Human-readable explanation of what input is needed
+            schema: JSON Schema defining expected response structure
+            title: Optional title for the input dialog
+            description: Optional longer description
+
+        Returns:
+            Dict with the user's structured response
+
+        Raises:
+            RuntimeError: If transport callback is not available
+        """
+        if self._send_to_client is None:
+            raise RuntimeError("No transport callback available for sending elicitation requests")
+
+        params: dict[str, Any] = {
+            "message": message,
+            "requestedSchema": schema,
+        }
+        if title is not None:
+            params["title"] = title
+        if description is not None:
+            params["description"] = description
+
+        request_id = f"elicit-{uuid.uuid4().hex[:12]}"
+        request = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: request_id,
+            KEY_METHOD: McpMethod.ELICITATION_CREATE,
+            KEY_PARAMS: params,
+        }
+
+        response = await self._send_to_client(request)
+
+        if KEY_ERROR in response:
+            error = response[KEY_ERROR]
+            raise RuntimeError(f"Elicitation request failed: {error.get('message', 'Unknown error')}")
+
+        return response.get(KEY_RESULT, {})
+
+    async def send_progress_notification(
+        self,
+        progress_token: str | int,
+        progress: float,
+        total: float | None = None,
+        message: str | None = None,
+    ) -> None:
+        """
+        Send a progress notification to the MCP client.
+
+        This is a fire-and-forget notification (no response expected).
+
+        Args:
+            progress_token: Token from the request's _meta.progressToken
+            progress: Current progress value
+            total: Optional total expected progress value
+            message: Optional human-readable progress message
+        """
+        if self._send_to_client is None:
+            return
+
+        params: dict[str, Any] = {
+            "progressToken": progress_token,
+            "progress": progress,
+        }
+        if total is not None:
+            params["total"] = total
+        if message is not None:
+            params["message"] = message
+
+        # Notification — no id field
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpMethod.NOTIFICATIONS_PROGRESS,
+            KEY_PARAMS: params,
+        }
+
+        await self._send_to_client(notification)
+
+    async def send_roots_request(self) -> list[dict[str, Any]]:
+        """
+        Send a roots/list request to the MCP client.
+
+        Returns:
+            List of Root dicts with uri and optional name
+
+        Raises:
+            RuntimeError: If transport callback is not available
+        """
+        if self._send_to_client is None:
+            raise RuntimeError("No transport callback available for sending roots requests")
+
+        request_id = f"roots-{uuid.uuid4().hex[:12]}"
+        request = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: request_id,
+            KEY_METHOD: McpMethod.ROOTS_LIST,
+            KEY_PARAMS: {},
+        }
+
+        response = await self._send_to_client(request)
+
+        if KEY_ERROR in response:
+            error = response[KEY_ERROR]
+            raise RuntimeError(f"Roots request failed: {error.get('message', 'Unknown error')}")
+
+        result = response.get(KEY_RESULT, {})
+        return result.get("roots", [])
+
+    async def notify_resource_updated(self, uri: str) -> None:
+        """
+        Send a resource updated notification to subscribed clients.
+
+        Args:
+            uri: URI of the resource that was updated
+        """
+        if self._send_to_client is None:
+            return
+
+        # Find all sessions subscribed to this URI
+        for session_id, uris in self._resource_subscriptions.items():
+            if uri in uris:
+                notification = {
+                    JSONRPC_KEY: JSONRPC_VERSION,
+                    KEY_METHOD: McpMethod.NOTIFICATIONS_RESOURCES_UPDATED,
+                    KEY_PARAMS: {"uri": uri},
+                }
+                try:
+                    await self._send_to_client(notification)
+                except Exception as e:
+                    logger.debug(f"Failed to notify session {session_id[:8]}... of resource update: {e}")
+
+    async def send_log_notification(
+        self,
+        level: str = "info",
+        data: Any = None,
+        logger_name: str | None = None,
+    ) -> None:
+        """
+        Send a log message notification to the client (notifications/message).
+
+        This is a fire-and-forget notification. Safe to call even if no transport
+        callback is available (will silently no-op).
+
+        Args:
+            level: Log level (debug, info, notice, warning, error, critical, alert, emergency)
+            data: Log data (any JSON-serializable value)
+            logger_name: Optional logger name for filtering
+        """
+        if self._send_to_client is None:
+            return
+
+        params: dict[str, Any] = {"level": level, "data": data}
+        if logger_name is not None:
+            params["logger"] = logger_name
+
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpMethod.NOTIFICATIONS_MESSAGE,
+            KEY_PARAMS: params,
+        }
+
+        try:
+            await self._send_to_client(notification)
+        except Exception as e:
+            logger.debug(f"Failed to send log notification: {e}")
+
+    def _handle_cancelled_notification(self, params: dict[str, Any]) -> None:
+        """
+        Handle notifications/cancelled — cancel an in-flight request.
+
+        The client sends this when it no longer needs the response for a
+        previous request. We look up the asyncio task and cancel it.
+
+        Args:
+            params: Must contain "requestId"; may contain "reason".
+        """
+        request_id = params.get("requestId")
+        reason = params.get("reason", "")
+        if request_id is None:
+            logger.debug("Received cancelled notification without requestId")
+            return
+
+        task = self._in_flight_requests.pop(request_id, None)
+        if task is not None:
+            task.cancel()
+            logger.debug(f"Cancelled request {request_id}" + (f": {reason}" if reason else ""))
+        else:
+            logger.debug(f"Cancelled notification for unknown request {request_id}")
+
+    async def _handle_completion_complete(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle completion/complete request."""
+        ref = params.get("ref", {})
+        argument = params.get("argument", {})
+        ref_type = ref.get("type", "")
+
+        # Look up provider for this reference type
+        provider = self.completion_providers.get(ref_type)
+        if provider is None:
+            # No provider — return empty completions
+            result = {"completion": {"values": [], "hasMore": False}}
+            return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}, None
+
+        try:
+            completion = await provider(ref, argument)
+            if isinstance(completion, dict):
+                result = {"completion": completion}
+            else:
+                result = {"completion": {"values": [], "hasMore": False}}
+
+            return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}, None
+
+        except Exception as e:
+            logger.error(f"Completion error: {e}")
+            return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, f"Completion error: {str(e)}"), None
+
+    async def _handle_resources_subscribe(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle resources/subscribe request."""
+        uri = params.get("uri", "")
+
+        from .context import get_session_id
+
+        session_id = get_session_id()
+        if session_id:
+            self._resource_subscriptions.setdefault(session_id, set()).add(uri)
+            logger.debug(f"Session {session_id[:8]}... subscribed to {uri}")
+
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: {}}, None
+
+    async def _handle_resources_unsubscribe(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle resources/unsubscribe request."""
+        uri = params.get("uri", "")
+
+        from .context import get_session_id
+
+        session_id = get_session_id()
+        if session_id and session_id in self._resource_subscriptions:
+            self._resource_subscriptions[session_id].discard(uri)
+            logger.debug(f"Session {session_id[:8]}... unsubscribed from {uri}")
+
+        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: {}}, None
+
+    async def _handle_resources_list(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle resources/list request with pagination support."""
         resources_list = self.get_resources_list()
-        result = {"resources": resources_list}
+        result = self._paginate(resources_list, "resources", params)
 
         response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}
 
-        logger.debug(f"📂 Returning {len(resources_list)} resources")
+        logger.debug(f"Returning {len(result['resources'])} resources")
         return response, None
 
     async def _handle_resources_read(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
@@ -410,14 +954,26 @@ class MCPProtocolHandler:
                 msg_id, JsonRpcError.INTERNAL_ERROR, f"Resource read error: {str(e)}"
             ), None
 
-    async def _handle_prompts_list(self, msg_id: Any) -> tuple[dict[str, Any], None]:
-        """Handle prompts/list request."""
-        prompts_list = self.get_prompts_list()
-        result = {"prompts": prompts_list}
+    async def _handle_resources_templates_list(
+        self, params: dict[str, Any], msg_id: Any
+    ) -> tuple[dict[str, Any], None]:
+        """Handle resources/templates/list request with pagination support."""
+        templates_list = self.get_resource_templates_list()
+        result = self._paginate(templates_list, "resourceTemplates", params)
 
         response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}
 
-        logger.info(f"💬 Returning {len(prompts_list)} prompts")
+        logger.debug(f"Returning {len(result['resourceTemplates'])} resource templates")
+        return response, None
+
+    async def _handle_prompts_list(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
+        """Handle prompts/list request with pagination support."""
+        prompts_list = self.get_prompts_list()
+        result = self._paginate(prompts_list, "prompts", params)
+
+        response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}
+
+        logger.info(f"Returning {len(result['prompts'])} prompts")
         return response, None
 
     async def _handle_prompts_get(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
@@ -521,6 +1077,42 @@ class MCPProtocolHandler:
         }
 
         return response, None
+
+    @staticmethod
+    def _paginate(items: list[dict[str, Any]], key: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Apply cursor-based pagination to a list of items.
+
+        Args:
+            items: Full list of items.
+            key: Result key name (e.g., "tools", "resources", "prompts").
+            params: Request params (may contain "cursor").
+
+        Returns:
+            Result dict with paginated items and optional nextCursor.
+        """
+        from .constants import DEFAULT_PAGE_SIZE, KEY_CURSOR, KEY_NEXT_CURSOR
+
+        cursor = params.get(KEY_CURSOR)
+        offset = 0
+
+        if cursor is not None:
+            import base64
+
+            try:
+                offset = int(base64.b64decode(cursor).decode())
+            except (ValueError, Exception):
+                offset = 0  # Invalid cursor, start from beginning
+
+        page = items[offset : offset + DEFAULT_PAGE_SIZE]
+        result: dict[str, Any] = {key: page}
+
+        if offset + DEFAULT_PAGE_SIZE < len(items):
+            import base64
+
+            next_offset = offset + DEFAULT_PAGE_SIZE
+            result[KEY_NEXT_CURSOR] = base64.b64encode(str(next_offset).encode()).decode()
+
+        return result
 
     def _create_error_response(self, msg_id: Any, code: int, message: str) -> dict[str, Any]:
         """Create error response."""

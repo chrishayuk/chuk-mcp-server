@@ -147,17 +147,17 @@ class ResourceHandler:
         if mime_type == "application/json":
             if isinstance(result, dict | list):
                 # 🚀 Use orjson for 2-3x faster JSON serialization
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
+                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             else:
-                return orjson.dumps(result).decode()  # type: ignore[no-any-return]
+                return str(orjson.dumps(result).decode())
         elif mime_type == "text/markdown" or mime_type == "text/plain":
             if isinstance(result, dict | list):
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
+                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             return str(result)
         else:
             # For unknown MIME types, convert to string with orjson
             if isinstance(result, dict | list):
-                return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()  # type: ignore[no-any-return]
+                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             else:
                 return str(result)
 
@@ -199,6 +199,93 @@ class ResourceHandler:
             "remaining_seconds": round(remaining, 2),
             "content_length": len(self._cached_content) if self._cached_content else 0,
         }
+
+
+# ============================================================================
+# ResourceTemplateHandler
+# ============================================================================
+
+
+@dataclass
+class ResourceTemplateHandler:
+    """Handler for URI template-based resources (RFC 6570).
+
+    Resource templates allow clients to discover parameterized resources.
+    The handler function receives extracted template parameters as kwargs.
+    """
+
+    uri_template: str
+    name: str
+    handler: Callable[..., Any]
+    description: str | None = None
+    mime_type: str | None = None
+    _cached_mcp_format: dict[str, Any] | None = None
+    _cached_mcp_bytes: bytes | None = None
+
+    def __post_init__(self) -> None:
+        if self._cached_mcp_format is None:
+            fmt: dict[str, Any] = {
+                "uriTemplate": self.uri_template,
+                "name": self.name,
+            }
+            if self.description is not None:
+                fmt["description"] = self.description
+            if self.mime_type is not None:
+                fmt["mimeType"] = self.mime_type
+            self._cached_mcp_format = fmt
+        if self._cached_mcp_bytes is None:
+            self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
+
+    @classmethod
+    def from_function(
+        cls,
+        uri_template: str,
+        func: Callable[..., Any],
+        name: str | None = None,
+        description: str | None = None,
+        mime_type: str | None = None,
+    ) -> "ResourceTemplateHandler":
+        """Create ResourceTemplateHandler from a function."""
+        template_name = name or func.__name__.replace("_", " ").title()
+        template_description = description or func.__doc__ or f"Resource template: {uri_template}"
+
+        return cls(
+            uri_template=uri_template,
+            name=template_name,
+            handler=func,
+            description=template_description,
+            mime_type=mime_type,
+        )
+
+    def to_mcp_format(self) -> dict[str, Any]:
+        """Convert to MCP resource template format."""
+        if self._cached_mcp_bytes is None:
+            self.__post_init__()
+        result: dict[str, Any] = orjson.loads(self._cached_mcp_bytes)
+        return result
+
+    def to_mcp_bytes(self) -> bytes:
+        """Get orjson-serialized MCP format bytes."""
+        if self._cached_mcp_bytes is None:
+            self.__post_init__()
+        return self._cached_mcp_bytes  # type: ignore[return-value]
+
+    async def read(self, **kwargs: Any) -> str:
+        """Read resource content with template parameters."""
+        try:
+            if inspect.iscoroutinefunction(self.handler):
+                result = await self.handler(**kwargs)
+            else:
+                result = self.handler(**kwargs)
+
+            # Format result
+            if isinstance(result, BaseModel):
+                result = result.model_dump()
+            if isinstance(result, dict | list):
+                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
+            return str(result)
+        except Exception as e:
+            raise MCPError(f"Failed to read resource template '{self.uri_template}': {str(e)}", code=-32603) from e
 
 
 # ============================================================================
@@ -252,6 +339,7 @@ def create_markdown_resource(
 
 __all__ = [
     "ResourceHandler",
+    "ResourceTemplateHandler",
     "create_resource_from_function",
     "create_json_resource",
     "create_markdown_resource",

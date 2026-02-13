@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 # src/chuk_mcp_server/endpoints/mcp.py
 """
-MCP Endpoint - Handles core MCP protocol requests with SSE support
+MCP Endpoint - Handles core MCP protocol requests with SSE support.
+
+Supports bidirectional communication over SSE: during tool execution,
+the server can send requests (sampling, elicitation, roots) to the client
+as SSE events. The client responds via POST to /mcp/respond.
 """
 
+import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -52,10 +58,12 @@ JSONRPC_VERSION_KEY = "jsonrpc"
 
 
 class MCPEndpoint:
-    """Core MCP endpoint handler with SSE support for Inspector compatibility."""
+    """Core MCP endpoint handler with SSE and bidirectional support."""
 
     def __init__(self, protocol_handler: MCPProtocolHandler):
         self.protocol = protocol_handler
+        # Pending server-to-client requests awaiting responses via /mcp/respond
+        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     async def handle_request(self, request: Request) -> Response:
         """Main MCP endpoint handler."""
@@ -176,6 +184,65 @@ class MCPEndpoint:
 
         return Response(orjson.dumps(response), media_type=CONTENT_TYPE_JSON, headers=headers)
 
+    async def handle_respond(self, request: Request) -> Response:
+        """Handle client responses to server-initiated requests.
+
+        When the server sends a request (sampling, elicitation, roots) via SSE,
+        the client responds by POSTing to /mcp/respond with the JSON-RPC response.
+        """
+        try:
+            body = await request.body()
+            data = orjson.loads(body) if body else {}
+            request_id = str(data.get("id", ""))
+
+            if request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(data)
+                return Response(
+                    orjson.dumps({"status": "ok"}),
+                    media_type=CONTENT_TYPE_JSON,
+                    headers=HEADERS_CORS_ONLY,
+                )
+
+            return self._error_response(
+                data.get("id"),
+                JsonRpcErrorCode.INVALID_REQUEST,
+                f"No pending request with ID: {request_id}",
+            )
+
+        except orjson.JSONDecodeError as e:
+            return self._error_response(None, JsonRpcErrorCode.PARSE_ERROR, f"Parse error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error handling /mcp/respond: {e}")
+            return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, f"Internal error: {str(e)}")
+
+    async def _send_to_client_http(self, request: dict[str, Any], sse_queue: asyncio.Queue[Any]) -> dict[str, Any]:
+        """Send a server-to-client request via SSE and await response.
+
+        For notifications (no id): enqueue and return immediately.
+        For requests (with id): create a future, enqueue, await response via /mcp/respond.
+        """
+        request_id = request.get("id")
+        if request_id is None:
+            # Notification (e.g., progress) — fire and forget
+            await sse_queue.put(request)
+            return {}
+
+        # Request-response — create future, enqueue, await
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[dict[str, Any]] = loop.create_future()
+        request_id_str = str(request_id)
+        self._pending_requests[request_id_str] = future
+        await sse_queue.put(request)
+
+        try:
+            return await asyncio.wait_for(future, timeout=120.0)
+        except TimeoutError:
+            raise RuntimeError(f"Timeout waiting for client response to request {request_id}")
+        finally:
+            self._pending_requests.pop(request_id_str, None)
+
     async def _handle_sse_request(
         self, request_data: dict[str, Any], session_id: str | None, oauth_token: str | None = None
     ) -> StreamingResponse:
@@ -200,36 +267,88 @@ class MCPEndpoint:
     async def _sse_stream_generator(
         self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
     ):
-        """Generate SSE stream response."""
-        try:
-            # Process the request through protocol handler
-            response, _ = await self.protocol.handle_request(request_data, session_id, oauth_token)
+        """Generate SSE stream response with bidirectional support.
 
-            if response:
-                logger.debug(f"Streaming SSE response for {method}")
+        For tools/call requests, sets up a bidirectional channel so the server
+        can send requests (sampling, elicitation, roots, progress) to the client
+        as SSE events during tool execution.
+        """
+        is_tool_call = method == "tools/call"
 
-                # Send complete SSE event in proper format
-                # CRITICAL: Must send all 3 parts as separate yields for Inspector compatibility
-                yield SSE_EVENT_MESSAGE
-                yield f"data: {orjson.dumps(response).decode()}\r\n"
+        if is_tool_call:
+            # Bidirectional mode: use queue for server-to-client messages
+            sse_queue: asyncio.Queue[Any] = asyncio.Queue()
+            _sentinel = ("_final_", None)
+
+            async def _send_fn(request: dict[str, Any]) -> dict[str, Any]:
+                return await self._send_to_client_http(request, sse_queue)
+
+            async def _execute() -> None:
+                prev_send = self.protocol._send_to_client
+                self.protocol._send_to_client = _send_fn
+                try:
+                    response, _ = await self.protocol.handle_request(request_data, session_id, oauth_token)
+                    await sse_queue.put(("_final_", response))
+                except Exception as exc:
+                    error_response = {
+                        JSONRPC_VERSION_KEY: JSONRPC_VERSION,
+                        "id": request_data.get("id"),
+                        "error": {
+                            "code": JsonRpcErrorCode.INTERNAL_ERROR,
+                            "message": str(exc),
+                        },
+                    }
+                    await sse_queue.put(("_final_", error_response))
+                finally:
+                    self.protocol._send_to_client = prev_send
+
+            task = asyncio.create_task(_execute())
+
+            try:
+                while True:
+                    item = await sse_queue.get()
+                    if isinstance(item, tuple) and len(item) == 2 and item[0] == "_final_":
+                        # Final response from tool execution
+                        response = item[1]
+                        if response:
+                            yield SSE_EVENT_MESSAGE
+                            yield f"data: {orjson.dumps(response).decode()}\r\n"
+                            yield SSE_LINE_END
+                        break
+                    else:
+                        # Server-to-client request or notification
+                        yield "event: server_request\r\n"
+                        yield f"data: {orjson.dumps(item).decode()}\r\n"
+                        yield "\r\n"
+            finally:
+                if not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+        else:
+            # Non-tool-call: simple one-shot SSE response (no bidirectional needed)
+            try:
+                response, _ = await self.protocol.handle_request(request_data, session_id, oauth_token)
+
+                if response:
+                    logger.debug(f"Streaming SSE response for {method}")
+                    yield SSE_EVENT_MESSAGE
+                    yield f"data: {orjson.dumps(response).decode()}\r\n"
+                    yield SSE_LINE_END
+
+            except Exception as e:
+                logger.error(f"SSE stream error: {e}")
+                error_response = {
+                    JSONRPC_VERSION_KEY: JSONRPC_VERSION,
+                    "id": request_data.get("id"),
+                    "error": {
+                        "code": JsonRpcErrorCode.INTERNAL_ERROR,
+                        "message": str(e),
+                    },
+                }
+                yield SSE_EVENT_ERROR
+                yield f"data: {orjson.dumps(error_response).decode()}\r\n"
                 yield SSE_LINE_END
-
-                logger.debug(f"SSE response sent for {method}")
-
-            # For notifications, we don't send anything (which is correct)
-
-        except Exception as e:
-            logger.error(f"SSE stream error: {e}")
-
-            # Send error event
-            error_response = {
-                JSONRPC_VERSION_KEY: JSONRPC_VERSION,
-                "id": request_data.get("id"),
-                "error": {"code": JsonRpcErrorCode.INTERNAL_ERROR, "message": str(e)},
-            }
-            yield SSE_EVENT_ERROR
-            yield f"data: {orjson.dumps(error_response).decode()}\r\n"
-            yield SSE_LINE_END
 
     def _sse_headers(self, session_id: str | None) -> dict[str, str]:
         """Build SSE response headers."""

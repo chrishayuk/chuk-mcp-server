@@ -14,6 +14,7 @@ from .config import SmartConfig
 from .decorators import (
     clear_global_registry,
     get_global_prompts,
+    get_global_resource_templates,
     get_global_resources,
     get_global_tools,
 )
@@ -34,6 +35,7 @@ from .types import (
     ToolHandler,
     create_server_capabilities,
 )
+from .types.resources import ResourceTemplateHandler
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,7 @@ class ChukMCPServer:
         resources: bool = True,
         prompts: bool = False,
         logging: bool = False,
+        completions: bool = False,
         experimental: dict[str, Any] | None = None,
         # Smart defaults (all optional - will use SmartConfig)
         host: str | None = None,
@@ -121,7 +124,12 @@ class ChukMCPServer:
             self.capabilities = capabilities
         else:
             self.capabilities = create_server_capabilities(
-                tools=tools, resources=resources, prompts=prompts, logging=logging, experimental=experimental
+                tools=tools,
+                resources=resources,
+                prompts=prompts,
+                logging=logging,
+                completions=completions,
+                experimental=experimental,
             )
 
         # Store smart defaults for run() - using modular config
@@ -208,6 +216,10 @@ class ChukMCPServer:
             self.protocol.register_prompt(prompt_handler)
             mcp_registry.register_prompt(prompt_handler.name, prompt_handler)
 
+        # Register global resource templates
+        for template_handler in get_global_resource_templates():
+            self.protocol.register_resource_template(template_handler)
+
         # Clear global registry to avoid duplicate registrations
         clear_global_registry()
 
@@ -227,6 +239,10 @@ class ChukMCPServer:
             @mcp.tool(tags=["custom"])
             def advanced_tool(data: dict) -> dict:
                 return {"processed": data}
+
+            @mcp.tool(read_only_hint=True, idempotent_hint=True)
+            def safe_lookup(key: str) -> str:
+                return db[key]
         """
 
         def decorator(func: Callable) -> Callable:
@@ -234,8 +250,16 @@ class ChukMCPServer:
             tool_name = name or func.__name__
             tool_description = description or func.__doc__ or f"Execute {tool_name}"
 
+            # Extract annotation and output_schema kwargs
+            annotation_kwargs = {}
+            for key in ("read_only_hint", "destructive_hint", "idempotent_hint", "open_world_hint", "output_schema"):
+                if key in kwargs:
+                    annotation_kwargs[key] = kwargs.pop(key)
+
             # Create tool handler from function
-            tool_handler = ToolHandler.from_function(func, name=tool_name, description=tool_description)
+            tool_handler = ToolHandler.from_function(
+                func, name=tool_name, description=tool_description, **annotation_kwargs
+            )
 
             # Register in protocol handler (for MCP functionality)
             self.protocol.register_tool(tool_handler)
@@ -312,6 +336,42 @@ class ChukMCPServer:
             func._mcp_resource = resource_handler
 
             logger.debug(f"Registered resource: {resource_handler.uri}")
+            return func
+
+        return decorator
+
+    def resource_template(
+        self,
+        uri_template: str,
+        name: str | None = None,
+        description: str | None = None,
+        mime_type: str | None = None,
+    ):
+        """
+        Resource template decorator for parameterized resources (RFC 6570).
+
+        Usage:
+            @mcp.resource_template("users://{user_id}/profile")
+            def get_user_profile(user_id: str) -> dict:
+                return {"id": user_id, "name": "Alice"}
+        """
+
+        def decorator(func: Callable) -> Callable:
+            template_handler = ResourceTemplateHandler.from_function(
+                uri_template=uri_template,
+                func=func,
+                name=name,
+                description=description,
+                mime_type=mime_type,
+            )
+
+            # Register in protocol handler
+            self.protocol.register_resource_template(template_handler)
+
+            # Add metadata to function
+            func._mcp_resource_template = template_handler
+
+            logger.debug(f"Registered resource template: {uri_template}")
             return func
 
         return decorator
@@ -684,6 +744,8 @@ class ChukMCPServer:
         stdio: bool | None = None,
         log_level: str = "warning",
         post_register_hook=None,
+        reload: bool = False,
+        inspect: bool = False,
     ):
         """
         Run the MCP server with modular smart defaults.
@@ -695,6 +757,8 @@ class ChukMCPServer:
             stdio: Run in stdio mode instead of HTTP server (auto-detects if None)
             log_level: Logging level for application (debug, info, warning, error, critical)
             post_register_hook: Optional callback to register additional endpoints after default endpoints
+            reload: Enable hot reload (auto-restart on file changes, HTTP mode only)
+            inspect: Open MCP Inspector in browser after starting (HTTP mode only)
         """
         # Set logging level FIRST, before any other operations
         import os
@@ -797,9 +861,31 @@ class ChukMCPServer:
             if self._server is None:
                 self._server = create_server(self.protocol, post_register_hook=post_register_hook)
 
+            # Open MCP Inspector if requested
+            if inspect:
+                import threading
+                import webbrowser
+
+                inspect_url = f"http://{final_host}:{final_port}/docs"
+
+                def _open_browser():
+                    import time
+
+                    time.sleep(1.5)  # Wait for server to start
+                    webbrowser.open(inspect_url)
+
+                threading.Thread(target=_open_browser, daemon=True).start()
+                logger.info(f"Opening MCP Inspector: {inspect_url}")
+
             # Run the server
             try:
-                self._server.run(host=final_host, port=final_port, debug=final_debug, log_level=log_level)
+                self._server.run(
+                    host=final_host,
+                    port=final_port,
+                    debug=final_debug,
+                    log_level=log_level,
+                    reload=reload,
+                )
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
                 # Stop proxy servers on shutdown
