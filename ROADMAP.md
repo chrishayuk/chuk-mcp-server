@@ -4,29 +4,35 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.18.0
+## Current State: v0.20.0
 
-**1592 tests | 88% coverage | 36K+ RPS**
+**2230+ tests | 97% coverage | 36K+ RPS**
 
-ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. The current release includes:
+ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest). The current release includes:
 
 | Area | Capabilities |
 |------|-------------|
-| **Core API** | `@tool`, `@resource`, `@prompt` decorators with automatic JSON schema generation |
-| **Transports** | HTTP (Starlette/Uvicorn), STDIO (sync + async), bidirectional on both transports |
-| **Protocol** | JSON-RPC 2.0, MCP specification 2025-06-18, full protocol surface |
-| **Context** | Session management, user context, progress reporting, metadata, sampling, elicitation, roots |
-| **Types** | `ToolHandler`, `ResourceHandler`, `PromptHandler` with orjson caching |
+| **Core API** | `@tool`, `@resource`, `@resource_template`, `@prompt` decorators with automatic JSON schema generation |
+| **Transports** | Streamable HTTP (Starlette/Uvicorn), STDIO (sync + async), bidirectional on both transports |
+| **Protocol** | JSON-RPC 2.0, MCP specification 2025-11-25, full protocol surface |
+| **Context** | Session management, user context, progress reporting, log notifications, resource links, metadata, sampling, elicitation, roots |
+| **Types** | `ToolHandler`, `ResourceHandler`, `ResourceTemplateHandler`, `PromptHandler` with orjson caching |
+| **Tool Annotations** | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata on tools |
+| **Structured Output** | `outputSchema` on tool definitions, `structuredContent` in tool results |
+| **Icons** | Icons on tools, resources, resource templates, prompts, and server info |
+| **Tasks** | Durable long-running request state machines with `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel` |
+| **Cancellation** | `notifications/cancelled` support for cancelling in-flight requests |
+| **Pagination** | Cursor-based pagination for `tools/list`, `resources/list`, `prompts/list`, `resources/templates/list` |
 | **OAuth** | Base provider, Google Drive provider, middleware integration |
 | **Cloud** | Auto-detection and deployment for GCP, AWS, Azure, Vercel, Netlify, Cloudflare |
 | **Composition** | `import_server` (static), `mount` (dynamic), module loader, proxy |
-| **Sampling** | Server-to-client LLM requests via `context.create_message()` (STDIO + HTTP) |
-| **Elicitation** | Server-to-client structured user input via `context.create_elicitation()` (form mode) |
+| **Sampling** | Server-to-client LLM requests via `context.create_message()` with tool calling support |
+| **Elicitation** | Server-to-client structured user input via `context.create_elicitation()` (form mode + URL mode + defaults) |
 | **Progress** | Server-to-client progress notifications via `context.send_progress()` |
 | **Roots** | Client filesystem root discovery via `context.list_roots()` |
 | **Subscriptions** | Client subscribes to resource URIs and receives update notifications |
 | **Completions** | Argument auto-completion for resources and prompts |
-| **Logging** | `logging/setLevel` handler with MCP-to-Python level mapping |
+| **Logging** | `logging/setLevel` handler + `notifications/message` log entries to clients |
 | **Audio** | `AudioContent` type support via chuk_mcp |
 | **Artifacts** | Optional `chuk-artifacts` integration for persistent storage |
 | **Performance** | 36K+ requests per second with schema and orjson caching |
@@ -35,16 +41,29 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **OpenAPI** | Auto-generated OpenAPI 3.1.0 spec from tool schemas at `/openapi.json` |
 | **Errors** | Structured error messages with fix suggestions and fuzzy tool name matching |
 
-### Recently Completed (v0.18.0)
+### Recently Completed (v0.20.0 -- Phase 4: MCP 2025-11-25)
 
-- **HTTP bidirectional transport** -- SSE-based server-to-client requests (sampling, elicitation, roots, progress) over HTTP via `/mcp/respond` endpoint
-- **ToolRunner test harness** -- `ToolRunner` class for invoking tools without transport overhead, exported from `chuk_mcp_server`
-- **Improved error messages** -- Structured errors with fix suggestions; fuzzy tool name matching ("Did you mean X?")
-- **OpenAPI generation** -- Auto-generated OpenAPI 3.1.0 spec from registered tool schemas at `/openapi.json`
-- **Hot reload** -- `--reload` CLI flag enables uvicorn hot reload during development
-- **MCP Inspector integration** -- `--inspect` CLI flag opens MCP Inspector in browser on server start
+- **Streamable HTTP transport** -- Single MCP endpoint (POST+GET), `MCP-Session-Id` header, session DELETE, `MCP-Protocol-Version` header, SSE resumability with event IDs
+- **Tasks system** -- `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `notifications/tasks/status` for durable long-running request state machines
+- **URL mode elicitation** -- Direct users to external URLs for sensitive interactions, `URLElicitationRequiredError` (-32042)
+- **Tool calling in sampling** -- `tools` array and `toolChoice` parameter in `sampling/createMessage`
+- **Icons** -- `icons` field on tools, resources, resource templates, prompts, and server info
+- **Enhanced ServerInfo** -- `title`, `description`, `icons`, `websiteUrl` in `serverInfo` during initialize
+- **Elicitation defaults** -- `default` values on primitive types in elicitation schemas
+- **Tool name validation** -- Enforce 1-128 character naming rules (alphanumeric + underscore/hyphen/dot)
 
-### Previously Completed (v0.17.0)
+### Previously Completed (v0.19.0 -- Phase 3: MCP 2025-06-18)
+
+- **Structured tool output** -- `outputSchema` on tool definitions, `structuredContent` in tool results
+- **Tool annotations** -- `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` via `@tool` decorator
+- **Pagination** -- Cursor-based pagination for `tools/list`, `resources/list`, `prompts/list`, `resources/templates/list`
+- **Resource templates** -- `resources/templates/list` method for URI template-based resource discovery (RFC 6570)
+- **Resource links** -- Return `ResourceLink` objects alongside tool content to reference server resources
+- **Content annotations** -- `audience`, `priority` annotations on content types
+- **Request cancellation** -- `notifications/cancelled` support for cancelling in-flight requests
+- **Log message notifications** -- Emit `notifications/message` to clients for server-side log events
+
+### Previously Completed (v0.18.0)
 
 - **Elicitation support** -- `elicitation/create` via `context.create_elicitation()` enables server-initiated structured user input requests
 - **Progress notifications** -- `notifications/progress` via `context.send_progress()` for long-running tool operations
@@ -302,6 +321,8 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.20.0 | MCP 2025-11-25: Streamable HTTP, tasks, URL elicitation, tool calling in sampling, icons, enhanced ServerInfo |
+| v0.19.0 | MCP 2025-06-18: Structured output, tool annotations, pagination, resource templates, resource links, content annotations, cancellation, log notifications |
 | v0.18.0 | Developer experience: HTTP bidirectional, ToolRunner, improved errors, OpenAPI, hot reload, inspect |
 | v0.17.0 | Full MCP protocol surface: elicitation, progress, roots, subscriptions, completions |
 | v0.16.5 | MCP sampling, bidirectional STDIO, client capability detection |

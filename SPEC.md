@@ -1,9 +1,9 @@
 # chuk-mcp-server Technical Specification
 
-**Package**: `chuk-mcp-server` v0.18.0
+**Package**: `chuk-mcp-server` v0.20.0
 **License**: MIT
 **Python**: >= 3.11
-**MCP Protocol**: `2025-06-18` (default), `2025-03-26` (supported)
+**MCP Protocol**: `2025-11-25` (default), `2025-06-18` (supported), `2025-03-26` (supported)
 
 ---
 
@@ -21,15 +21,17 @@
 10. [Sampling](#sampling)
 11. [Elicitation](#elicitation)
 12. [Progress Notifications](#progress-notifications)
-13. [Roots](#roots)
-14. [Resource Subscriptions](#resource-subscriptions)
-15. [Completions](#completions)
-16. [Artifacts](#artifacts)
-17. [Server Composition](#server-composition)
-18. [Configuration](#configuration)
-19. [Testing](#testing)
-20. [OpenAPI](#openapi)
-21. [CLI](#cli)
+13. [Logging Notifications](#logging-notifications)
+14. [Roots](#roots)
+15. [Resource Subscriptions](#resource-subscriptions)
+16. [Completions](#completions)
+17. [Tasks](#tasks)
+18. [Artifacts](#artifacts)
+19. [Server Composition](#server-composition)
+20. [Configuration](#configuration)
+21. [Testing](#testing)
+22. [OpenAPI](#openapi)
+23. [CLI](#cli)
 
 ---
 
@@ -76,6 +78,8 @@ ChukMCPServer(
     version: str = "1.0.0",
     title: str | None = None,
     description: str | None = None,
+    icons: list[dict[str, Any]] | None = None,
+    website_url: str | None = None,
     capabilities: ServerCapabilities | None = None,
     tools: bool = True,
     resources: bool = True,
@@ -96,8 +100,10 @@ ChukMCPServer(
 |-----------|------|---------|-------------|
 | `name` | `str \| None` | Auto-detected | Server name; inferred from project if `None` |
 | `version` | `str` | `"1.0.0"` | Server version string |
-| `title` | `str \| None` | `None` | Human-readable server title |
-| `description` | `str \| None` | `None` | Server description |
+| `title` | `str \| None` | `None` | Human-readable server title (MCP 2025-11-25) |
+| `description` | `str \| None` | `None` | Server description (MCP 2025-11-25) |
+| `icons` | `list[dict] \| None` | `None` | Server icons for UI rendering (MCP 2025-11-25). Each dict has `uri` and `mimeType` |
+| `website_url` | `str \| None` | `None` | Server website URL (MCP 2025-11-25) |
 | `capabilities` | `ServerCapabilities \| None` | Auto-configured | MCP capabilities; built from boolean flags if `None` |
 | `tools` | `bool` | `True` | Enable the tools capability |
 | `resources` | `bool` | `True` | Enable the resources capability |
@@ -262,12 +268,29 @@ def hello(name: str) -> str:
 @tool(name="add_numbers", description="Add two numbers")
 def add(x: int, y: int = 0) -> int:
     return x + y
+
+@tool(
+    name="db.lookup",
+    read_only_hint=True,
+    idempotent_hint=True,
+    output_schema={"type": "object", "properties": {"id": {"type": "string"}}},
+    icons=[{"uri": "https://example.com/search.svg", "mimeType": "image/svg+xml"}],
+)
+def lookup(query: str) -> dict:
+    """Lookup with annotations, structured output, and icons."""
+    return {"id": "123"}
 ```
 
 | Kwarg | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | `str \| None` | `func.__name__` | Tool name in MCP |
+| `name` | `str \| None` | `func.__name__` | Tool name (1-128 chars, alphanumeric + `_`/`-`/`.`) |
 | `description` | `str \| None` | `func.__doc__` | Tool description |
+| `read_only_hint` | `bool \| None` | `None` | Hint: tool only reads data, no side effects (MCP 2025-03-26) |
+| `destructive_hint` | `bool \| None` | `None` | Hint: tool may perform destructive operations (MCP 2025-03-26) |
+| `idempotent_hint` | `bool \| None` | `None` | Hint: repeated calls with same args have same effect (MCP 2025-03-26) |
+| `open_world_hint` | `bool \| None` | `None` | Hint: tool interacts with external systems (MCP 2025-03-26) |
+| `output_schema` | `dict \| None` | `None` | JSON Schema for structured tool output (MCP 2025-06-18) |
+| `icons` | `list[dict] \| None` | `None` | Icons for UI rendering; each dict has `uri` and `mimeType` (MCP 2025-11-25) |
 
 Supports both `@tool` and `@tool()` syntax. Async functions are supported.
 
@@ -280,7 +303,8 @@ from chuk_mcp_server import resource
 def get_settings() -> dict:
     return {"app": "my_app", "version": "1.0"}
 
-@resource("file://readme", mime_type="text/markdown")
+@resource("file://readme", mime_type="text/markdown",
+          icons=[{"uri": "https://example.com/doc.svg", "mimeType": "image/svg+xml"}])
 def get_readme() -> str:
     return "# My Application"
 ```
@@ -291,6 +315,33 @@ def get_readme() -> str:
 | `name` | `str \| None` | Derived from `func.__name__` | Resource display name |
 | `description` | `str \| None` | `func.__doc__` | Resource description |
 | `mime_type` | `str` | `"text/plain"` | MIME type for the resource content |
+| `icons` | `list[dict] \| None` | `None` | Icons for UI rendering (MCP 2025-11-25) |
+
+### `@resource_template`
+
+```python
+from chuk_mcp_server import resource_template
+
+@resource_template("users://{user_id}/profile")
+def get_user_profile(user_id: str) -> dict:
+    """Get a user's profile by ID."""
+    return {"user_id": user_id, "name": "Example"}
+
+@resource_template("files://{path}", mime_type="application/octet-stream",
+                   icons=[{"uri": "https://example.com/file.svg", "mimeType": "image/svg+xml"}])
+def get_file(path: str) -> str:
+    return f"Contents of {path}"
+```
+
+| Kwarg | Type | Default | Description |
+|-------|------|---------|-------------|
+| `uri_template` | `str` | **required** | RFC 6570 URI template (positional) |
+| `name` | `str \| None` | Derived from `func.__name__` | Template display name |
+| `description` | `str \| None` | `func.__doc__` | Template description |
+| `mime_type` | `str \| None` | `None` | MIME type for the resource content |
+| `icons` | `list[dict] \| None` | `None` | Icons for UI rendering (MCP 2025-11-25) |
+
+Discoverable via `resources/templates/list`. Template parameters are extracted from the URI template and passed as kwargs to the handler function.
 
 ### `@prompt`
 
@@ -432,6 +483,37 @@ async list_roots() -> list[dict[str, Any]]
 
 See the [Roots](#roots) section for details.
 
+### Logging Notifications
+
+```python
+get_log_fn() -> Callable | None
+set_log_fn(fn: Callable | None) -> None
+
+async send_log(
+    level: str,
+    data: Any,
+    logger_name: str | None = None,
+) -> None
+```
+
+Sends `notifications/message` to the client. Levels: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`. Silent no-op if unavailable.
+
+### Resource Links
+
+```python
+get_resource_links() -> list[dict[str, Any]] | None
+set_resource_links(links: list[dict[str, Any]] | None) -> None
+
+add_resource_link(
+    uri: str,
+    name: str | None = None,
+    description: str | None = None,
+    mime_type: str | None = None,
+) -> None
+```
+
+Accumulates `ResourceLink` references during tool execution. The protocol handler attaches them to the tool result as `_meta.links`.
+
 ### Utilities
 
 ```python
@@ -466,20 +548,28 @@ Supports nesting; inner contexts take precedence and outer contexts are restored
 | `initialize` | client -> server | Initialize MCP session; returns server info and capabilities |
 | `notifications/initialized` | client -> server | Client confirms session is ready (notification, no response) |
 | `ping` | client -> server | Connectivity check; returns empty result |
-| `tools/list` | client -> server | List all registered tools with schemas |
-| `tools/call` | client -> server | Execute a tool with arguments |
-| `resources/list` | client -> server | List all registered resources |
+| `tools/list` | client -> server | List all registered tools with schemas (supports pagination) |
+| `tools/call` | client -> server | Execute a tool with arguments (supports structured output) |
+| `resources/list` | client -> server | List all registered resources (supports pagination) |
 | `resources/read` | client -> server | Read a resource by URI |
 | `resources/subscribe` | client -> server | Subscribe to resource update notifications |
 | `resources/unsubscribe` | client -> server | Unsubscribe from resource update notifications |
-| `prompts/list` | client -> server | List all registered prompts |
+| `resources/templates/list` | client -> server | List resource templates (RFC 6570, supports pagination) |
+| `prompts/list` | client -> server | List all registered prompts (supports pagination) |
 | `prompts/get` | client -> server | Get a prompt with arguments |
 | `logging/setLevel` | client -> server | Set server logging level |
 | `completion/complete` | client -> server | Request argument auto-completion for resources or prompts |
-| `sampling/createMessage` | server -> client | Request LLM sampling from the client |
-| `elicitation/create` | server -> client | Request structured user input from the client |
+| `sampling/createMessage` | server -> client | Request LLM sampling from the client (supports tool calling) |
+| `elicitation/create` | server -> client | Request structured user input from the client (form mode) |
 | `roots/list` | server -> client | Request client's filesystem roots |
+| `tasks/get` | client -> server | Get task status by ID |
+| `tasks/result` | client -> server | Get task result when completed |
+| `tasks/list` | client -> server | List all tasks for current session |
+| `tasks/cancel` | client -> server | Cancel a running task |
 | `notifications/progress` | server -> client | Send progress update during tool execution |
+| `notifications/message` | server -> client | Send log message notification to client |
+| `notifications/cancelled` | bidirectional | Cancel an in-flight request |
+| `notifications/tasks/status` | server -> client | Task status change notification |
 | `notifications/roots/list_changed` | client -> server | Client's roots list has changed |
 | `notifications/resources/updated` | server -> client | A subscribed resource has been updated |
 
@@ -487,7 +577,8 @@ Supports nesting; inner contexts take precedence and outer contexts are restored
 
 | Version | Status |
 |---------|--------|
-| `2025-06-18` | Default |
+| `2025-11-25` | Default (latest) |
+| `2025-06-18` | Supported |
 | `2025-03-26` | Supported |
 
 ### JSON-RPC
@@ -515,6 +606,7 @@ All messages use JSON-RPC 2.0. The wire format is:
 | `-32601` | Method Not Found | Unknown MCP method |
 | `-32602` | Invalid Params | Invalid method parameters |
 | `-32603` | Internal Error | Server-side error |
+| `-32042` | URL Elicitation Required | Tool requires user interaction at an external URL (MCP 2025-11-25) |
 
 ### Session Management
 
@@ -616,7 +708,7 @@ async def custom_handler(request: Request) -> Response:
 
 ### ToolHandler
 
-Wraps a Python function as an MCP tool with parameter validation and schema caching.
+Wraps a Python function as an MCP tool with parameter validation, schema caching, annotations, and structured output.
 
 ```python
 @dataclass
@@ -626,15 +718,18 @@ class ToolHandler:
     parameters: list[ToolParameter]
     requires_auth: bool = False
     auth_scopes: list[str] | None = None
+    annotations: dict[str, bool] | None = None       # readOnlyHint, destructiveHint, etc.
+    output_schema: dict[str, Any] | None = None       # JSON Schema for structured output
+    icons: list[dict[str, Any]] | None = None          # Icons for UI rendering
 ```
 
 **Key Methods:**
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `from_function(func, name, description)` | `ToolHandler` | Create from a Python function |
+| `from_function(func, name, description, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, output_schema, icons)` | `ToolHandler` | Create from a Python function |
 | `execute(arguments)` | `Any` | Validate arguments and execute the handler |
-| `to_mcp_format()` | `dict` | Cached MCP tool schema as dict |
+| `to_mcp_format()` | `dict` | Cached MCP tool schema as dict (includes annotations, outputSchema, icons) |
 | `to_mcp_bytes()` | `bytes` | Cached orjson-serialized MCP schema |
 | `invalidate_cache()` | `None` | Clear cached schema formats |
 
@@ -657,7 +752,7 @@ Parameters are extracted from the function signature. The `self` and `_external_
 
 ### ResourceHandler
 
-Wraps a Python function as an MCP resource with optional content caching.
+Wraps a Python function as an MCP resource with optional content caching and icons.
 
 ```python
 @dataclass
@@ -665,6 +760,7 @@ class ResourceHandler:
     mcp_resource: MCPResource
     handler: Callable[..., Any]
     cache_ttl: int | None = None
+    icons: list[dict[str, Any]] | None = None  # Icons for UI rendering
 ```
 
 **Key Methods:**
@@ -828,6 +924,8 @@ async def create_message(
     stop_sequences: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
     include_context: str | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | str | None = None,
 ) -> dict[str, Any]
 ```
 
@@ -841,6 +939,8 @@ async def create_message(
 | `stop_sequences` | `list[str] \| None` | `None` | Stop sequences |
 | `metadata` | `dict \| None` | `None` | Request metadata |
 | `include_context` | `str \| None` | `None` | Context inclusion: `"none"`, `"thisServer"`, or `"allServers"` |
+| `tools` | `list[dict] \| None` | `None` | Tools the client's LLM can call during sampling (MCP 2025-11-25) |
+| `tool_choice` | `dict \| str \| None` | `None` | Tool selection policy: `"auto"`, `"none"`, `"required"`, or `{"type": "tool", "name": "..."}` |
 
 **Returns:** Dict with `role`, `content`, `model`, and `stopReason` from the client's LLM.
 
@@ -862,9 +962,9 @@ Sampling requests have a 120-second timeout. If the client does not respond with
 
 ## Elicitation
 
-Elicitation enables the server to request structured user input from the connected MCP client. This follows the same server-to-client pattern as sampling.
+Elicitation enables the server to request structured user input from the connected MCP client. Two modes are supported: **form mode** (structured input) and **URL mode** (external URL redirect).
 
-### Usage in Tools
+### Form Mode
 
 ```python
 from chuk_mcp_server import tool, create_elicitation
@@ -876,8 +976,9 @@ async def configure_analysis(dataset: str) -> str:
         schema={
             "type": "object",
             "properties": {
-                "method": {"type": "string", "enum": ["regression", "classification", "clustering"]},
-                "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                "method": {"type": "string", "enum": ["regression", "classification", "clustering"],
+                           "default": "regression"},
+                "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.95},
             },
             "required": ["method"],
         },
@@ -886,12 +987,28 @@ async def configure_analysis(dataset: str) -> str:
     return f"Running {result['method']} analysis on {dataset}"
 ```
 
+### URL Mode (MCP 2025-11-25)
+
+URL mode directs users to external URLs for sensitive interactions (OAuth flows, payment, credentials). The tool raises `URLElicitationRequiredError` which the protocol handler converts to a JSON-RPC error with code `-32042`.
+
+```python
+from chuk_mcp_server import tool
+from chuk_mcp_server.types.errors import URLElicitationRequiredError
+
+@tool
+async def connect_account(service: str) -> str:
+    raise URLElicitationRequiredError(
+        url=f"https://auth.example.com/connect/{service}",
+        description=f"Please authorize access to your {service} account",
+    )
+```
+
 ### `create_elicitation()` Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `message` | `str` | **required** | Message to display to the user |
-| `schema` | `dict[str, Any]` | **required** | JSON Schema describing the expected input structure |
+| `schema` | `dict[str, Any]` | **required** | JSON Schema with optional `default` values on primitives |
 | `title` | `str \| None` | `None` | Optional title for the elicitation dialog |
 | `description` | `str \| None` | `None` | Optional description for the dialog |
 
@@ -904,6 +1021,7 @@ async def configure_analysis(dataset: str) -> str:
 - The client must declare `elicitation` in its capabilities during `initialize`.
 - The transport must support bidirectional communication.
 - `create_elicitation()` is only callable within a tool execution context.
+- Schema properties support `default` values on primitives (MCP 2025-11-25).
 
 ---
 
@@ -948,6 +1066,51 @@ async def process_large_dataset(path: str) -> str:
 - The client must include a `progressToken` in the tool call's `_meta` field.
 - The transport must support bidirectional communication.
 - Progress notifications have no `id` field (they are JSON-RPC notifications, not requests).
+
+---
+
+## Logging Notifications
+
+Logging notifications allow tools to emit structured log messages to the client. Logging is fire-and-forget, like progress.
+
+### Usage in Tools
+
+```python
+from chuk_mcp_server import tool, send_log
+
+@tool
+async def process_data(input: str) -> str:
+    await send_log("info", "Starting data processing", logger_name="processor")
+    # Do work...
+    await send_log("warning", {"message": "Skipped 3 invalid rows", "count": 3})
+    return "Done"
+```
+
+### `send_log()` Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `level` | `str` | **required** | Log level: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency` |
+| `data` | `Any` | **required** | Log data (string or structured dict) |
+| `logger_name` | `str \| None` | `None` | Optional logger name for categorization |
+
+**Returns:** `None`. This is a fire-and-forget notification.
+
+**Behavior:** `send_log()` is a silent no-op if no log function is available.
+
+### Wire Format
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notifications/message",
+    "params": {
+        "level": "info",
+        "data": "Starting data processing",
+        "logger": "processor"
+    }
+}
+```
 
 ---
 
@@ -1099,6 +1262,71 @@ async def provider(ref: dict, argument: dict) -> dict:
 - Enable completions: `ChukMCPServer(completions=True)` or `create_server_capabilities(completions=True)`.
 - Register providers by ref type: `"ref/resource"` or `"ref/prompt"`.
 - If no provider is registered for a ref type, an empty result is returned.
+
+---
+
+## Tasks
+
+The tasks system (MCP 2025-11-25, experimental) provides durable state machines for long-running requests. Instead of keeping a connection open, `tools/call` can return a task ID that clients poll for progress and results.
+
+### Task Lifecycle
+
+```
+tools/call (long-running)
+  -> Returns task ID with status "working"
+  -> Client polls tasks/get for status updates
+  -> Server sends notifications/tasks/status on state changes
+  -> Client calls tasks/result when status is "completed"
+  -> Client can call tasks/cancel to abort
+```
+
+### Task Status Values
+
+| Status | Description |
+|--------|-------------|
+| `working` | Task is in progress |
+| `completed` | Task finished successfully; result available via `tasks/result` |
+| `failed` | Task failed; error details in status notification |
+| `cancelled` | Task was cancelled by the client |
+
+### Protocol Methods
+
+**`tasks/get`** -- Get task status
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tasks/get", "params": {"taskId": "abc-123"}}
+```
+
+**`tasks/result`** -- Get completed task result
+
+```json
+{"jsonrpc": "2.0", "id": 2, "method": "tasks/result", "params": {"taskId": "abc-123"}}
+```
+
+**`tasks/list`** -- List all tasks for current session
+
+```json
+{"jsonrpc": "2.0", "id": 3, "method": "tasks/list", "params": {}}
+```
+
+**`tasks/cancel`** -- Cancel a running task
+
+```json
+{"jsonrpc": "2.0", "id": 4, "method": "tasks/cancel", "params": {"taskId": "abc-123"}}
+```
+
+### Status Notifications
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notifications/tasks/status",
+    "params": {
+        "taskId": "abc-123",
+        "status": "completed"
+    }
+}
+```
 
 ---
 
@@ -1486,6 +1714,7 @@ from chuk_mcp_server import (
     # Decorators
     tool,
     resource,
+    resource_template,
     prompt,
     requires_auth,
 
@@ -1496,6 +1725,8 @@ from chuk_mcp_server import (
     create_message, get_sampling_fn, set_sampling_fn,
     create_elicitation, get_elicitation_fn, set_elicitation_fn,
     send_progress, get_progress_notify_fn, set_progress_notify_fn,
+    send_log,                                    # Log notifications (MCP 2025-06-18)
+    add_resource_link,                           # Resource links in tool results (MCP 2025-06-18)
     list_roots, get_roots_fn, set_roots_fn,
 
     # Types
@@ -1505,6 +1736,9 @@ from chuk_mcp_server import (
     ToolParameter,
     MCPPrompt,
     ServerInfo,
+
+    # Errors
+    URLElicitationRequiredError,                 # URL mode elicitation (MCP 2025-11-25)
 
     # Cloud
     is_cloud, is_gcf, is_lambda, is_azure,

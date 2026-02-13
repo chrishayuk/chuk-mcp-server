@@ -1,15 +1,15 @@
 # chuk-mcp-server Architecture
 
-**Version**: 0.18.0 | **Python**: >=3.11 | **License**: MIT
-**Tests**: 1592 passed, 88% coverage | **Performance**: 36K+ RPS, <3ms overhead
+**Version**: 0.20.0 | **Python**: >=3.11 | **License**: MIT
+**Tests**: 2230+ passed, 97% coverage | **Performance**: 36K+ RPS, <3ms overhead
 
 ## Overview
 
 chuk-mcp-server is a zero-configuration MCP (Model Context Protocol) server
 framework for Python. It provides decorator-based tool, resource, and prompt
-registration; automatic cloud and environment detection; HTTP and STDIO
-transports; server composition and proxy capabilities; and full JSON-RPC 2.0
-protocol compliance.
+registration; automatic cloud and environment detection; Streamable HTTP and
+STDIO transports; server composition and proxy capabilities; and full
+conformance with MCP specification 2025-11-25 (latest).
 
 The framework is designed around three principles: no configuration required
 for common cases, no unnecessary abstraction layers, and deploy-anywhere
@@ -20,21 +20,23 @@ without code changes.
 |                         chuk-mcp-server                            |
 |                                                                    |
 |  @tool / @resource / @prompt           run() / ChukMCPServer()    |
-|  (decorators.py)                       (core.py)                  |
-|         |                                    |                     |
-|         v                                    v                     |
+|  @resource_template                    (core.py)                  |
+|  (decorators.py)                             |                     |
+|         |                                    v                     |
 |  +-----------------+     +--------------------------------------+ |
 |  | Global Registry |---->| MCPProtocolHandler (JSON-RPC 2.0)    | |
-|  | (mcp_registry)  |     | - Tool dispatch                      | |
-|  +-----------------+     | - Resource dispatch                   | |
-|                          | - Prompt dispatch                     | |
-|                          | - Sampling / Elicitation / Roots      | |
-|                          | - Progress / Subscriptions / Complete | |
+|  | (mcp_registry)  |     | - Tool dispatch + structured output   | |
+|  +-----------------+     | - Resource dispatch + templates        | |
+|                          | - Prompt dispatch + pagination         | |
+|                          | - Sampling / Elicitation / Roots       | |
+|                          | - Progress / Subscriptions / Complete  | |
+|                          | - Tasks / Cancellation / Logging       | |
 |                          +--------------------------------------+ |
 |                                    |              |                |
 |                          +---------+----+  +-----+--------+       |
-|                          | HTTP Server  |  | STDIO Transport|      |
-|                          | (Starlette)  |  | (sync/async)   |      |
+|                          | Streamable   |  | STDIO Transport|      |
+|                          | HTTP Server  |  | (sync/async)   |      |
+|                          | (Starlette)  |  |                |      |
 |                          +--------------+  +--------------+       |
 +--------------------------------------------------------------------+
 ```
@@ -45,11 +47,11 @@ without code changes.
 src/chuk_mcp_server/
 |-- __init__.py              # Exports, cloud auto-detection
 |-- core.py                  # ChukMCPServer main class
-|-- decorators.py            # @tool, @resource, @prompt, @requires_auth
-|-- protocol.py              # MCPProtocolHandler (JSON-RPC 2.0)
-|-- context.py               # Request context (contextvars)
-|-- constants.py             # Protocol constants
-|-- http_server.py           # Starlette/Uvicorn HTTP server
+|-- decorators.py            # @tool, @resource, @resource_template, @prompt, @requires_auth
+|-- protocol.py              # MCPProtocolHandler (JSON-RPC 2.0, tasks, pagination)
+|-- context.py               # Request context (contextvars, send_log, add_resource_link)
+|-- constants.py             # Protocol constants, tool name regex
+|-- http_server.py           # Starlette/Uvicorn HTTP server (Streamable HTTP)
 |-- stdio_transport.py       # STDIO transport (sync + async)
 |-- artifacts_context.py     # Optional artifact/workspace support
 |-- cli.py                   # CLI (scaffolding, --reload, --inspect)
@@ -61,14 +63,14 @@ src/chuk_mcp_server/
 |
 |-- types/                   # Type system
 |   |-- base.py              # Direct chuk_mcp types (no conversion)
-|   |-- tools.py             # ToolHandler (orjson caching)
-|   |-- resources.py         # ResourceHandler
-|   |-- prompts.py           # PromptHandler
+|   |-- tools.py             # ToolHandler (orjson caching, annotations, structured output, icons)
+|   |-- resources.py         # ResourceHandler, ResourceTemplateHandler (icons)
+|   |-- prompts.py           # PromptHandler (icons)
 |   |-- parameters.py        # ToolParameter + JSON Schema
 |   |-- capabilities.py      # ServerCapabilities
-|   |-- content.py           # Content types
+|   |-- content.py           # Content types, annotations, resource links
 |   |-- serialization.py     # Serialization utils
-|   +-- errors.py            # Error types
+|   +-- errors.py            # Error types (URLElicitationRequiredError)
 |
 |-- config/                  # Smart configuration
 |   |-- smart_config.py      # SmartConfig orchestrator
@@ -135,15 +137,21 @@ MCPProtocolHandler.handle_request()
   - Validates JSON-RPC 2.0 structure
   - Dispatches by method:
       "initialize"              -> _handle_initialize()
-      "tools/list"              -> _handle_tools_list()
-      "tools/call"              -> _handle_tools_call()
-      "resources/list"          -> _handle_resources_list()
+      "tools/list"              -> _handle_tools_list()       (with pagination)
+      "tools/call"              -> _handle_tools_call()       (structured output)
+      "resources/list"          -> _handle_resources_list()   (with pagination)
       "resources/read"          -> _handle_resources_read()
       "resources/subscribe"     -> _handle_resources_subscribe()
       "resources/unsubscribe"   -> _handle_resources_unsubscribe()
-      "prompts/list"            -> _handle_prompts_list()
+      "resources/templates/list"-> _handle_resource_templates_list()
+      "prompts/list"            -> _handle_prompts_list()     (with pagination)
       "prompts/get"             -> _handle_prompts_get()
       "completion/complete"     -> _handle_completion_complete()
+      "tasks/get"               -> _handle_tasks_get()
+      "tasks/result"            -> _handle_tasks_result()
+      "tasks/list"              -> _handle_tasks_list()
+      "tasks/cancel"            -> _handle_tasks_cancel()
+      "notifications/cancelled" -> _handle_cancelled()
       "notifications/*"         -> _handle_notification()
   |
   v
@@ -197,14 +205,20 @@ types/
                   - Wraps a callable with metadata (name, description, schema)
                   - Caches both dict representation and orjson bytes
                   - Schema is computed once from function signature
+                  - Supports annotations (readOnlyHint, destructiveHint, etc.)
+                  - Supports outputSchema for structured tool output
+                  - Supports icons for UI rendering
 
-  resources.py    ResourceHandler
+  resources.py    ResourceHandler + ResourceTemplateHandler
                   - Wraps a callable with URI pattern
                   - Supports content caching with TTL
+                  - ResourceTemplateHandler for RFC 6570 URI templates
+                  - Both support icons for UI rendering
 
   prompts.py      PromptHandler
                   - Wraps a callable with prompt metadata
                   - Arguments extracted from function signature
+                  - Supports icons for UI rendering
 
   parameters.py   ToolParameter + JSON Schema generation
                   - Converts Python type hints to JSON Schema
@@ -213,6 +227,12 @@ types/
 
   content.py      Content types (TextContent, ImageContent, etc.)
                   - format_content() normalizes tool return values
+                  - Content annotations (audience, priority)
+                  - Resource link creation
+
+  errors.py       Error types
+                  - URLElicitationRequiredError for URL mode elicitation
+                  - ParameterValidationError, ToolExecutionError
 
   serialization.py  orjson-based serialization utilities
 ```
@@ -251,6 +271,8 @@ contextvars (context.py):
   _elicitation_fn    : ContextVar[Callable | None]
   _progress_notify_fn: ContextVar[Callable | None]
   _roots_fn          : ContextVar[Callable | None]
+  _log_fn            : ContextVar[Callable | None]       # send_log() notifications
+  _resource_links    : ContextVar[list | None]            # add_resource_link() for tool results
 ```
 
 The `RequestContext` async context manager sets these variables on entry
@@ -273,11 +295,15 @@ Sampling enables server-initiated LLM requests back to the client. This
 is the reverse of the normal flow: the server asks the client to create
 a message using the client's model.
 
+As of MCP 2025-11-25, sampling supports **tool calling**: the server can
+include `tools` and `toolChoice` in the sampling request, allowing the
+client's LLM to invoke tools during the sampled conversation.
+
 ```
 Tool code
   |
   v
-context.create_message(messages, model_preferences, ...)
+context.create_message(messages, model_preferences, tools, tool_choice, ...)
   |
   v
 _sampling_fn (set in contextvars)
@@ -288,7 +314,7 @@ protocol.send_sampling_request()
       {"jsonrpc": "2.0",
        "id": <uuid>,
        "method": "sampling/createMessage",
-       "params": {messages, modelPreferences, ...}}
+       "params": {messages, modelPreferences, tools, toolChoice, ...}}
   |
   v
 transport._send_to_client(request)
@@ -337,22 +363,37 @@ Key components in `endpoints/mcp.py`:
 Notifications (progress) are fire-and-forget: they are enqueued and
 yielded as SSE events without creating a Future.
 
-## Elicitation, Progress, and Roots
+## Elicitation, Progress, Logging, and Roots
 
-Three additional server-to-client features follow the same pattern as
-sampling: a context variable holds a function injected by the protocol
-handler during tool execution.
+Additional server-to-client features follow the same pattern as sampling:
+a context variable holds a function injected by the protocol handler
+during tool execution.
 
 ```
-Elicitation (structured user input):
+Elicitation (structured user input -- form mode):
   context.create_elicitation(message, schema, ...)
     -> _elicitation_fn -> protocol.send_elicitation_request()
     -> transport._send_to_client() -> client responds
+
+Elicitation (URL mode -- MCP 2025-11-25):
+  Tool raises URLElicitationRequiredError(url, description)
+    -> protocol catches error -> returns JSON-RPC error -32042
+    -> client directs user to URL for out-of-band interaction
 
 Progress (fire-and-forget notifications):
   context.send_progress(progress, total, message)
     -> _progress_notify_fn -> protocol.send_progress_notification()
     -> transport._send_to_client() (no response expected)
+
+Logging (fire-and-forget notifications -- MCP 2025-06-18):
+  context.send_log(level, data, logger_name)
+    -> _log_fn -> protocol.send_log_notification()
+    -> transport._send_to_client() (no response expected)
+
+Resource Links (attached to tool results -- MCP 2025-06-18):
+  context.add_resource_link(uri, name, description, mime_type)
+    -> accumulated in _resource_links context var
+    -> protocol attaches links to tool result _meta.links
 
 Roots (filesystem root discovery):
   context.list_roots()
@@ -361,10 +402,11 @@ Roots (filesystem root discovery):
 ```
 
 Key differences:
-- `send_progress()` is a silent no-op if unavailable (progress is optional)
+- `send_progress()` and `send_log()` are silent no-ops if unavailable
 - `create_elicitation()` and `list_roots()` raise `RuntimeError` if unavailable
-- Progress notifications have no `id` field (JSON-RPC notifications)
+- Progress and logging notifications have no `id` field (JSON-RPC notifications)
 - Elicitation and roots are request-response (have `id` field)
+- Resource links are accumulated per-request and attached to the final tool result
 
 ## Resource Subscriptions and Completions
 
