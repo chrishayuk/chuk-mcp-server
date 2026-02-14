@@ -190,13 +190,16 @@ __version__ = "0.18"
 # ============================================================================
 
 _global_server: ChukMCPServer | None = None
+_server_lock = __import__("threading").Lock()
 
 
 def get_or_create_global_server() -> ChukMCPServer:
     """Get or create the global server instance with cloud detection."""
     global _global_server
     if _global_server is None:
-        _global_server = ChukMCPServer()  # Auto-detects cloud environment
+        with _server_lock:
+            if _global_server is None:
+                _global_server = ChukMCPServer()  # Auto-detects cloud environment
     return _global_server
 
 

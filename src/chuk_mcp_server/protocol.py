@@ -56,11 +56,25 @@ logger = logging.getLogger(__name__)
 class SessionManager:
     """Manage MCP sessions."""
 
-    def __init__(self, max_sessions: int = 1000, cleanup_interval: int = 100):
+    def __init__(
+        self,
+        max_sessions: int = 1000,
+        cleanup_interval: int = 100,
+        on_evict: Callable[[str], None] | None = None,
+        protected_sessions: Callable[[], set[str]] | None = None,
+    ):
         self.sessions: dict[str, dict[str, Any]] = {}
         self.max_sessions = max_sessions
         self.cleanup_interval = cleanup_interval
         self._creation_count = 0
+        self._on_evict = on_evict
+        self._protected_sessions = protected_sessions
+
+    def _evict_session(self, session_id: str) -> None:
+        """Evict a session, calling the on_evict callback first."""
+        if self._on_evict is not None:
+            self._on_evict(session_id)
+        del self.sessions[session_id]
 
     def create_session(self, client_info: dict[str, Any], protocol_version: str) -> str:
         """Create a new session."""
@@ -72,9 +86,12 @@ class SessionManager:
 
         # Evict oldest session if at capacity
         if len(self.sessions) >= self.max_sessions:
-            oldest_sid = min(self.sessions, key=lambda sid: self.sessions[sid]["last_activity"])
-            del self.sessions[oldest_sid]
-            logger.debug(f"Evicted oldest session {oldest_sid[:8]}... (max_sessions reached)")
+            protected = self._protected_sessions() if self._protected_sessions else set()
+            candidates = [sid for sid in self.sessions if sid not in protected]
+            if candidates:
+                oldest_sid = min(candidates, key=lambda sid: self.sessions[sid]["last_activity"])
+                self._evict_session(oldest_sid)
+                logger.debug(f"Evicted oldest session {oldest_sid[:8]}... (max_sessions reached)")
 
         session_id = str(uuid.uuid4()).replace("-", "")
         self.sessions[session_id] = {
@@ -101,7 +118,7 @@ class SessionManager:
         now = time.time()
         expired = [sid for sid, session in self.sessions.items() if now - session["last_activity"] > max_age]
         for sid in expired:
-            del self.sessions[sid]
+            self._evict_session(sid)
             logger.debug(f"Cleaned up expired session {sid[:8]}...")
 
 
@@ -119,12 +136,16 @@ class MCPProtocolHandler:
         capabilities: ServerCapabilities,
         oauth_provider_getter: Any = None,
         extra_server_info: dict[str, Any] | None = None,
+        rate_limit_rps: float | None = None,
     ):
         # Use chuk_mcp types directly - no conversion needed
         self.server_info = server_info
         self.capabilities = capabilities
         self._extra_server_info = extra_server_info
-        self.session_manager = SessionManager()
+        self.session_manager = SessionManager(
+            on_evict=self._cleanup_session_state,
+            protected_sessions=self._get_protected_sessions,
+        )
 
         # Tool, resource, and prompt registries (now use handlers)
         self.tools: dict[str, ToolHandler] = {}
@@ -155,6 +176,14 @@ class MCPProtocolHandler:
         # SSE event buffer for resumability (session_id → list of (event_id, data))
         self._sse_event_buffers: dict[str, list[tuple[int, dict[str, Any]]]] = {}
         self._sse_event_counters: dict[str, int] = {}
+
+        # Rate limiter (off by default)
+        self._rate_limiter: Any = None
+        if rate_limit_rps is not None:
+            from .rate_limiter import TokenBucketRateLimiter
+
+            burst = rate_limit_rps * 2  # Default burst = 2x rate
+            self._rate_limiter = TokenBucketRateLimiter(rate=rate_limit_rps, burst=burst)
 
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
@@ -266,6 +295,11 @@ class MCPProtocolHandler:
                 set_session_id(session_id)
                 self.session_manager.update_activity(session_id)
 
+            # Rate limit check
+            if self._rate_limiter is not None and session_id:
+                if not self._rate_limiter.allow(session_id):
+                    return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Rate limit exceeded"), None
+
             # Route to appropriate handler
             if method == McpMethod.INITIALIZE:
                 return await self._handle_initialize(params, msg_id)
@@ -316,9 +350,16 @@ class MCPProtocolHandler:
                     msg_id, JsonRpcError.METHOD_NOT_FOUND, f"Method not found: {method}"
                 ), None
 
+        except asyncio.CancelledError:
+            raise  # Never swallow cancellation
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Invalid params in request: {e}")
+            return self._create_error_response(
+                msg_id, JsonRpcError.INVALID_PARAMS, f"Invalid parameters: {str(e)}"
+            ), None
         except Exception as e:
             logger.error(f"Error handling request: {e}", exc_info=True)
-            return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}"), None
+            return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Internal server error"), None
 
     async def _handle_initialize(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], str]:
         """Handle initialize request using chuk_mcp."""
@@ -376,6 +417,21 @@ class MCPProtocolHandler:
         """Handle tools/call request."""
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
+
+        # Validate arguments
+        if not isinstance(arguments, dict):
+            return self._create_error_response(
+                msg_id, JsonRpcError.INVALID_PARAMS, f"arguments must be an object, got {type(arguments).__name__}"
+            ), None
+
+        from .constants import MAX_ARGUMENT_KEYS
+
+        if len(arguments) > MAX_ARGUMENT_KEYS:
+            return self._create_error_response(
+                msg_id,
+                JsonRpcError.INVALID_PARAMS,
+                f"Too many argument keys ({len(arguments)}, max {MAX_ARGUMENT_KEYS})",
+            ), None
 
         if tool_name not in self.tools:
             from .errors import format_unknown_tool_error
@@ -1169,6 +1225,43 @@ class MCPProtocolHandler:
         return result
 
     # ================================================================
+    # Session lifecycle helpers
+    # ================================================================
+
+    def _cleanup_session_state(self, session_id: str) -> None:
+        """Clean up all per-session state (subscriptions, SSE buffers, etc.).
+
+        Called both by explicit terminate_session() and by SessionManager
+        eviction/expiry callbacks to prevent memory leaks.
+        """
+        self._resource_subscriptions.pop(session_id, None)
+        self._sse_event_buffers.pop(session_id, None)
+        self._sse_event_counters.pop(session_id, None)
+        if self._rate_limiter is not None:
+            self._rate_limiter.cleanup(session_id)
+        logger.debug(f"Cleaned up state for session {session_id[:8]}...")
+
+    def _get_protected_sessions(self) -> set[str]:
+        """Return session IDs that should not be evicted (have in-flight requests)."""
+        protected: set[str] = set()
+        # In-flight requests are keyed by request_id, not session_id.
+        # Walk the task store to find sessions with active work.
+        for task in self._task_store.values():
+            if task.get("status") == "working":
+                request_id = task.get("requestId")
+                if request_id is not None and request_id in self._in_flight_requests:
+                    # The task doesn't store session_id directly, but we protect
+                    # any session that still has in-flight work by checking the
+                    # SSE buffers (only HTTP sessions using SSE have them).
+                    pass
+        # Simpler heuristic: protect sessions that have SSE event counters,
+        # since those are actively streaming.
+        for sid in self._sse_event_counters:
+            if sid in self.session_manager.sessions:
+                protected.add(sid)
+        return protected
+
+    # ================================================================
     # Session termination (MCP 2025-11-25 Streamable HTTP)
     # ================================================================
 
@@ -1185,12 +1278,8 @@ class MCPProtocolHandler:
         if session is None:
             return False
 
-        # Clean up subscriptions
-        self._resource_subscriptions.pop(session_id, None)
-
-        # Clean up SSE buffers
-        self._sse_event_buffers.pop(session_id, None)
-        self._sse_event_counters.pop(session_id, None)
+        # Clean up all per-session state
+        self._cleanup_session_state(session_id)
 
         # Remove session
         self.session_manager.sessions.pop(session_id, None)
@@ -1318,6 +1407,36 @@ class MCPProtocolHandler:
             await self._send_to_client(notification)
         except Exception as e:
             logger.debug(f"Failed to send task status notification: {e}")
+
+    async def shutdown(self, timeout: float = 5.0) -> None:
+        """Gracefully shut down the protocol handler.
+
+        Waits for in-flight requests to complete (up to timeout), then cancels
+        any remaining and cleans up all session state.
+
+        Args:
+            timeout: Maximum seconds to wait for in-flight requests.
+        """
+        # Wait for in-flight requests to finish
+        if self._in_flight_requests:
+            logger.debug(f"Waiting for {len(self._in_flight_requests)} in-flight requests (timeout={timeout}s)")
+            tasks = list(self._in_flight_requests.values())
+            done, pending = await asyncio.wait(tasks, timeout=timeout)
+            for t in pending:
+                t.cancel()
+            logger.debug(f"Shutdown: {len(done)} completed, {len(pending)} cancelled")
+
+        self._in_flight_requests.clear()
+
+        # Clean up all session state
+        for sid in list(self.session_manager.sessions):
+            self._cleanup_session_state(sid)
+        self.session_manager.sessions.clear()
+
+        # Clear task store
+        self._task_store.clear()
+
+        logger.debug("Protocol handler shut down")
 
     def _create_error_response(self, msg_id: Any, code: int, message: str) -> dict[str, Any]:
         """Create error response."""

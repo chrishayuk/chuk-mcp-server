@@ -4,9 +4,9 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.20.0
+## Current State: v0.21.0
 
-**2230+ tests | 97% coverage | 36K+ RPS**
+**2330+ tests | 97% coverage | 36K+ RPS**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest). The current release includes:
 
@@ -40,8 +40,25 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **Testing** | `ToolRunner` test harness for invoking tools without transport |
 | **OpenAPI** | Auto-generated OpenAPI 3.1.0 spec from tool schemas at `/openapi.json` |
 | **Errors** | Structured error messages with fix suggestions and fuzzy tool name matching |
+| **Rate Limiting** | Per-session token bucket rate limiter, configurable via `rate_limit_rps`, disabled by default |
+| **Validation** | Request body size limits (10 MB), argument key count limits (100), type checking |
+| **Thread Safety** | Locked global registries, double-checked locking singleton, graceful shutdown with drain |
+| **Health** | `/health` (liveness), `/health/ready` (readiness), `/health/detailed` (full state) |
+| **Telemetry** | Thin OpenTelemetry wrapper, zero overhead without otel |
 
-### Recently Completed (v0.20.0 -- Phase 4: MCP 2025-11-25)
+### Recently Completed (v0.21.0 -- Phase 5: Production Hardening)
+
+- **Session lifecycle cleanup** -- `on_evict` callback cleans up `_resource_subscriptions`, `_sse_event_buffers`, `_sse_event_counters` on session eviction; protected sessions with active SSE streams skip eviction
+- **Request validation** -- 10 MB body size limit on HTTP and STDIO transports, 100-key argument limit, type checking on tool arguments
+- **Rate limiting** -- Per-session token bucket rate limiter (`TokenBucketRateLimiter`), configurable via `rate_limit_rps` parameter, disabled by default
+- **Narrow exception handling** -- `asyncio.CancelledError` re-raised, `ValueError`/`TypeError`/`KeyError` return `INVALID_PARAMS`, generic exceptions return sanitized `"Internal server error"` message
+- **Thread safety** -- `_registry_lock` on global decorator registries, double-checked locking on singleton in `__init__.py`, `clear_global_registry()` uses `.clear()` to preserve references
+- **Graceful shutdown** -- `MCPProtocolHandler.shutdown(timeout=5.0)` drains in-flight requests with configurable timeout, then cancels remaining tasks and cleans all state
+- **Health check enhancements** -- `/health/ready` readiness probe (checks tools registered), `/health/detailed` endpoint (sessions, tools, resources, prompts, in-flight requests)
+- **Telemetry** -- Thin OpenTelemetry wrapper (`telemetry.py`), `trace_tool_call()` context manager, zero overhead when otel is not installed
+- **Pending request limits** -- `MAX_PENDING_REQUESTS = 100` enforced in STDIO transport, `stop()` cancels all pending futures
+
+### Previously Completed (v0.20.0 -- Phase 4: MCP 2025-11-25)
 
 - **Streamable HTTP transport** -- Single MCP endpoint (POST+GET), `MCP-Session-Id` header, session DELETE, `MCP-Protocol-Version` header, SSE resumability with event IDs
 - **Tasks system** -- `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `notifications/tasks/status` for durable long-running request state machines
@@ -81,43 +98,42 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 
 ## Code Review Findings
 
-A comprehensive code review identified the following issues organized by severity. These findings inform the roadmap priorities below.
+A comprehensive code review identified the following issues organized by severity. Items marked **Fixed** were addressed in Phase 5 (v0.21).
 
 ### Critical
 
-| Finding | Location | Description |
-|---------|----------|-------------|
-| Resource subscription memory leak | `protocol.py:137` | `_resource_subscriptions` dict grows unbounded. Subscriptions are tracked per session but never cleaned up when sessions expire or are evicted. |
-| Session eviction drops active sessions | `protocol.py:74-76` | When at capacity, the oldest session by `last_activity` is evicted with no grace period or check for in-flight requests. Under uniform load, an actively-used session can be evicted. |
-| Version drift | `pyproject.toml` vs docs | `pyproject.toml` says `0.16.5` while `ARCHITECTURE.md` and `ROADMAP.md` reference `0.18.0`. |
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Resource subscription memory leak | `protocol.py` | `_resource_subscriptions` dict grows unbounded on session eviction. | **Fixed** (WP1: `on_evict` callback) |
+| Session eviction drops active sessions | `protocol.py` | Oldest session evicted with no check for in-flight requests. | **Fixed** (WP1: protected sessions) |
+| Version drift | `pyproject.toml` vs docs | `pyproject.toml` says `0.16.5` while docs reference `0.18.0`. | Open |
 
 ### High
 
-| Finding | Location | Description |
-|---------|----------|-------------|
-| Broad exception handling | `protocol.py:396` | OAuth validation catches bare `Exception`, masking real bugs (`TypeError`, `ImportError`). Should catch specific OAuth errors. |
-| No rate limiting or request size limits | Protocol layer | Any client can send unlimited tool calls or arbitrarily large payloads. Denial-of-service vector in HTTP mode. |
-| Thread safety of global state | `decorators.py`, `__init__.py` | Global mutable lists/singletons with no locking. Safe in single-threaded asyncio but unsafe if imported from threads. |
-| Large files need splitting | `core.py` (1031 lines), `protocol.py` (953 lines) | Both files handle too many concerns. `core.py` manages registration, composition, proxy, config, and lifecycle all in one class. |
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Broad exception handling | `protocol.py` | OAuth validation catches bare `Exception`, masking real bugs. | **Fixed** (WP4: narrowed handlers) |
+| No rate limiting or request size limits | Protocol layer | Any client can send unlimited requests or arbitrarily large payloads. | **Fixed** (WP2+WP3: size limits + rate limiter) |
+| Thread safety of global state | `decorators.py`, `__init__.py` | Global mutable lists/singletons with no locking. | **Fixed** (WP5: `_registry_lock` + `_server_lock`) |
+| Large files need splitting | `core.py`, `protocol.py` | Both files handle too many concerns. | Open (Phase 6) |
 
 ### Medium
 
-| Finding | Location | Description |
-|---------|----------|-------------|
-| Pending request cleanup | `stdio_transport.py` | `_pending_requests` dict entries may linger if timeout fires but dict entry is not removed. |
-| Test suite duplication | `tests/` | Multiple `*_coverage.py` and `*_final_coverage.py` files alongside main counterparts. Iterative coverage improvements never consolidated. |
-| Weak assertions in core tests | `test_core.py` | Many tests use `try/except` with `pytest.skip()` and only assert method existence rather than testing behavior. |
-| No concurrency tests | `tests/` | Zero tests for concurrent tool execution, parallel sampling, or race conditions in the context system. |
-| Uncommitted work on main | Working tree | 13 modified files and 10 new untracked files sitting on `main`. |
-| No input validation at protocol boundary | `protocol.py` | JSON-RPC handler trusts incoming `params` dicts. No schema validation before calling tool functions. |
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Pending request cleanup | `stdio_transport.py` | `_pending_requests` entries linger after timeout. | **Fixed** (WP4: `stop()` cancels, limit enforced) |
+| Test suite duplication | `tests/` | Multiple `*_coverage.py` files alongside main counterparts. | Open (Phase 6) |
+| Weak assertions in core tests | `test_core.py` | Tests use `try/except`+`pytest.skip()` patterns. | Open (Phase 6) |
+| No concurrency tests | `tests/` | Zero tests for concurrent tool execution or race conditions. | **Partial** (WP5: thread safety tests) |
+| No input validation at protocol boundary | `protocol.py` | JSON-RPC handler trusts incoming `params` dicts. | **Fixed** (WP2: argument validation) |
 
 ### Low
 
-| Finding | Location | Description |
-|---------|----------|-------------|
-| Import-time side effects | `__init__.py` | `_auto_export_cloud_handlers()` runs at import time, triggering cloud detection logic. |
-| Magic numbers | `errors.py`, `protocol.py` | Fuzzy match cutoff `0.6`, `max_sessions=100`, `cleanup_interval=10` undocumented. |
-| `dist/` in working tree | Repository root | Built distribution files should be gitignored. |
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Import-time side effects | `__init__.py` | `_auto_export_cloud_handlers()` runs at import time. | Open (Phase 6) |
+| Magic numbers | `errors.py`, `protocol.py` | Undocumented constants like `max_sessions=100`. | **Partial** (WP2+WP3+WP4: named constants) |
+| `dist/` in working tree | Repository root | Built distribution files should be gitignored. | Open |
 
 ---
 
@@ -248,24 +264,24 @@ Upgrade to the latest MCP specification. Implement the new transport, tasks syst
 
 ---
 
-## Phase 5: Production Hardening -- v0.21
+## Phase 5: Production Hardening -- v0.21 (Complete)
 
 Address critical findings from the code review. Harden the server for sustained production workloads with reliability, observability, and security improvements.
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Resource subscription cleanup | Planned | Tie `_resource_subscriptions` cleanup to session eviction and expiry to prevent memory leaks |
-| Session eviction improvements | Planned | Grace period for active sessions, check for in-flight requests before eviction, TTL-based expiration |
-| Request size limits | Planned | Maximum payload size enforcement on HTTP transport to prevent denial-of-service |
-| Rate limiting | Planned | Per-tool and per-session rate limiting with configurable policies |
-| Protocol boundary validation | Planned | JSON schema validation of incoming tool arguments before invoking handler functions |
-| Narrow exception handling | Planned | Replace broad `except Exception` blocks in OAuth and protocol handling with specific exception types |
-| Pending request cleanup | Planned | Explicit cleanup of `_pending_requests` entries in STDIO transport on timeout |
-| Thread safety | Planned | Add locking to global mutable state in `decorators.py` and `__init__.py` for thread-safe imports |
-| OpenTelemetry integration | Planned | Metrics, traces, and spans for tool invocations, transport I/O, and protocol events |
-| Health check enhancements | Planned | Separate readiness and liveness probes; dependency health reporting |
-| Graceful shutdown | Planned | Drain in-flight requests before stopping; configurable timeout |
-| Connection pooling for proxy | Planned | Reuse connections when proxying to upstream MCP servers |
+| Resource subscription cleanup | **Done** | `on_evict` callback ties `_resource_subscriptions`, `_sse_event_buffers`, `_sse_event_counters` cleanup to session eviction and expiry |
+| Session eviction improvements | **Done** | Protected sessions with active SSE streams skip eviction; `_cleanup_session_state()` centralized cleanup |
+| Request size limits | **Done** | 10 MB body size limit on HTTP and STDIO transports; 100-key argument limit with type checking |
+| Rate limiting | **Done** | Per-session token bucket rate limiter (`TokenBucketRateLimiter`), configurable via `rate_limit_rps`, disabled by default |
+| Protocol boundary validation | **Done** | Argument type checking and key count validation before invoking tool handlers |
+| Narrow exception handling | **Done** | `CancelledError` re-raised; `ValueError`/`TypeError`/`KeyError` → `INVALID_PARAMS`; generic exceptions sanitized |
+| Pending request cleanup | **Done** | `MAX_PENDING_REQUESTS = 100` enforced in STDIO transport; `stop()` cancels all pending futures |
+| Thread safety | **Done** | `_registry_lock` on global registries; double-checked locking on singleton; `.clear()` preserves references |
+| OpenTelemetry integration | **Done** | Thin wrapper in `telemetry.py`; `trace_tool_call()` context manager; zero overhead without otel |
+| Health check enhancements | **Done** | `/health/ready` readiness probe; `/health/detailed` with session/tool/resource/in-flight counts |
+| Graceful shutdown | **Done** | `MCPProtocolHandler.shutdown(timeout=5.0)` drains in-flight requests then cancels remaining |
+| Connection pooling for proxy | Deferred | Deferred to Phase 7 (Advanced Composition) |
 
 ---
 
@@ -321,6 +337,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.21.0 | Production hardening: session lifecycle cleanup, request validation, rate limiting, exception handling, thread safety, graceful shutdown, health probes, telemetry |
 | v0.20.0 | MCP 2025-11-25: Streamable HTTP, tasks, URL elicitation, tool calling in sampling, icons, enhanced ServerInfo |
 | v0.19.0 | MCP 2025-06-18: Structured output, tool annotations, pagination, resource templates, resource links, content annotations, cancellation, log notifications |
 | v0.18.0 | Developer experience: HTTP bidirectional, ToolRunner, improved errors, OpenAPI, hot reload, inspect |

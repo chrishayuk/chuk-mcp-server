@@ -932,6 +932,8 @@ class ChukMCPServer:
                 )
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
+                # Gracefully shut down protocol handler (drain in-flight requests)
+                asyncio.run(self.protocol.shutdown())
                 # Stop proxy servers on shutdown
                 if self.proxy_manager:
                     asyncio.run(self._stop_proxy_if_enabled())

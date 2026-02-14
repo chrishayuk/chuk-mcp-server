@@ -169,6 +169,17 @@ class MCPEndpoint:
         try:
             # Parse request body
             body = await request.body()
+
+            # Reject oversized request bodies
+            from ..constants import MAX_REQUEST_BODY_BYTES
+
+            if len(body) > MAX_REQUEST_BODY_BYTES:
+                return self._error_response(
+                    None,
+                    JsonRpcErrorCode.INVALID_REQUEST,
+                    f"Request body too large ({len(body)} bytes, max {MAX_REQUEST_BODY_BYTES})",
+                )
+
             request_data = orjson.loads(body) if body else {}
             method = request_data.get("method")
 

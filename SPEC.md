@@ -1,6 +1,6 @@
 # chuk-mcp-server Technical Specification
 
-**Package**: `chuk-mcp-server` v0.20.0
+**Package**: `chuk-mcp-server` v0.21.0
 **License**: MIT
 **Python**: >= 3.11
 **MCP Protocol**: `2025-11-25` (default), `2025-06-18` (supported), `2025-03-26` (supported)
@@ -615,8 +615,38 @@ Sessions are created on `initialize` and tracked by the `SessionManager`. Config
 - Maximum sessions: 1000 (evicts oldest when at capacity)
 - Session expiry: 3600 seconds of inactivity
 - Cleanup runs every 100 session creations
+- Protected sessions: Sessions with active SSE streams skip eviction
+- Eviction callback: Cleans up `_resource_subscriptions`, `_sse_event_buffers`, `_sse_event_counters`, and rate limiter buckets
 
 Session IDs are returned in the `Mcp-Session-Id` HTTP header and must be included in subsequent requests.
+
+### Request Validation
+
+All incoming requests are validated at the transport and protocol layers:
+
+| Limit | Value | Location |
+|-------|-------|----------|
+| Max request body size | 10 MB (`MAX_REQUEST_BODY_BYTES`) | HTTP endpoint, STDIO transport |
+| Max argument keys | 100 (`MAX_ARGUMENT_KEYS`) | Protocol handler (`_handle_tools_call`) |
+| Arguments type | Must be `dict` | Protocol handler (`_handle_tools_call`) |
+| Max pending requests | 100 (`MAX_PENDING_REQUESTS`) | STDIO transport (`_send_and_receive`) |
+
+### Rate Limiting
+
+Per-session token bucket rate limiting is available via the `rate_limit_rps` parameter on `MCPProtocolHandler`. When enabled, each session gets an independent bucket that refills at the configured rate. Disabled by default (no overhead).
+
+```python
+MCPProtocolHandler(server_info, capabilities, rate_limit_rps=100.0)
+# burst = rate_limit_rps * 2 = 200.0
+```
+
+### Graceful Shutdown
+
+`MCPProtocolHandler.shutdown(timeout=5.0)` performs an orderly shutdown:
+
+1. Waits up to `timeout` seconds for in-flight requests to complete
+2. Cancels any remaining in-flight request tasks
+3. Clears all sessions, task store, subscriptions, SSE state, and rate limiter
 
 ---
 
@@ -677,7 +707,9 @@ Or by passing `transport="stdio"` to the constructor, or `stdio=True` to `run()`
 | `/mcp` | GET, POST, OPTIONS | Core MCP protocol endpoint (JSON-RPC over HTTP) |
 | `/mcp/respond` | POST, OPTIONS | Client responses to server-initiated requests (bidirectional) |
 | `/ping` | GET | Connectivity check; returns `{"status": "ok"}` |
-| `/health` | GET | Health status; returns `{"status": "healthy"}` |
+| `/health` | GET | Liveness probe; returns `{"status": "healthy", "uptime": ...}` |
+| `/health/ready` | GET | Readiness probe; returns 200 when tools are registered, 503 otherwise |
+| `/health/detailed` | GET | Detailed health: tool/resource/prompt counts, sessions, in-flight requests |
 | `/version` | GET | Server version information |
 | `/` | GET | Server info (name, version, tools, resources, prompts) |
 | `/info` | GET | Server info (alias for `/`) |

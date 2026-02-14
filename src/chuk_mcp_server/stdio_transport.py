@@ -79,6 +79,12 @@ class StdioTransport:
             await self._send_response(request)
             return {}
 
+        # Enforce pending request limit
+        from .constants import MAX_PENDING_REQUESTS
+
+        if len(self._pending_requests) >= MAX_PENDING_REQUESTS:
+            raise RuntimeError(f"Too many pending requests ({MAX_PENDING_REQUESTS})")
+
         # Create a future for this request
         loop = asyncio.get_event_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -141,11 +147,13 @@ class StdioTransport:
                     await self._handle_message(line)
 
             except asyncio.CancelledError:
-                # Stdio transport cancelled
                 break
+            except (orjson.JSONDecodeError, ValueError) as e:
+                logger.debug(f"Parse error in stdio listener: {e}")
+                await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
             except Exception as e:
                 logger.debug(f"Error in stdio listener: {e}")
-                await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
+                await self._send_error(None, JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
 
     async def _handle_message(self, message: str) -> None:
         """
@@ -157,6 +165,15 @@ class StdioTransport:
         Args:
             message: Raw JSON-RPC message string
         """
+        # Reject oversized messages
+        from .constants import MAX_REQUEST_BODY_BYTES
+
+        if len(message.encode("utf-8")) > MAX_REQUEST_BODY_BYTES:
+            await self._send_error(
+                None, JsonRpcError.INVALID_REQUEST, f"Message too large (max {MAX_REQUEST_BODY_BYTES} bytes)"
+            )
+            return
+
         try:
             # Parse the JSON-RPC message
             request_data = orjson.loads(message)
@@ -241,8 +258,13 @@ class StdioTransport:
 
     async def stop(self) -> None:
         """Stop the stdio transport."""
-        # Stopping stdio transport
         self.running = False
+
+        # Cancel all pending server-to-client requests
+        for req_id, future in self._pending_requests.items():
+            if not future.done():
+                future.cancel()
+        self._pending_requests.clear()
 
         # Close reader if available
         if self.reader:
@@ -411,6 +433,13 @@ class StdioSyncTransport:
         Args:
             line: Raw JSON-RPC message string
         """
+        # Reject oversized messages
+        from .constants import MAX_REQUEST_BODY_BYTES
+
+        if len(line.encode("utf-8")) > MAX_REQUEST_BODY_BYTES:
+            self._send_error(JsonRpcError.INVALID_REQUEST, f"Message too large (max {MAX_REQUEST_BODY_BYTES} bytes)")
+            return
+
         try:
             message = orjson.loads(line)
 

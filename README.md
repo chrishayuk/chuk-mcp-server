@@ -91,6 +91,7 @@ Restart Claude Desktop - your tools are now available!
 - **🎨 Icons**: Icons on tools, resources, prompts, and server info
 - **📦 Dual Transport**: STDIO + Streamable HTTP, both with bidirectional support
 - **🧩 Full Protocol Surface**: Sampling, elicitation, progress, roots, subscriptions, completions, tasks, cancellation
+- **🛡️ Production Hardened**: Rate limiting, request validation, graceful shutdown, thread safety, health probes
 - **🧪 ToolRunner**: Test tools without transport overhead
 - **📄 OpenAPI**: Auto-generated OpenAPI 3.1.0 spec at `/openapi.json`
 

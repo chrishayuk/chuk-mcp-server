@@ -97,7 +97,7 @@ Demonstrations of MCP protocol capabilities.
 
 | Example | Description | Key Features |
 |---------|-------------|--------------|
-| **[protocol_features_demo.py](protocol_features_demo.py)** | All v0.17 protocol features | Completions, subscriptions, elicitation, progress, roots |
+| **[protocol_features_demo.py](protocol_features_demo.py)** | Protocol features demo | Completions, subscriptions, elicitation, progress, roots |
 | **[tool_features_example.py](tool_features_example.py)** | Tool annotations, structured output, icons, resource templates | Phase 3 & 4 decorator features |
 | **[context_features_example.py](context_features_example.py)** | Log notifications, progress, resource links, content annotations | Phase 3 context API features |
 | **[advanced_protocol_example.py](advanced_protocol_example.py)** | Sampling with tools, URL elicitation, tasks system | Phase 4 protocol features |

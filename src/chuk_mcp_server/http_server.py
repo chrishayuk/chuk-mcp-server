@@ -17,7 +17,16 @@ from starlette.responses import Response
 from .endpoint_registry import http_endpoint_registry
 
 # Import optimized endpoints
-from .endpoints import HealthEndpoint, InfoEndpoint, MCPEndpoint, handle_health_ultra_fast, handle_ping, handle_version
+from .endpoints import (
+    HealthEndpoint,
+    InfoEndpoint,
+    MCPEndpoint,
+    handle_health_detailed,
+    handle_health_ready,
+    handle_health_ultra_fast,
+    handle_ping,
+    handle_version,
+)
 from .middlewares import ContextMiddleware
 from .openapi import generate_openapi_spec
 from .protocol import MCPProtocolHandler
@@ -78,6 +87,8 @@ class HTTPServer:
             ("/ping", handle_ping, ["GET"], "ping"),
             ("/version", handle_version, ["GET"], "version"),
             ("/health", handle_health_ultra_fast, ["GET"], "health_fast"),
+            ("/health/ready", handle_health_ready, ["GET"], "health_ready"),
+            ("/health/detailed", handle_health_detailed, ["GET"], "health_detailed"),
             ("/mcp", mcp_endpoint.handle_request, ["GET", "POST", "DELETE", "OPTIONS"], "mcp_protocol"),
             ("/mcp/respond", mcp_endpoint.handle_respond, ["POST", "OPTIONS"], "mcp_respond"),
             ("/", info_endpoint.handle_request, ["GET"], "server_info"),

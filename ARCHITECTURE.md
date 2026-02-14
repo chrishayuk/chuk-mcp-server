@@ -1,7 +1,7 @@
 # chuk-mcp-server Architecture
 
-**Version**: 0.20.0 | **Python**: >=3.11 | **License**: MIT
-**Tests**: 2230+ passed, 97% coverage | **Performance**: 36K+ RPS, <3ms overhead
+**Version**: 0.21.0 | **Python**: >=3.11 | **License**: MIT
+**Tests**: 2330+ passed, 97% coverage | **Performance**: 36K+ RPS, <3ms overhead
 
 ## Overview
 
@@ -50,9 +50,11 @@ src/chuk_mcp_server/
 |-- decorators.py            # @tool, @resource, @resource_template, @prompt, @requires_auth
 |-- protocol.py              # MCPProtocolHandler (JSON-RPC 2.0, tasks, pagination)
 |-- context.py               # Request context (contextvars, send_log, add_resource_link)
-|-- constants.py             # Protocol constants, tool name regex
+|-- constants.py             # Protocol constants, tool name regex, validation limits
 |-- http_server.py           # Starlette/Uvicorn HTTP server (Streamable HTTP)
 |-- stdio_transport.py       # STDIO transport (sync + async)
+|-- rate_limiter.py          # Per-session token bucket rate limiter
+|-- telemetry.py             # Thin OpenTelemetry wrapper (no-op without otel)
 |-- artifacts_context.py     # Optional artifact/workspace support
 |-- cli.py                   # CLI (scaffolding, --reload, --inspect)
 |-- errors.py                # Structured error messages
@@ -87,7 +89,8 @@ src/chuk_mcp_server/
 |
 |-- endpoints/               # HTTP endpoints
 |   |-- mcp.py               # Core /mcp endpoint with SSE
-|   |-- health.py, ping.py, info.py, version.py
+|   |-- health.py            # /health, /health/ready, /health/detailed
+|   |-- ping.py, info.py, version.py
 |   +-- constants.py
 |
 |-- oauth/                   # OAuth 2.1 support
@@ -544,6 +547,62 @@ time is not included.
 ResourceHandler supports TTL-based content caching. When a resource is
 read, the result is cached and subsequent reads within the TTL window
 return the cached value without invoking the handler function.
+
+## Production Hardening (v0.21)
+
+The server includes several production-readiness features added in v0.21:
+
+### Session Lifecycle
+
+When sessions are evicted at capacity, an `on_evict` callback cleans up
+`_resource_subscriptions`, `_sse_event_buffers`, and `_sse_event_counters`
+to prevent memory leaks. Sessions with active SSE streams are protected
+from eviction. `_cleanup_session_state()` centralizes all per-session
+cleanup and is also called during `terminate_session` and `shutdown`.
+
+### Request Validation
+
+Three layers of input validation protect against oversized or malformed
+requests:
+
+- HTTP body size: `MAX_REQUEST_BODY_BYTES` (10 MB) in `endpoints/mcp.py`
+- STDIO message size: Same limit in `stdio_transport.py`
+- Tool arguments: Type check (`dict` required), key count limit (`MAX_ARGUMENT_KEYS = 100`)
+
+### Rate Limiting
+
+`TokenBucketRateLimiter` in `rate_limiter.py` provides per-session
+token bucket rate limiting. Enabled by passing `rate_limit_rps` to
+`MCPProtocolHandler`. Disabled by default (no overhead when off).
+Session buckets are cleaned up on session eviction.
+
+### Thread Safety
+
+Global mutable state is protected with locks:
+
+- `_registry_lock` in `decorators.py` wraps all `_global_*.append()` calls
+- `_server_lock` in `__init__.py` uses double-checked locking for the singleton
+- `clear_global_registry()` uses `.clear()` instead of `= []` to preserve references
+
+### Graceful Shutdown
+
+`MCPProtocolHandler.shutdown(timeout=5.0)` drains in-flight requests
+with a configurable timeout, then cancels remaining tasks and cleans
+all session state. Called from `core.py` on `KeyboardInterrupt`.
+
+### Health Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Liveness probe (status + uptime) |
+| `/health/ready` | Readiness probe (checks tools registered, 200 or 503) |
+| `/health/detailed` | Full state: tools, resources, prompts, sessions, in-flight requests |
+
+### Telemetry
+
+`telemetry.py` provides a thin OpenTelemetry wrapper. `trace_tool_call()`
+creates spans when otel is installed and falls back to a lightweight
+timing dict when not. Zero overhead without the `opentelemetry` package.
 
 ## Dependencies
 

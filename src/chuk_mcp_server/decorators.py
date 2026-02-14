@@ -5,6 +5,7 @@ Simple decorators for tools and resources
 """
 
 import inspect
+import threading
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
@@ -16,6 +17,7 @@ from .types.resources import ResourceTemplateHandler
 # Global Registry (for standalone decorators)
 # ============================================================================
 
+_registry_lock = threading.Lock()
 _global_tools: list[ToolHandler] = []
 _global_resources: list[ResourceHandler] = []
 _global_prompts: list[PromptHandler] = []
@@ -54,11 +56,11 @@ def get_global_registry() -> dict[str, list[Any]]:
 
 def clear_global_registry() -> None:
     """Clear global registry (useful for testing)."""
-    global _global_tools, _global_resources, _global_prompts, _global_resource_templates
-    _global_tools = []
-    _global_resources = []
-    _global_prompts = []
-    _global_resource_templates = []
+    with _registry_lock:
+        _global_tools.clear()
+        _global_resources.clear()
+        _global_prompts.clear()
+        _global_resource_templates.clear()
 
 
 # ============================================================================
@@ -108,7 +110,8 @@ def tool(
         )
 
         # Register globally
-        _global_tools.append(mcp_tool)
+        with _registry_lock:
+            _global_tools.append(mcp_tool)
 
         # Add tool metadata to function
         func._mcp_tool = mcp_tool  # type: ignore[attr-defined]
@@ -162,7 +165,8 @@ def resource(
         )
 
         # Register globally
-        _global_resources.append(mcp_resource)
+        with _registry_lock:
+            _global_resources.append(mcp_resource)
 
         # Add resource metadata to function
         func._mcp_resource = mcp_resource  # type: ignore[attr-defined]
@@ -204,7 +208,8 @@ def prompt(
         mcp_prompt = PromptHandler.from_function(func, name=name, description=description, icons=icons)
 
         # Register globally
-        _global_prompts.append(mcp_prompt)
+        with _registry_lock:
+            _global_prompts.append(mcp_prompt)
 
         # Add prompt metadata to function
         func._mcp_prompt = mcp_prompt  # type: ignore[attr-defined]
@@ -267,7 +272,8 @@ def resource_template(
         )
 
         # Register globally
-        _global_resource_templates.append(mcp_template)
+        with _registry_lock:
+            _global_resource_templates.append(mcp_template)
 
         # Add template metadata to function
         func._mcp_resource_template = mcp_template  # type: ignore[attr-defined]

@@ -205,3 +205,18 @@ class McpTaskMethod:
 MCP_PROTOCOL_VERSION_2025_11 = "2025-11-25"
 HEADER_MCP_PROTOCOL_VERSION = "MCP-Protocol-Version"
 HEADER_LAST_EVENT_ID = "Last-Event-ID"
+
+
+# ---------------------------------------------------------------------------
+# Request validation limits (Phase 5: Production Hardening)
+# ---------------------------------------------------------------------------
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_ARGUMENT_KEYS = 100
+MAX_PENDING_REQUESTS = 100
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (Phase 5: Production Hardening)
+# ---------------------------------------------------------------------------
+DEFAULT_RATE_LIMIT_RPS = 100.0
+DEFAULT_RATE_LIMIT_BURST = 200.0
