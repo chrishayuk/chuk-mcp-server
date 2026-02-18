@@ -1,6 +1,5 @@
 site_name: ChukMCPServer
 site_description: The fastest, most developer-friendly MCP server framework for Python
-site_author: Chris Hay
 site_url: https://chrishayuk.github.io/chuk-mcp-server/
 
 repo_name: chrishayuk/chuk-mcp-server
@@ -137,4 +136,4 @@ extra:
   version:
     provider: mike
 
-copyright: Copyright &copy; 2024 Chris Hay
+copyright: Copyright &copy; 2024 contributors

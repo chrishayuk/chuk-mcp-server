@@ -4,7 +4,7 @@ Welcome to the **ChukMCPServer** documentation! ChukMCPServer is the fastest, mo
 
 ## What is ChukMCPServer?
 
-ChukMCPServer lets you build production-ready MCP servers in minutes with:
+ChukMCPServer lets you build robust MCP servers in minutes with:
 
 - **Decorator-based API** - Define tools with simple `@tool` decorators
 - **Zero Configuration** - Smart defaults detect everything automatically
@@ -21,7 +21,7 @@ def add(a: int, b: int) -> int:
     """Add two numbers together."""
     return a + b
 
-run()  # That's it! Production-ready server
+run()  # That's it! Deploy-ready server
 ```
 
 ## Quick Links
@@ -42,7 +42,7 @@ run()  # That's it! Production-ready server
 
 - :material-cloud-upload: **[Deployment](deployment/http-mode.md)**
 
-    Deploy to production with HTTP, Docker, or cloud platforms
+    Deploy with HTTP, Docker, or cloud platforms
 
 - :material-speedometer: **[Performance](performance/benchmarks.md)**
 
@@ -72,7 +72,7 @@ run()  # That's it! Production-ready server
 | Transport | Use Case | Performance |
 |-----------|----------|-------------|
 | **STDIO** | Claude Desktop integration | N/A (local) |
-| **HTTP** | Web APIs, production deployment | 36,000+ RPS |
+| **HTTP** | Web APIs, cloud deployment | 36,000+ RPS |
 
 ### ☁️ Cloud Support
 
@@ -114,7 +114,7 @@ Full OAuth 2.1 implementation with:
     - Automatic type validation
     - Built-in scaffolder
 
-=== "Production Ready"
+=== "Deployment Ready"
 
     **Deploy with confidence**
 
@@ -139,7 +139,7 @@ Ready to build your first MCP server?
 1. **[Install ChukMCPServer](getting-started/installation.md)** - Get up and running in minutes
 2. **[Create Your First Server](getting-started/first-server.md)** - Build a simple calculator
 3. **[Add to Claude Desktop](getting-started/claude-desktop.md)** - Connect to Claude
-4. **[Build Real Tools](tools/basic.md)** - Create production tools
+4. **[Build Real Tools](tools/basic.md)** - Create robust tools
 
 ## Example Servers
 

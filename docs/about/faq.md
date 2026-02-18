@@ -13,11 +13,11 @@ ChukMCPServer is a high-performance Python framework for building MCP (Model Con
 - **Zero Configuration**: Auto-detects everything (project name, host, port, workers)
 - **High Performance**: 39,000+ RPS with uvloop and orjson
 - **Developer Friendly**: FastAPI-like decorator syntax
-- **Production Ready**: Built-in OAuth, cloud support, comprehensive tests
+- **Deployment Ready**: Built-in OAuth, cloud support, comprehensive tests
 
-### Is it production ready?
+### Is it ready for deployment?
 
-Yes! ChukMCPServer v1.0+ is production-ready with:
+Yes! ChukMCPServer v1.0+ is battle-tested with:
 - 87%+ test coverage (1400+ tests)
 - Type-safe with full mypy checking
 - Battle-tested in cloud environments
@@ -135,7 +135,7 @@ See [Performance Guide](../advanced/performance.md).
 
 ## Deployment
 
-### How do I deploy to production?
+### How do I deploy?
 
 Multiple options:
 

@@ -10,7 +10,7 @@ and orjson optimization for maximum performance in schema operations.
 import inspect
 from dataclasses import dataclass
 from types import UnionType
-from typing import Any, Union
+from typing import Any, Union, cast
 
 import orjson
 
@@ -291,8 +291,7 @@ class ToolParameter:
             and not self.pydantic_items_model
         ):
             # Return pre-computed schema for maximum speed
-            return orjson.loads(_BASE_SCHEMAS[cache_key])  # type: ignore[no-any-return]
-
+            return cast(dict[str, Any], orjson.loads(_BASE_SCHEMAS[cache_key]))
         # Build custom schema
         schema: dict[str, Any] = {"type": self.type}
 
@@ -381,7 +380,7 @@ def build_input_schema(parameters: list[ToolParameter]) -> dict[str, Any]:
 def build_input_schema_bytes(parameters: list[ToolParameter]) -> bytes:
     """Build orjson-serialized input schema for maximum performance."""
     schema = build_input_schema(parameters)
-    return orjson.dumps(schema)  # type: ignore[no-any-return]
+    return orjson.dumps(schema)
 
 
 # ============================================================================

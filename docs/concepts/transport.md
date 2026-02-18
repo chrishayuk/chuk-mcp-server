@@ -23,7 +23,7 @@ run()  # Default: STDIO
 
 ## HTTP Transport
 
-HTTP server for web APIs and production:
+HTTP server for web APIs and deployed services:
 
 ```python
 from chuk_mcp_server import tool, run
@@ -37,7 +37,7 @@ run(transport="http", port=8000)
 
 **Use for:**
 - Web applications
-- Production APIs
+- Deployed APIs
 - Testing with curl/browser
 - Cloud deployment
 
@@ -54,4 +54,4 @@ run(transport="http", port=8000)
 
 - [Claude Desktop Setup](../getting-started/claude-desktop.md) - STDIO
 - [HTTP Mode](../deployment/http-mode.md) - HTTP deployment
-- [Cloud Deployment](../deployment/cloud.md) - Production
+- [Cloud Deployment](../deployment/cloud.md) - Cloud platforms

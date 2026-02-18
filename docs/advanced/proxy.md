@@ -234,6 +234,6 @@ mcp.run()
 
 ## Next Steps
 
-- [Production](../deployment/production.md) - Production best practices
+- [Deployment Guide](../deployment/production.md) - Deployment best practices
 - [Docker](../deployment/docker.md) - Containerization
 - [Cloud](../deployment/cloud.md) - Cloud deployment

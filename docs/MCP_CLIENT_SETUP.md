@@ -205,7 +205,7 @@ WorkingDirectory=/var/lib/chuk-mcp
 ExecStart=/usr/local/bin/uvx chuk-mcp-server http --port 8000
 Restart=always
 RestartSec=10
-Environment="MCP_SERVER_NAME=production-mcp"
+Environment="MCP_SERVER_NAME=deployed-mcp"
 
 [Install]
 WantedBy=multi-user.target
@@ -391,7 +391,7 @@ uvx chuk-mcp-server http --port 8000
 uvx chuk-mcp-server stdio
 ```
 
-### For Production Deployment
+### For Deployment
 
 ```bash
 # HTTP mode with monitoring

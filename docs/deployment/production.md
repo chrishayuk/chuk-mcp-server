@@ -1,6 +1,6 @@
 # Production Guide
 
-Best practices for deploying MCP servers to production.
+Best practices for deploying MCP servers.
 
 ## Configuration
 

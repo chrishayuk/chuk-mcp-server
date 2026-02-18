@@ -379,7 +379,7 @@ curl http://localhost:8000/mcp \\
 
 ### Option 3: Docker (Production Deployment)
 
-Docker automatically runs the server in HTTP mode, perfect for production deployments.
+Docker automatically runs the server in HTTP mode, suitable for containerized deployments.
 
 #### Using docker-compose (easiest)
 ```bash

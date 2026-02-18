@@ -1,6 +1,6 @@
 # Advanced Logging
 
-Configure logging for debugging and production monitoring.
+Configure logging for debugging and deployment monitoring.
 
 ## Log Levels
 
@@ -13,7 +13,7 @@ from chuk_mcp_server import ChukMCPServer
 mcp = ChukMCPServer(name="my-server")
 mcp.run(log_level="debug")
 
-# Production: minimal logs
+# Deployed: minimal logs
 mcp.run(log_level="warning")
 ```
 
@@ -56,7 +56,7 @@ mcp.run()
 
 ## Structured Logging
 
-For production systems:
+For deployed systems:
 
 ```python
 import structlog

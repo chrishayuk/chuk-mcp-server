@@ -224,7 +224,7 @@ Expected results:
 
 ## Monitoring
 
-Track performance in production:
+Track performance when deployed:
 
 ```python
 from chuk_mcp_server import ChukMCPServer

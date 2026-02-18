@@ -313,7 +313,7 @@ async def test_workspace_creation(artifact_store):
 4. **Choose Right Backend**:
    - Memory for ephemeral/test data
    - Filesystem for local development
-   - S3 for production cloud deployments
+   - S3 for cloud deployments
 5. **Handle Errors**: Always handle potential errors from storage operations
 
 ## Related Documentation

@@ -2,7 +2,7 @@
 Proxy Manager v2 - Using chuk-tool-processor StreamManager for MCP integration.
 
 This version replaces custom transport classes with chuk-tool-processor's
-production-grade MCP handling (timeouts, retries, circuit breakers, etc).
+robust MCP handling (timeouts, retries, circuit breakers, etc).
 """
 
 import logging

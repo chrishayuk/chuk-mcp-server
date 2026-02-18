@@ -7,7 +7,7 @@ This guide shows you how to test the multi-server proxy functionality.
 ### Terminal 1: Start the Proxy Server
 
 ```bash
-cd /Users/chrishay/chris-source/chuk-ai/chuk-mcp-server
+cd /path/to/chuk-mcp-server
 
 # Run the proxy demo server
 uv run python examples/proxy_demo.py
@@ -38,7 +38,7 @@ This server proxies a simple backend MCP server and adds local tools.
 
 ```bash
 # In a new terminal
-cd /Users/chrishay/chris-source/chuk-ai/chuk-mcp-server
+cd /path/to/chuk-mcp-server
 
 # Run the test client
 uv run python examples/test_proxy_client.py

@@ -133,7 +133,7 @@ No security issues reported.
 ## Acknowledgments
 
 ### Contributors
-- [Chris Hay](https://github.com/chrishayuk) - Creator and maintainer
+- Original contributors
 
 ### Special Thanks
 - Anthropic team for MCP protocol

@@ -7,7 +7,7 @@ ChukMCPServer is licensed under the MIT License.
 ```
 MIT License
 
-Copyright (c) 2024 Chris Hay
+Copyright (c) 2024 contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -124,7 +124,7 @@ While ChukMCPServer is free, commercial support is available:
 
 ## Trademark
 
-"ChukMCPServer" and associated logos are trademarks of Chris Hay.
+"ChukMCPServer" and associated logos are trademarks of their respective owners.
 
 You may:
 - Reference the project by name

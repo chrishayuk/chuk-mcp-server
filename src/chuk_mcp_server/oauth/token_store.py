@@ -3,14 +3,14 @@ Token storage using chuk-sessions.
 
 Stores OAuth tokens using chuk-sessions library with pluggable backends:
 - Memory backend (default): For development and testing
-- Redis backend: For production use
+- Redis backend: For persistent/distributed use
 
 This provides:
-- Secure storage (Redis in production)
+- Secure storage (Redis for distributed deployments)
 - Automatic TTL/expiration
 - Multi-tenant isolation via sandbox_id
 - High performance (1.8M ops/sec memory, 20K ops/sec Redis)
-- Production-ready scalability
+- Horizontally scalable
 
 Configuration:
     Backend Configuration:
@@ -65,7 +65,7 @@ class TokenStore(BaseTokenStore):
     """
     Token store backed by chuk-sessions.
 
-    Supports both memory (development) and Redis (production) backends.
+    Supports both memory (development) and Redis (distributed) backends.
     Backend is configured via environment variables (see module docstring).
 
     Session Keys:

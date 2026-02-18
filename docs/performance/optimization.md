@@ -29,7 +29,7 @@ async def fetch_data(url: str):
 
 ## Redis for Sessions
 
-In production:
+For distributed deployments:
 
 ```bash
 export SESSION_PROVIDER=redis

@@ -37,6 +37,6 @@ export OAUTH_SERVER_URL=http://localhost:8000
 
 ## Next Steps
 
-- [Production Guide](production.md) - Best practices
+- [Deployment Guide](production.md) - Best practices
 - [OAuth Overview](../oauth/overview.md) - Authentication
 - [HTTP Mode](http-mode.md) - HTTP configuration

@@ -388,7 +388,7 @@ pool = await asyncpg.create_pool(max_size=100)
 
 ### 3. Error Handling
 
-- No stack traces in production
+- No stack traces in deployed environments
 - Secure error messages
 - Comprehensive logging
 

@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.16.5"
+version = "0.17"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
-    "chuk-mcp>=0.8.1",
-    "chuk-sessions>=0.4.2",
-    "chuk-tool-processor>=0.11.3", # Required for MCP proxy/tool handling
+    "chuk-mcp>=0.9.1",
+    "chuk-sessions>=0.6.1",
+    "chuk-tool-processor>=0.20.1", # Required for MCP proxy/tool handling
     "httptools>=0.6.4",
     "httpx>=0.27.0", # Required for HTTP proxy transport
     "orjson>=3.11.6",
@@ -40,8 +40,8 @@ dev = [
     "bandit>=1.7.8",
 ]
 artifacts = [
-    "chuk-artifacts>=0.9",
-    "chuk-virtual-fs>=0.3",
+    "chuk-artifacts>=0.11.1",
+    "chuk-virtual-fs>=0.5.1",
 ]
 google_drive = [
     "google-auth>=2.23.0",
