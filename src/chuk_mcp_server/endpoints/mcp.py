@@ -296,7 +296,14 @@ class MCPEndpoint:
                 HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
                 HEADER_MCP_PROTOCOL_VERSION: protocol_version,
             }
-            return Response("", status_code=HttpStatus.ACCEPTED, headers=headers)
+            if effective_session:
+                headers[HEADER_MCP_SESSION_ID] = effective_session
+            return Response(
+                "",
+                status_code=HttpStatus.ACCEPTED,
+                media_type=CONTENT_TYPE_JSON,
+                headers=headers,
+            )
 
         # Build response headers
         headers = {
@@ -388,9 +395,10 @@ class MCPEndpoint:
             created_session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
             logger.info(f"Created SSE session: {created_session_id[:8]}...")
 
+        effective_session = created_session_id or session_id
         return StreamingResponse(
-            self._sse_stream_generator(request_data, created_session_id or session_id, method, oauth_token),
-            headers=self._sse_headers(created_session_id),
+            self._sse_stream_generator(request_data, effective_session, method, oauth_token),
+            headers=self._sse_headers(effective_session),
         )
 
     def _emit_sse_event(self, event_type: str, data: dict[str, Any], session_id: str | None) -> tuple[str, ...]:
