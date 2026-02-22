@@ -11,7 +11,14 @@ from typing import Any
 
 # Import the modular smart configuration system
 from .config import SmartConfig
-from .constants import CONTENT_TYPE_JSON, CONTENT_TYPE_PLAIN
+from .constants import (
+    ATTR_MCP_PROMPT,
+    ATTR_MCP_RESOURCE,
+    ATTR_MCP_RESOURCE_TEMPLATE,
+    ATTR_MCP_TOOL,
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_PLAIN,
+)
 from .decorators import (
     clear_global_registry,
     get_global_prompts,
@@ -298,7 +305,7 @@ class ChukMCPServer:
             mcp_registry.register_tool(tool_handler.name, tool_handler, metadata=metadata, tags=tags, **kwargs)
 
             # Add tool metadata to function
-            func._mcp_tool = tool_handler
+            setattr(func, ATTR_MCP_TOOL, tool_handler)
 
             logger.debug(f"Registered tool: {tool_handler.name}")
             return func
@@ -365,7 +372,7 @@ class ChukMCPServer:
             )
 
             # Add resource metadata to function
-            func._mcp_resource = resource_handler
+            setattr(func, ATTR_MCP_RESOURCE, resource_handler)
 
             logger.debug(f"Registered resource: {resource_handler.uri}")
             return func
@@ -408,7 +415,7 @@ class ChukMCPServer:
             self.protocol.register_resource_template(template_handler)
 
             # Add metadata to function
-            func._mcp_resource_template = template_handler
+            setattr(func, ATTR_MCP_RESOURCE_TEMPLATE, template_handler)
 
             logger.debug(f"Registered resource template: {uri_template}")
             return func
@@ -459,7 +466,7 @@ class ChukMCPServer:
             mcp_registry.register_prompt(prompt_handler.name, prompt_handler, metadata=metadata, tags=tags, **kwargs)
 
             # Add prompt metadata to function
-            func._mcp_prompt = prompt_handler
+            setattr(func, ATTR_MCP_PROMPT, prompt_handler)
 
             logger.debug(f"Registered prompt: {prompt_handler.name}")
             return func

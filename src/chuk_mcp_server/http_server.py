@@ -114,8 +114,9 @@ class HTTPServer:
 
         async def openapi_handler(request: Request) -> Response:  # noqa: ARG001
             spec = generate_openapi_spec(protocol)
+            body: bytes = orjson.dumps(spec)
             return Response(
-                orjson.dumps(spec),
+                body,
                 media_type=CONTENT_TYPE_JSON,
                 headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
             )

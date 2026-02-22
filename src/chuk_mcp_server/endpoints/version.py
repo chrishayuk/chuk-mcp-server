@@ -36,8 +36,9 @@ _VERSION_INFO = {
     },
 }
 
+_CACHED_VERSION_BYTES: bytes = orjson.dumps(_VERSION_INFO)
 _CACHED_VERSION_RESPONSE = Response(
-    orjson.dumps(_VERSION_INFO), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_LONG_CACHE
+    _CACHED_VERSION_BYTES, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_LONG_CACHE
 )
 
 

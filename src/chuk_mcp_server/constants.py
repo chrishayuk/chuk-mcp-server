@@ -62,6 +62,9 @@ class McpMethod:
     RESOURCES_TEMPLATES_LIST = "resources/templates/list"
     NOTIFICATIONS_CANCELLED = "notifications/cancelled"
     NOTIFICATIONS_MESSAGE = "notifications/message"
+    NOTIFICATIONS_TOOLS_LIST_CHANGED = "notifications/tools/list_changed"
+    NOTIFICATIONS_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed"
+    NOTIFICATIONS_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed"
 
 
 # MCP initialize parameter keys
@@ -76,6 +79,7 @@ KEY_CAPABILITIES = "capabilities"
 # ---------------------------------------------------------------------------
 ATTR_MCP_TOOL = "_mcp_tool"
 ATTR_MCP_RESOURCE = "_mcp_resource"
+ATTR_MCP_RESOURCE_TEMPLATE = "_mcp_resource_template"
 ATTR_MCP_PROMPT = "_mcp_prompt"
 ATTR_REQUIRES_AUTH = "_requires_auth"
 ATTR_AUTH_SCOPES = "_auth_scopes"

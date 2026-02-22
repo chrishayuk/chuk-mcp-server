@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.17.0"
+version = "0.18.0"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "chuk-mcp>=0.9.1",
     "chuk-sessions>=0.6.1",
-    "chuk-tool-processor>=0.20.1", # Required for MCP proxy/tool handling
+    "chuk-tool-processor>=0.22.1", # Required for MCP proxy/tool handling
     "httptools>=0.6.4",
     "httpx>=0.27.0", # Required for HTTP proxy transport
     "orjson>=3.11.6",

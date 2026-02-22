@@ -514,10 +514,11 @@ class TokenStore(BaseTokenStore):
             data: Authorization data to store (client_id, redirect_uri, etc.)
         """
         async with get_session() as session:
+            pending_data: bytes = orjson.dumps(data)
             await session.setex(
                 f"{self.sandbox_id}:pending_auth:{state}",
                 self.pending_auth_ttl,
-                orjson.dumps(data),
+                pending_data,
             )
 
     async def get_pending_authorization(

@@ -234,14 +234,14 @@ class OAuthMiddleware:
             redirect_url = f"{auth_params.redirect_uri}?{urlencode(redirect_params)}"
             return RedirectResponse(redirect_url)
 
-        except Exception as e:
+        except Exception:
             # Attempt to redirect with error, but only if redirect_uri is available
             try:
                 redirect_uri = params.get(PARAM_REDIRECT_URI)
                 if redirect_uri:
                     error_params = {
                         "error": ERROR_SERVER_ERROR,
-                        "error_description": str(e),
+                        "error_description": "Authorization failed",
                     }
                     if params.get(PARAM_STATE):
                         error_params[PARAM_STATE] = params[PARAM_STATE]
@@ -249,16 +249,16 @@ class OAuthMiddleware:
                     error_url = f"{redirect_uri}?{urlencode(error_params)}"
                     return RedirectResponse(error_url)
             except Exception:
-                pass
+                logger.debug("Failed to redirect with error response", exc_info=True)
 
             # Fallback: render error as HTML page (no redirect)
             return HTMLResponse(
-                f"""
+                """
                 <html>
                     <head><title>Authorization Error</title></head>
                     <body>
                         <h1>Authorization Error</h1>
-                        <p>{html.escape(str(e))}</p>
+                        <p>An unexpected error occurred during authorization.</p>
                     </body>
                 </html>
                 """,
@@ -347,14 +347,11 @@ class OAuthMiddleware:
             )
 
         except Exception as e:
-            logger.error(f"❌ Token exchange failed: {type(e).__name__}: {str(e)}")
-            import traceback
-
-            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            logger.error(f"Token exchange failed: {type(e).__name__}", exc_info=True)
             return JSONResponse(
                 {
                     "error": ERROR_INVALID_REQUEST,
-                    "error_description": str(e),
+                    "error_description": "Token exchange failed",
                 },
                 status_code=400,
             )
@@ -383,10 +380,11 @@ class OAuthMiddleware:
             )
 
         except Exception as e:
+            logger.error(f"Client registration failed: {type(e).__name__}", exc_info=True)
             return JSONResponse(
                 {
                     "error": ERROR_INVALID_CLIENT_METADATA,
-                    "error_description": str(e),
+                    "error_description": "Client registration failed",
                 },
                 status_code=400,
             )

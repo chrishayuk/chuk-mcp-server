@@ -18,4 +18,5 @@ async def handle_request(_request: Request) -> Response:
 
     response_data = {"status": STATUS_PONG, "server": SERVER_NAME, "timestamp": timestamp_ms}
 
-    return Response(orjson.dumps(response_data), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)
+    body: bytes = orjson.dumps(response_data)
+    return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)

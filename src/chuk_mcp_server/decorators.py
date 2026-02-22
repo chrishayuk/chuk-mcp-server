@@ -11,9 +11,12 @@ from functools import wraps
 from typing import Any
 
 from .constants import (
+    ATTR_AUTH_SCOPES,
     ATTR_MCP_PROMPT,
     ATTR_MCP_RESOURCE,
+    ATTR_MCP_RESOURCE_TEMPLATE,
     ATTR_MCP_TOOL,
+    ATTR_REQUIRES_AUTH,
     CONTENT_TYPE_PLAIN,
 )
 from .types import PromptHandler, ResourceHandler, ToolHandler
@@ -288,7 +291,7 @@ def resource_template(
             _global_resource_templates.append(mcp_template)
 
         # Add template metadata to function
-        func._mcp_resource_template = mcp_template  # type: ignore[attr-defined]
+        setattr(func, ATTR_MCP_RESOURCE_TEMPLATE, mcp_template)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -333,8 +336,8 @@ def requires_auth(scopes: list[str] | None = None) -> Callable[[Callable[..., An
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Set authorization metadata on the function
-        func._requires_auth = True  # type: ignore[attr-defined]
-        func._auth_scopes = scopes  # type: ignore[attr-defined]
+        setattr(func, ATTR_REQUIRES_AUTH, True)
+        setattr(func, ATTR_AUTH_SCOPES, scopes)
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -345,8 +348,8 @@ def requires_auth(scopes: list[str] | None = None) -> Callable[[Callable[..., An
                 return func(*args, **kwargs)
 
         # Copy metadata to wrapper
-        wrapper._requires_auth = True  # type: ignore[attr-defined]
-        wrapper._auth_scopes = scopes  # type: ignore[attr-defined]
+        setattr(wrapper, ATTR_REQUIRES_AUTH, True)
+        setattr(wrapper, ATTR_AUTH_SCOPES, scopes)
 
         return wrapper
 

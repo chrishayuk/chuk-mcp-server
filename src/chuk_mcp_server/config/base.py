@@ -36,10 +36,10 @@ class ConfigDetector(ABC):
     def safe_json_parse(self, content: str) -> dict[str, Any] | None:
         """Safely parse JSON content."""
         try:
-            import json
+            import orjson
 
-            return json.loads(content)
-        except (json.JSONDecodeError, TypeError) as e:
+            return orjson.loads(content)
+        except (orjson.JSONDecodeError, TypeError) as e:
             self.logger.debug(f"Could not parse JSON: {e}")
         return None
 

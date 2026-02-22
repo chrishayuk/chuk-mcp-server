@@ -235,10 +235,11 @@ Every feature in the MCP specification is implemented or explicitly deferred.
 | Roots (list, notifications) | Complete |
 | Progress (notifications) | Complete |
 | Completions (complete) | Complete |
-| Logging (setLevel, notifications/message) | Complete |
+| Logging (setLevel, notifications/message) | Complete (all 8 MCP levels) |
 | Cancellation (notifications/cancelled) | Complete |
 | Tasks (get, result, list, cancel, status notifications) | Complete |
-| Streamable HTTP (single /mcp endpoint, SSE resumability) | Complete |
+| Streamable HTTP (single /mcp endpoint, SSE resumability) | Complete (Last-Event-ID replay) |
+| List changed notifications (tools, resources, prompts) | Complete |
 | MCP Apps (_meta, structuredContent passthrough) | Complete |
 
 **Why:** Partial protocol implementations create subtle interop failures. Full conformance means ChukMCPServer works with every MCP client without negotiation surprises.
@@ -282,7 +283,23 @@ Optional features cost nothing when not used.
 
 ---
 
-## 12. No Unnecessary Dependencies
+## 12. chuk-mcp Is the Protocol Layer
+
+`chuk-mcp` is the single source of truth for MCP protocol types. `chuk-mcp-server` never redefines protocol-level models.
+
+**Rules:**
+- All protocol-level Pydantic models come from `chuk-mcp`: `ServerInfo`, `Implementation`, `ServerCapabilities`, `TextContent`, `ImageContent`, `AudioContent`, `ResourceLink`, `MCPTool`, `MCPToolInputSchema`, `MCPError`, `ValidationError`
+- `chuk-mcp-server` adds *framework* types (`ToolHandler`, `ResourceHandler`, `PromptHandler`, `ToolParameter`) that wrap or extend protocol types — it does not duplicate them
+- Protocol version constants, capability negotiation, and content type models live in `chuk-mcp`
+- `chuk-mcp-server` depends on `chuk-mcp` for wire-format correctness — if the MCP spec changes, `chuk-mcp` updates first, then `chuk-mcp-server` adapts
+- Never vendor or copy protocol model definitions into `chuk-mcp-server` — import them
+- The `types/base.py` module re-exports the subset of `chuk-mcp` types used across the framework to centralize the dependency surface
+
+**Why:** Separating protocol types from framework logic means MCP spec updates flow through a single package (`chuk-mcp`) without touching framework internals. It also lets other projects (e.g., `chuk-mcp-client`) share the same protocol models, ensuring wire-format compatibility.
+
+---
+
+## 13. No Unnecessary Dependencies
 
 The dependency tree is minimal and intentional.
 
@@ -309,7 +326,7 @@ The dependency tree is minimal and intentional.
 
 ---
 
-## 13. Clean Code
+## 14. Clean Code
 
 Small functions. Clear names. Single responsibility. Minimal coupling.
 
@@ -327,7 +344,7 @@ Small functions. Clear names. Single responsibility. Minimal coupling.
 
 ---
 
-## 14. Test Coverage >= 90% Per File
+## 15. Test Coverage >= 90% Per File
 
 Every source file must have >= 90% line coverage individually.
 
@@ -341,13 +358,13 @@ Every source file must have >= 90% line coverage individually.
 - CI enforces: `ruff` (lint + format), `mypy` (type checking), `pytest` (2300+ tests), `bandit` (security)
 - `make check` runs the full suite — all checks must pass before merge
 
-**Current status:** 2334 tests passing, 96.70% aggregate coverage.
+**Current status:** 2334 tests passing, 96.23% aggregate coverage.
 
 **Why:** High coverage catches regressions early. Per-file measurement prevents coverage debt from hiding in low-coverage modules while the aggregate looks healthy.
 
 ---
 
-## 15. Observable by Default
+## 16. Observable by Default
 
 Every subsystem exposes structured diagnostics without opt-in.
 
@@ -375,5 +392,6 @@ Every subsystem exposes structured diagnostics without opt-in.
 - [ ] Thread safety: global mutable state protected by `_registry_lock`
 - [ ] Optional features have zero overhead when disabled
 - [ ] No unnecessary new dependencies — justify each addition
+- [ ] Protocol types imported from `chuk-mcp`, not redefined
 - [ ] `make check` passes (ruff, mypy, pytest, bandit)
 - [ ] New MCP protocol features tracked in `ROADMAP.md`

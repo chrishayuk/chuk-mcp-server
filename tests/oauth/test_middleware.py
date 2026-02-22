@@ -249,9 +249,9 @@ class TestOAuthMiddleware:
         response = await middleware._authorize_endpoint(mock_request)
 
         assert isinstance(response, RedirectResponse)
-        # Middleware wraps all exceptions as server_error
+        # Middleware wraps all exceptions as server_error with sanitized description
         assert "error=server_error" in response.headers["location"]
-        assert "access_denied" in response.headers["location"]
+        assert "Authorization+failed" in response.headers["location"]
 
     @pytest.mark.asyncio
     async def test_token_endpoint_authorization_code_grant(self):
@@ -419,9 +419,9 @@ class TestOAuthMiddleware:
         import json
 
         body = json.loads(response.body)
-        # Middleware wraps all exceptions as invalid_client_metadata
+        # Middleware wraps all exceptions as invalid_client_metadata with sanitized description
         assert body["error"] == "invalid_client_metadata"
-        assert "invalid_redirect_uri" in body["error_description"]
+        assert body["error_description"] == "Client registration failed"
 
     @pytest.mark.asyncio
     async def test_external_callback_success(self):

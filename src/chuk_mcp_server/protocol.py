@@ -23,10 +23,13 @@ from .constants import (
     KEY_PROTOCOL_VERSION,
     KEY_RESULT,
     KEY_SERVER_INFO,
+    LOG_ALERT,
     LOG_CRITICAL,
     LOG_DEBUG,
+    LOG_EMERGENCY,
     LOG_ERROR,
     LOG_INFO,
+    LOG_NOTICE,
     LOG_WARNING,
     MCP_DEFAULT_PROTOCOL_VERSION,
     PACKAGE_LOGGER,
@@ -929,6 +932,45 @@ class MCPProtocolHandler:
                 except Exception as e:
                     logger.debug(f"Failed to notify session {session_id[:8]}... of resource update: {e}")
 
+    async def notify_tools_list_changed(self) -> None:
+        """Send notifications/tools/list_changed to all connected clients."""
+        if self._send_to_client is None:
+            return
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpMethod.NOTIFICATIONS_TOOLS_LIST_CHANGED,
+        }
+        try:
+            await self._send_to_client(notification)
+        except Exception as e:
+            logger.debug(f"Failed to send tools list_changed notification: {e}")
+
+    async def notify_resources_list_changed(self) -> None:
+        """Send notifications/resources/list_changed to all connected clients."""
+        if self._send_to_client is None:
+            return
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpMethod.NOTIFICATIONS_RESOURCES_LIST_CHANGED,
+        }
+        try:
+            await self._send_to_client(notification)
+        except Exception as e:
+            logger.debug(f"Failed to send resources list_changed notification: {e}")
+
+    async def notify_prompts_list_changed(self) -> None:
+        """Send notifications/prompts/list_changed to all connected clients."""
+        if self._send_to_client is None:
+            return
+        notification = {
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_METHOD: McpMethod.NOTIFICATIONS_PROMPTS_LIST_CHANGED,
+        }
+        try:
+            await self._send_to_client(notification)
+        except Exception as e:
+            logger.debug(f"Failed to send prompts list_changed notification: {e}")
+
     async def send_log_notification(
         self,
         level: str = "info",
@@ -1167,9 +1209,12 @@ class MCPProtocolHandler:
         level_mapping = {
             LOG_DEBUG: logging.DEBUG,
             LOG_INFO: logging.INFO,
+            LOG_NOTICE: logging.INFO,  # Python has no NOTICE; map to INFO
             LOG_WARNING: logging.WARNING,
             LOG_ERROR: logging.ERROR,
             LOG_CRITICAL: logging.CRITICAL,
+            LOG_ALERT: logging.CRITICAL,  # Python has no ALERT; map to CRITICAL
+            LOG_EMERGENCY: logging.CRITICAL,  # Python has no EMERGENCY; map to CRITICAL
         }
 
         level_lower = level.lower()
@@ -1177,7 +1222,7 @@ class MCPProtocolHandler:
             return self._create_error_response(
                 msg_id,
                 JsonRpcError.INVALID_PARAMS,
-                f"Invalid logging level: {level}. Must be one of: debug, info, warning, error",
+                f"Invalid logging level: {level}. Must be one of: debug, info, notice, warning, error, critical, alert, emergency",
             ), None
 
         # Set the logging level for the chuk_mcp_server logger

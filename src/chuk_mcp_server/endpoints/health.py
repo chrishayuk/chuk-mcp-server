@@ -47,7 +47,8 @@ async def handle_health_ultra_fast(_request: Request) -> Response:
         "uptime": uptime_seconds,
     }
 
-    return Response(orjson.dumps(response_data), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)
+    body: bytes = orjson.dumps(response_data)
+    return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)
 
 
 async def handle_health_ready(_request: Request) -> Response:
@@ -56,8 +57,9 @@ async def handle_health_ready(_request: Request) -> Response:
     ready = len(protocol.tools) > 0 if protocol is not None else False
 
     status_code = 200 if ready else 503
+    body: bytes = orjson.dumps({"status": STATUS_READY if ready else "not_ready"})
     return Response(
-        orjson.dumps({"status": STATUS_READY if ready else "not_ready"}),
+        body,
         status_code=status_code,
         media_type=CONTENT_TYPE_JSON,
         headers=HEADERS_CORS_NOCACHE,
@@ -96,4 +98,5 @@ async def handle_health_detailed(_request: Request) -> Response:
         "in_flight_requests": in_flight_requests,
     }
 
-    return Response(orjson.dumps(response_data), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)
+    body: bytes = orjson.dumps(response_data)
+    return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)

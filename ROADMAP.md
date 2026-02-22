@@ -6,7 +6,7 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ## Current State: v0.22.0
 
-**2318+ tests | 97% coverage | 36K+ RPS**
+**2334 tests | 96.23% coverage | 36K+ RPS**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
@@ -111,39 +111,42 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Blocking file I/O in async path | `composition/config_loader.py:49` | `open()` + `yaml.safe_load()` called synchronously from `async apply_to_manager()` | Open (Phase 6) |
+| Blocking file I/O in async path | `composition/config_loader.py:49` | `open()` + `yaml.safe_load()` called synchronously from `async apply_to_manager()` | **Fixed** |
 | Multiple `asyncio.run()` calls | `core.py:877,937,940,945` | Proxy start and shutdown create separate event loops instead of reusing | Open (Phase 6) |
 
 ### Principle 2: orjson Type Safety
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| `type: ignore[no-any-return]` | `__init__.py:183` | `Capabilities()` function — replace with typed variable | Open (Phase 6) |
-| `type: ignore[no-any-return]` | `types/tools.py:165,170` | `.name` and `.description` properties — replace with typed variable | Open (Phase 6) |
-| `type: ignore[no-any-return]` | `types/prompts.py:315` | `get_prompt()` return — replace with typed variable | Open (Phase 6) |
+| `type: ignore[no-any-return]` | `__init__.py:183` | `Capabilities()` function — replace with typed variable | **Fixed** |
+| `type: ignore[no-any-return]` | `types/tools.py:165,170` | `.name` and `.description` properties — replace with typed variable | **Fixed** |
+| `type: ignore[no-any-return]` | `types/prompts.py:315` | `get_prompt()` return — replace with typed variable | **Fixed** |
+| `orjson.dumps()` inline usage | `endpoints/*.py`, `http_server.py`, etc. | ~28 instances of `orjson.dumps()` passed directly without typed variable assignment | **Fixed** |
+| `json` module usage | `config/base.py` | Used `json.loads()` instead of `orjson.loads()` | **Fixed** |
 
 ### Principle 3: No Magic Strings
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Content-type string literals | `http_server.py`, `core.py`, `decorators.py`, `types/resources.py`, `openapi.py`, `cloud/adapters/gcf.py` | ~17 instances of `"application/json"`, `"text/plain"`, `"text/markdown"` should use `CONTENT_TYPE_*` constants | Open (Phase 6) |
-| Error code magic numbers | `types/resources.py:144,302`, `errors.py:17`, `cloud/adapters/gcf.py:202` | Bare `-32603` should use `JsonRpcError.INTERNAL_ERROR` | Open (Phase 6) |
-| JSON-RPC key string literals | `testing.py`, `cloud/adapters/gcf.py` | ~12 instances of `"jsonrpc"`, `"method"`, `"params"`, `"result"` should use constants | Open (Phase 6) |
-| MCP method string comparisons | `endpoints/mcp.py:209,308,340` | `== "initialize"`, `== "tools/call"` should use `McpMethod.*` constants | Open (Phase 6) |
-| Duplicate constants file | `endpoints/constants.py` | Redefines `CONTENT_TYPE_*`, `HEADER_*`, `JSONRPC_VERSION`, `JsonRpcErrorCode` already in `constants.py` | Open (Phase 6) |
+| Content-type string literals | `http_server.py`, `core.py`, `decorators.py`, `types/resources.py`, `openapi.py`, `cloud/adapters/gcf.py` | ~17 instances of `"application/json"`, `"text/plain"`, `"text/markdown"` should use `CONTENT_TYPE_*` constants | **Fixed** |
+| Error code magic numbers | `types/resources.py`, `errors.py`, `cloud/adapters/gcf.py` | Bare `-32603` should use `JsonRpcError.INTERNAL_ERROR` | **Fixed** |
+| JSON-RPC key string literals | `testing.py`, `cloud/adapters/gcf.py` | ~12 instances of `"jsonrpc"`, `"method"`, `"params"`, `"result"` should use constants | **Fixed** |
+| MCP method string comparisons | `endpoints/mcp.py` | `== "initialize"`, `== "tools/call"` should use `McpMethod.*` constants | **Fixed** |
+| Duplicate constants file | `endpoints/constants.py` | Redefines `CONTENT_TYPE_*`, `HEADER_*`, `JSONRPC_VERSION`, `JsonRpcErrorCode` already in `constants.py` | **Fixed** |
+| Attribute marker magic strings | `core.py`, `decorators.py` | Bare `func._mcp_tool`, `func._requires_auth` instead of `setattr(func, ATTR_MCP_TOOL, ...)` | **Fixed** |
 
 ### Principle 4: Async Native
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Blocking file I/O in async chain | `composition/config_loader.py:49-50,68` | Sync `open()` + `yaml.safe_load()` called from `async apply_to_manager()` | Open (Phase 6) |
+| Blocking file I/O in async chain | `composition/config_loader.py:49-50,68` | Sync `open()` + `yaml.safe_load()` called from `async apply_to_manager()` | **Fixed** |
 | `time.sleep()` in thread | `core.py:919` | Browser-opening thread uses blocking sleep instead of async task | Low |
 
 ### Principle 8: Layered Architecture
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| `protocol.py` too large | `protocol.py` | 1,453 lines with session management, protocol dispatch, task management, SSE buffering | Open (Phase 6) |
+| `protocol.py` too large | `protocol.py` | 1,500+ lines with session management, protocol dispatch, task management, SSE buffering | Open (Phase 6) |
 | `core.py` too large | `core.py` | 1,135 lines with server lifecycle, decorators, composition, component queries, startup printing | Open (Phase 6) |
 | `context.py` too large | `context.py` | 674 lines with 12 ContextVars, RequestContext, 30+ getter/setters, messaging utilities | Open (Phase 6) |
 | `cli.py` too large | `cli.py` | 796 lines with 400+ lines of embedded examples that should be separate | Open (Phase 6) |
@@ -152,23 +155,29 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 | Endpoint→Protocol coupling | `endpoints/mcp.py`, `endpoints/health.py` | HTTP endpoints import `MCPProtocolHandler` directly | Open (Phase 6) |
 | Cloud→Root coupling | `cloud/adapters/gcf.py:285` | GCF adapter imports `get_or_create_global_server` from `__init__.py` | Open (Phase 6) |
 
+### Principle 10: Structured Error Handling
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| OAuth error leakage | `oauth/middleware.py:349-392` | `str(e)` and `traceback.format_exc()` leaked to clients in error responses | **Fixed** |
+
 ### Principle 12: No Unnecessary Dependencies
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
 | `python-multipart` redundant | `pyproject.toml:20` | Transitive via Starlette — listed as required but never directly imported | Open (Phase 6) |
-| `psutil` should be optional | `pyproject.toml:19`, `config/system_detector.py` | Imported inside try/except with fallback — already behaves as optional | Open (Phase 6) |
+| `psutil` should be optional | `pyproject.toml:19`, `config/system_detector.py` | Imported inside try/except with fallback — already behaves as optional | **Fixed** |
 | `pyyaml` imported unconditionally | `composition/config_loader.py:15` | Module-level `import yaml` but only used if composition config is loaded | Low |
 
 ### Principle 14: Test Coverage >= 90%
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| `telemetry.py` at 63% | `telemetry.py` | OpenTelemetry-enabled paths (lines 40-51) completely untested | Open (Phase 6) |
+| `telemetry.py` at 63% | `telemetry.py` | OpenTelemetry-enabled paths (lines 40-51) completely untested | **Fixed** (100%) |
 | 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | Open (Phase 6) |
 | `pytest.skip()` masking | `test_core_final_coverage.py` | 7 skipped tests for STDIO detection and decorator fallback paths | Open (Phase 6) |
-| MCP Apps `meta` field untested | `types/tools.py` | No tests verify `meta` field on `ToolHandler` or `_meta` in `tools/list` response | Open (Phase 6) |
-| Pre-formatted passthrough untested | `protocol.py:585-595` | No test verifies the `structuredContent` passthrough conditional | Open (Phase 6) |
+| MCP Apps `meta` field untested | `types/tools.py` | No tests verify `meta` field on `ToolHandler` or `_meta` in `tools/list` response | **Fixed** |
+| Pre-formatted passthrough untested | `protocol.py:585-595` | No test verifies the `structuredContent` passthrough conditional | **Fixed** |
 
 ### Previously Fixed
 
@@ -201,15 +210,16 @@ The server targets **MCP specification 2025-11-25** (latest) and is fully confor
 | **Roots** (list) | Implemented |
 | **Progress** (notifications) | Implemented |
 | **Completions** (complete) | Implemented |
-| **Logging** (setLevel, notifications/message) | Implemented |
+| **Logging** (setLevel, notifications/message) | Implemented (all 8 MCP levels) |
 | **Cancellation** | Implemented |
-| **Tasks** | Implemented |
+| **Tasks** | Implemented (infrastructure; not auto-wired to tool execution) |
 | **Pagination** | Implemented |
-| **Streamable HTTP** | Implemented |
+| **Streamable HTTP** | Implemented (SSE resumability with Last-Event-ID) |
 | **Content annotations** | Implemented |
 | **Tool annotations** | Implemented |
 | **Structured output** | Implemented |
 | **Icons** | Implemented |
+| **List changed notifications** | Implemented (tools, resources, prompts) |
 | **MCP Apps** (`_meta`, structuredContent passthrough) | Implemented |
 
 ---
@@ -307,13 +317,13 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Split `protocol.py` (1,453 lines) | Planned | Extract `SessionManager` (~120 lines), task management (~150 lines), and SSE event buffering (~100 lines) into `session_manager.py`, `protocol_tasks.py`, `protocol_events.py` |
+| Split `protocol.py` (1,500+ lines) | Planned | Extract `SessionManager` (~120 lines), task management (~150 lines), and SSE event buffering (~100 lines) into `session_manager.py`, `protocol_tasks.py`, `protocol_events.py` |
 | Split `core.py` (1,135 lines) | Planned | Extract component registry (~180 lines) and startup/logging (~200 lines) into `component_registry.py` and `startup.py` |
 | Split `cli.py` (796 lines) | Planned | Extract ~400 lines of embedded example tools/resources into `cli_examples.py` |
 | Split `context.py` (674 lines) | Planned | Extract ContextVar declarations, RequestContext, and messaging utilities into focused sub-modules |
 | Slim `__init__.py` (587 lines) | Planned | Move cloud handler factories and artifact stubs out; reduce to pure re-exports (~150 lines) |
 | Remove import-time side effects | Planned | Defer `_auto_export_cloud_handlers()` from import time to first server creation; stop `setattr` on module namespace |
-| Consolidate duplicate constants | Planned | Remove `endpoints/constants.py` duplicates; import from main `constants.py` |
+| Consolidate duplicate constants | **Done** | `endpoints/constants.py` now re-exports from main `constants.py` |
 | Fix endpoint→protocol coupling | Planned | HTTP endpoints should not import `MCPProtocolHandler` directly; introduce interface or pass via DI |
 | Fix cloud→root coupling | Planned | `cloud/adapters/gcf.py` should receive server via injection, not import `get_or_create_global_server` |
 
@@ -321,42 +331,56 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Content-type constants | Planned | Replace ~17 instances of `"application/json"`, `"text/plain"`, `"text/markdown"` with `CONTENT_TYPE_*` from `constants.py` |
-| Error code constants | Planned | Replace bare `-32603` in `types/resources.py`, `errors.py`, `cloud/adapters/gcf.py` with `JsonRpcError.INTERNAL_ERROR` |
-| JSON-RPC key constants | Planned | Replace `"jsonrpc"`, `"method"`, `"params"`, `"result"` literals in `testing.py` and `gcf.py` with constants |
-| MCP method constants | Planned | Replace `== "initialize"`, `== "tools/call"` in `endpoints/mcp.py` with `McpMethod.*` enum values |
+| Content-type constants | **Done** | Replaced ~17 instances with `CONTENT_TYPE_*` from `constants.py` |
+| Error code constants | **Done** | Replaced bare `-32603` with `JsonRpcError.INTERNAL_ERROR` |
+| JSON-RPC key constants | **Done** | Replaced `"jsonrpc"`, `"method"`, `"params"`, `"result"` in `testing.py`, `gcf.py`, `endpoints/mcp.py` |
+| MCP method constants | **Done** | Replaced `== "initialize"`, `== "tools/call"` with `McpMethod.*` enum values |
+| Attribute marker constants | **Done** | Replaced bare `func._mcp_tool` etc. with `setattr(func, ATTR_MCP_TOOL, ...)` in `core.py`, `decorators.py` |
 
 ### 6C: Type Safety Cleanup (Principle 2: orjson Type Safety)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Remove `type: ignore[no-any-return]` | Planned | Replace 4 instances in `__init__.py:183`, `types/tools.py:165,170`, `types/prompts.py:315` with typed intermediate variables |
+| Remove `type: ignore[no-any-return]` | **Done** | Replaced with typed intermediate variables in `types/tools.py`, `types/prompts.py` |
+| Fix `orjson.dumps()` inline usage | **Done** | 28+ instances in endpoints, http_server, registries now use `body: bytes = orjson.dumps(...)` pattern |
+| Replace `json` with `orjson` | **Done** | `config/base.py` now uses `orjson.loads()` instead of `json.loads()` |
 
 ### 6D: Async Correctness (Principle 4: Async Native)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Fix blocking I/O in config loader | Planned | `composition/config_loader.py` calls sync `open()` + `yaml.safe_load()` from async `apply_to_manager()` — make async or use executor |
+| Fix blocking I/O in config loader | **Done** | Changed to `await asyncio.to_thread(self.load)` in `apply_to_manager()` |
 | Fix multiple `asyncio.run()` calls | Planned | `core.py` proxy start/shutdown creates separate event loops — reuse existing loop |
 
 ### 6E: Dependency Cleanup (Principle 12: No Unnecessary Dependencies)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Remove `python-multipart` from required | Planned | Transitive via Starlette — never directly imported |
-| Move `psutil` to optional extra | Planned | Already guarded with try/except and full fallback in `config/system_detector.py` |
+| Remove `python-multipart` from required | Deferred | Needed by OAuth middleware's `request.form()` |
+| Move `psutil` to optional extra | **Done** | Moved to `[project.optional-dependencies]` monitoring group |
 | Guard `pyyaml` import | Planned | `composition/config_loader.py` imports at module level; move to inside methods |
 
 ### 6F: Test Infrastructure (Principle 14: Test Coverage >= 90%)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Fix `telemetry.py` coverage (63%) | Planned | Add tests for OpenTelemetry-enabled code paths by mocking otel imports |
-| Add MCP Apps tests | Planned | Test `meta` field on `ToolHandler`, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
-| Consolidate test files | Planned | Merge 21 `*_coverage.py` and `*_final_coverage.py` variants into main test files (e.g., 7 `test_parameters*.py` → 1) |
-| Fix skipped tests | Planned | Replace 7 `pytest.skip()` patterns in `test_core_final_coverage.py` with proper assertions or integration tests |
+| Fix `telemetry.py` coverage (63%) | **Done** | Added mock-otel tests; now at 100% coverage |
+| Add MCP Apps tests | **Done** | 12 tests for `meta` field, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
+| Consolidate test files | Planned | Merge 21 `*_coverage.py` and `*_final_coverage.py` variants into main test files |
+| Fix skipped tests | Planned | Replace 7 `pytest.skip()` patterns in `test_core_final_coverage.py` with proper assertions |
 | Add concurrency tests | Planned | Test concurrent tool execution, parallel sampling, race conditions in context system |
 | Add integration tests | Planned | End-to-end HTTP and STDIO transport tests with real client connections |
+
+### 6G: MCP Spec Compliance Fixes
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| List changed notifications | **Done** | Added `notify_tools_list_changed()`, `notify_resources_list_changed()`, `notify_prompts_list_changed()` to protocol handler |
+| Missing logging levels | **Done** | Added `notice`, `alert`, `emergency` mappings to `_handle_logging_set_level` |
+| SSE resumability | **Done** | Connected `Last-Event-ID` header → `get_missed_events()` replay in GET handler |
+| OAuth error sanitization | **Done** | Replaced `str(e)` with generic messages in OAuth error responses |
+| Tasks auto-wire | Planned | Wire `_create_task` into `_handle_tools_call` for long-running tool execution |
+| Pre-initialize enforcement | Planned | Protocol handler should reject method calls on uninitialized sessions |
 
 ---
 

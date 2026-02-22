@@ -38,6 +38,7 @@ from .constants import (
     HEADER_CORS_HEADERS,
     HEADER_CORS_METHODS,
     HEADER_CORS_ORIGIN,
+    HEADER_LAST_EVENT_ID,
     HEADER_MCP_PROTOCOL_VERSION,
     HEADER_MCP_SESSION_ID,
     HEADERS_CORS_ONLY,
@@ -123,8 +124,30 @@ class MCPEndpoint:
             },
         )
 
-    async def _handle_get(self, request: Request) -> Response:  # noqa: ARG002
-        """Handle GET request - return server information."""
+    async def _handle_get(self, request: Request) -> Response:
+        """Handle GET request - return server info or resume SSE stream."""
+        session_id = request.headers.get(HEADER_MCP_SESSION_ID.lower())
+        last_event_id = request.headers.get(HEADER_LAST_EVENT_ID.lower())
+
+        # SSE resumption: replay missed events
+        if last_event_id and session_id:
+            missed = self.protocol.get_missed_events(session_id, last_event_id)
+            if missed is not None:
+
+                async def _replay_stream():
+                    for event_id, data in missed:
+                        data_str: str = orjson.dumps(data).decode()
+                        yield f"id: {event_id}\r\n"
+                        yield f"data: {data_str}\r\n"
+                        yield SSE_LINE_END
+
+                return StreamingResponse(
+                    _replay_stream(),
+                    media_type=CONTENT_TYPE_SSE,
+                    headers=self._sse_headers(session_id),
+                )
+
+        # Default: return server information
         server_info = {
             "name": self.protocol.server_info.name,
             "version": self.protocol.server_info.version,
@@ -135,7 +158,8 @@ class MCPEndpoint:
             "powered_by": FRAMEWORK_DESCRIPTION,
         }
 
-        return Response(orjson.dumps(server_info), media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_ONLY)
+        body: bytes = orjson.dumps(server_info)
+        return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_ONLY)
 
     async def _handle_post(self, request: Request) -> Response:
         """Handle POST request - process MCP protocol messages."""
@@ -233,7 +257,8 @@ class MCPEndpoint:
         if new_session_id:
             headers[HEADER_MCP_SESSION_ID] = new_session_id
 
-        return Response(orjson.dumps(response), media_type=CONTENT_TYPE_JSON, headers=headers)
+        body: bytes = orjson.dumps(response)
+        return Response(body, media_type=CONTENT_TYPE_JSON, headers=headers)
 
     async def handle_respond(self, request: Request) -> Response:
         """Handle client responses to server-initiated requests.
@@ -250,8 +275,9 @@ class MCPEndpoint:
                 future = self._pending_requests[request_id]
                 if not future.done():
                     future.set_result(data)
+                body: bytes = orjson.dumps({"status": "ok"})
                 return Response(
-                    orjson.dumps({"status": "ok"}),
+                    body,
                     media_type=CONTENT_TYPE_JSON,
                     headers=HEADERS_CORS_ONLY,
                 )
@@ -322,7 +348,8 @@ class MCPEndpoint:
             event_id = self.protocol.next_sse_event_id(session_id)
             self.protocol.buffer_sse_event(session_id, event_id, data)
             lines.append(f"id: {event_id}\r\n")
-        lines.append(f"data: {orjson.dumps(data).decode()}\r\n")
+        data_str: str = orjson.dumps(data).decode()
+        lines.append(f"data: {data_str}\r\n")
         lines.append(SSE_LINE_END)
         return tuple(lines)
 
@@ -440,8 +467,9 @@ class MCPEndpoint:
             HEADER_MCP_PROTOCOL_VERSION: self._get_protocol_version(session_id),
         }
 
+        body: bytes = orjson.dumps(error_response)
         return Response(
-            orjson.dumps(error_response),
+            body,
             status_code=status_code,
             media_type=CONTENT_TYPE_JSON,
             headers=headers,

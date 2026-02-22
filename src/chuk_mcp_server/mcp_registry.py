@@ -432,8 +432,9 @@ async def mcp_registry_info_handler(_request: Request) -> Response:
         "data": mcp_registry.get_info(),
     }
 
+    body: bytes = orjson.dumps(info, option=orjson.OPT_INDENT_2)
     return Response(
-        orjson.dumps(info, option=orjson.OPT_INDENT_2),
+        body,
         media_type=CONTENT_TYPE_JSON,
         headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
     )
