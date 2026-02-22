@@ -1,628 +1,379 @@
-# chuk-mcp-server Architecture
+# ChukMCPServer — Architecture Principles
 
-**Version**: 0.21.0 | **Python**: >=3.11 | **License**: MIT
-**Tests**: 2330+ passed, 97% coverage | **Performance**: 36K+ RPS, <3ms overhead
+> These principles govern all code in chuk-mcp-server.
+> Every PR should be evaluated against them.
 
-## Overview
+---
 
-chuk-mcp-server is a zero-configuration MCP (Model Context Protocol) server
-framework for Python. It provides decorator-based tool, resource, and prompt
-registration; automatic cloud and environment detection; Streamable HTTP and
-STDIO transports; server composition and proxy capabilities; and full
-conformance with MCP specification 2025-11-25 (latest).
+## 1. Performance First
 
-The framework is designed around three principles: no configuration required
-for common cases, no unnecessary abstraction layers, and deploy-anywhere
-without code changes.
+ChukMCPServer is the fastest Python MCP server. Every design decision preserves that.
 
+**Rules:**
+- Serialization uses `orjson` — never `json`. orjson is 2-10x faster for both encoding and decoding
+- Tool schemas are pre-computed at registration time and cached as both `dict` and `bytes` (`_cached_mcp_format`, `_cached_mcp_bytes`)
+- Deep copies use orjson round-trips (`orjson.loads(cached_bytes)`) instead of `copy.deepcopy` — orjson is ~10x faster than deepcopy for nested dicts
+- `to_mcp_format()` MUST return a deep copy — shallow `.copy()` leaks nested dict references and allows callers to mutate cached state
+- HTTP transport uses `httptools` for parsing and `uvloop` for the event loop (where available)
+- Single-worker model — requests handled in the event loop, no process spawning overhead
+- No per-request allocations for schema data — registries are pre-computed, responses assembled from cached parts
+- `serialize_tools_list_from_bytes()` concatenates pre-serialized byte fragments directly
+- Rate limiter uses O(1) token bucket refill — no timer threads, no periodic cleanup
+- Optional features (telemetry, rate limiting, OAuth) have zero overhead when disabled
+
+**Performance decisions by layer:**
+
+| Layer | Technique | Impact |
+|-------|-----------|--------|
+| Serialization | orjson (Rust-based JSON) | ~5x vs json |
+| Schema caching | Computed once at registration | Zero per-request |
+| Handler caching | Pre-serialized bytes on ToolHandler | Zero per-list |
+| Deep copy | orjson round-trip vs copy.deepcopy | ~10x faster |
+| Protocol dispatch | Direct dict lookup, no reflection | O(1) dispatch |
+| HTTP parser | httptools (C-based HTTP parsing) | ~3x vs pure-py |
+| Event loop | uvloop (libuv-based event loop) | ~2x vs asyncio |
+| Context | contextvars (C implementation in CPython) | Zero-lock |
+
+**Benchmark target:** 36,000+ requests per second, <3ms framework overhead.
+
+**Why:** MCP servers sit in the critical path between LLMs and tools. Every millisecond of overhead multiplies across thousands of tool calls per conversation.
+
+---
+
+## 2. orjson Type Safety
+
+orjson's `dumps()` and `loads()` return `Any` per mypy stubs. This requires a specific pattern to maintain type safety.
+
+**Rules:**
+- Never `return orjson.dumps(data)` directly — mypy reports `no-any-return`
+- Always assign to a typed intermediate variable:
+  ```python
+  # Correct
+  result: bytes = orjson.dumps(data)
+  return result
+
+  # Correct
+  decoded: str = orjson_bytes.decode("utf-8")
+  return decoded
+
+  # Wrong — triggers no-any-return
+  return orjson.dumps(data)
+  ```
+- Same pattern applies to `orjson.loads()` — assign to `dict[str, Any]` before returning
+- Do NOT use `# type: ignore[no-any-return]` to suppress — use the typed variable pattern instead
+
+**Why:** Type safety across the codebase depends on consistent patterns at serialization boundaries. The typed variable pattern is the cleanest solution that keeps mypy strict mode happy without suppressions.
+
+---
+
+## 3. No Magic Strings
+
+Use enums, constants, or compiled patterns — never bare string comparisons.
+
+**Rules:**
+- JSON-RPC version → `JSONRPC_VERSION = "2.0"`
+- MCP method names → `McpMethod` enum (`INITIALIZE`, `TOOLS_LIST`, `TOOLS_CALL`, etc.)
+- MCP task methods → `McpTaskMethod` enum (`TASKS_GET`, `TASKS_RESULT`, etc.)
+- HTTP headers → named constants (`HEADER_MCP_SESSION_ID`, `HEADER_MCP_PROTOCOL_VERSION`, `HEADER_LAST_EVENT_ID`)
+- Protocol versions → `MCP_PROTOCOL_VERSION_2025_06`, `MCP_PROTOCOL_VERSION_2025_11`
+- Error codes → named constants (`PARSE_ERROR`, `INVALID_REQUEST`, `METHOD_NOT_FOUND`, `INVALID_PARAMS`, `INTERNAL_ERROR`)
+- Content types → `CONTENT_TYPE_JSON`, `CONTENT_TYPE_SSE`
+- Request limits → `MAX_REQUEST_BODY_BYTES`, `MAX_ARGUMENT_KEYS`, `MAX_PENDING_REQUESTS`
+- Rate limit defaults → `DEFAULT_RATE_LIMIT_RPS`, `DEFAULT_RATE_LIMIT_BURST`
+- Tool name validation → `TOOL_NAME_PATTERN` (compiled regex)
+- If you find yourself writing `if x == "some_string"`, define a constant or enum in `constants.py` first
+
+**Why:** Magic strings are invisible to refactoring tools, produce silent bugs when misspelled, and can't be auto-completed by IDEs. A typo in `"tools/lisst"` is a runtime bug; a typo in `McpMethod.TOOLS_LISST` is a compile-time error.
+
+---
+
+## 4. Async Native
+
+All protocol-facing code is `async def`. No blocking calls in the request path.
+
+**Rules:**
+- Tool handlers can be `async def` or plain `def` — the framework detects and handles both via `inspect.iscoroutinefunction()`
+- Protocol handler methods (`_handle_tools_call`, `_handle_resources_read`, etc.) are always `async def`
+- Transport layers (HTTP, STDIO) are async — `StdioTransport` uses `asyncio.StreamReader/StreamWriter`
+- Server-to-client requests (sampling, elicitation, roots, progress) are async with `asyncio.Future` tracking
+- Use `asyncio.Lock` for async-context shared state, `threading.Lock` for cross-thread registration
+- Synchronous helpers (pure computation, schema generation, orjson serialization) are acceptable but must not block the event loop
+- Initialization is lazy where possible — `SmartConfig` auto-detects at construction, not import
+
+**Why:** MCP servers handle concurrent tool calls, sampling requests, and SSE streams simultaneously. A single blocking call stalls every client sharing that event loop.
+
+---
+
+## 5. Schema Caching and Pre-Computation
+
+Compute once at registration time, serve from cache forever.
+
+**Rules:**
+- `ToolHandler` pre-computes `_cached_mcp_format` (dict) and `_cached_mcp_bytes` (orjson bytes) at creation
+- `ResourceHandler` caches both schema format and content with TTL (`_cached_content`, `_cache_timestamp`)
+- JSON schemas are generated from Python type annotations once via `ToolParameter.from_annotation()`
+- `_ensure_cached_formats()` runs eagerly during `from_function()` — not lazily on first request
+- `invalidate_cache()` is available for runtime schema changes but should be rare
+- Tool name validation pattern is compiled at module level (`re.compile(...)`)
+- Input schema is built once via `build_input_schema()` which merges `$defs` for complex types
+
+**Registration-time flow:**
 ```
-+--------------------------------------------------------------------+
-|                         chuk-mcp-server                            |
-|                                                                    |
-|  @tool / @resource / @prompt           run() / ChukMCPServer()    |
-|  @resource_template                    (core.py)                  |
-|  (decorators.py)                             |                     |
-|         |                                    v                     |
-|  +-----------------+     +--------------------------------------+ |
-|  | Global Registry |---->| MCPProtocolHandler (JSON-RPC 2.0)    | |
-|  | (mcp_registry)  |     | - Tool dispatch + structured output   | |
-|  +-----------------+     | - Resource dispatch + templates        | |
-|                          | - Prompt dispatch + pagination         | |
-|                          | - Sampling / Elicitation / Roots       | |
-|                          | - Progress / Subscriptions / Complete  | |
-|                          | - Tasks / Cancellation / Logging       | |
-|                          +--------------------------------------+ |
-|                                    |              |                |
-|                          +---------+----+  +-----+--------+       |
-|                          | Streamable   |  | STDIO Transport|      |
-|                          | HTTP Server  |  | (sync/async)   |      |
-|                          | (Starlette)  |  |                |      |
-|                          +--------------+  +--------------+       |
-+--------------------------------------------------------------------+
-```
-
-## Directory Structure
-
-```
-src/chuk_mcp_server/
-|-- __init__.py              # Exports, cloud auto-detection
-|-- core.py                  # ChukMCPServer main class
-|-- decorators.py            # @tool, @resource, @resource_template, @prompt, @requires_auth
-|-- protocol.py              # MCPProtocolHandler (JSON-RPC 2.0, tasks, pagination)
-|-- context.py               # Request context (contextvars, send_log, add_resource_link)
-|-- constants.py             # Protocol constants, tool name regex, validation limits
-|-- http_server.py           # Starlette/Uvicorn HTTP server (Streamable HTTP)
-|-- stdio_transport.py       # STDIO transport (sync + async)
-|-- rate_limiter.py          # Per-session token bucket rate limiter
-|-- telemetry.py             # Thin OpenTelemetry wrapper (no-op without otel)
-|-- artifacts_context.py     # Optional artifact/workspace support
-|-- cli.py                   # CLI (scaffolding, --reload, --inspect)
-|-- errors.py                # Structured error messages
-|-- openapi.py               # OpenAPI 3.1.0 spec generation
-|-- testing.py               # ToolRunner test harness
-|-- mcp_registry.py          # Component registry
-|-- endpoint_registry.py     # HTTP endpoint registry
-|
-|-- types/                   # Type system
-|   |-- base.py              # Direct chuk_mcp types (no conversion)
-|   |-- tools.py             # ToolHandler (orjson caching, annotations, structured output, icons)
-|   |-- resources.py         # ResourceHandler, ResourceTemplateHandler (icons)
-|   |-- prompts.py           # PromptHandler (icons)
-|   |-- parameters.py        # ToolParameter + JSON Schema
-|   |-- capabilities.py      # ServerCapabilities
-|   |-- content.py           # Content types, annotations, resource links
-|   |-- serialization.py     # Serialization utils
-|   +-- errors.py            # Error types (URLElicitationRequiredError)
-|
-|-- config/                  # Smart configuration
-|   |-- smart_config.py      # SmartConfig orchestrator
-|   |-- cloud_detector.py    # GCP/AWS/Azure detection
-|   |-- container_detector.py # Docker/K8s detection
-|   |-- environment_detector.py # Dev/prod/serverless
-|   |-- network_detector.py  # Host/port detection
-|   |-- project_detector.py  # Project name detection
-|   +-- system_detector.py   # Workers, performance
-|
-|-- cloud/                   # Cloud provider support
-|   |-- providers/           # GCP, AWS, Azure, Edge
-|   +-- adapters/            # Platform-specific adapters
-|
-|-- endpoints/               # HTTP endpoints
-|   |-- mcp.py               # Core /mcp endpoint with SSE
-|   |-- health.py            # /health, /health/ready, /health/detailed
-|   |-- ping.py, info.py, version.py
-|   +-- constants.py
-|
-|-- oauth/                   # OAuth 2.1 support
-|   |-- base_provider.py     # Abstract OAuth provider
-|   |-- middleware.py         # OAuth middleware
-|   |-- token_store.py       # Token storage
-|   +-- providers/google_drive.py
-|
-|-- proxy/                   # Multi-server proxy
-|   |-- manager.py           # ProxyManager (chuk-tool-processor)
-|   +-- mcp_tool_wrapper.py  # Tool wrapper
-|
-|-- composition/             # Server composition
-|   |-- manager.py           # import_server / mount
-|   +-- config_loader.py     # YAML config loader
-|
-|-- modules/                 # Module loading
-|   +-- loader.py            # Dynamic tool loading
-|
-+-- middlewares/              # HTTP middleware
-    +-- context_middleware.py # Context injection
-```
-
-## Request Flow
-
-### HTTP Transport
-
-```
-HTTP POST /mcp
-  |
-  v
-Starlette Router
-  |
-  v
-ContextMiddleware
-  - Extracts session ID from headers / query params
-  - Extracts user context (OAuth token, user ID)
-  - Sets contextvars for the request scope
-  |
-  v
-MCPEndpoint.handle_request()
-  - Parses JSON-RPC envelope
-  - Routes to MCPProtocolHandler
-  |
-  v
-MCPProtocolHandler.handle_request()
-  - Validates JSON-RPC 2.0 structure
-  - Dispatches by method:
-      "initialize"              -> _handle_initialize()
-      "tools/list"              -> _handle_tools_list()       (with pagination)
-      "tools/call"              -> _handle_tools_call()       (structured output)
-      "resources/list"          -> _handle_resources_list()   (with pagination)
-      "resources/read"          -> _handle_resources_read()
-      "resources/subscribe"     -> _handle_resources_subscribe()
-      "resources/unsubscribe"   -> _handle_resources_unsubscribe()
-      "resources/templates/list"-> _handle_resource_templates_list()
-      "prompts/list"            -> _handle_prompts_list()     (with pagination)
-      "prompts/get"             -> _handle_prompts_get()
-      "completion/complete"     -> _handle_completion_complete()
-      "tasks/get"               -> _handle_tasks_get()
-      "tasks/result"            -> _handle_tasks_result()
-      "tasks/list"              -> _handle_tasks_list()
-      "tasks/cancel"            -> _handle_tasks_cancel()
-      "notifications/cancelled" -> _handle_cancelled()
-      "notifications/*"         -> _handle_notification()
-  |
-  v
-Handler Execution
-  - ToolHandler.execute(name, arguments)
-  - ResourceHandler.read(uri)
-  - PromptHandler.get_prompt(name, arguments)
-  |
-  v
-format_content() -> orjson.dumps()
-  |
-  v
-Response (JSON or SSE stream)
+function + metadata -> ToolHandler
+                        |-- _cached_mcp_format  -> dict   (for _ensure_cached_formats)
+                        +-- _cached_mcp_bytes   -> bytes  (for wire format & deep copies)
 ```
 
-### STDIO Transport
+**Mutation safety:**
+- `to_mcp_format()` returns `orjson.loads(self._cached_mcp_bytes)` — a full deep copy
+- `to_mcp_bytes()` returns the bytes directly — bytes are immutable, no copy needed
+- Never use `self._cached_mcp_format.copy()` — shallow copy leaks nested dict references (annotations, meta, icons)
+- This was verified by benchmarking: orjson round-trip deep copy is ~10x faster than `copy.deepcopy()` and ~7x slower than shallow `.copy()`, but correctness requires deep copy
+
+**Why:** Tool schemas don't change between requests. Pre-computing eliminates per-request JSON schema generation, which is the dominant cost in naive MCP server implementations.
+
+---
+
+## 6. Decorator-Driven API
+
+The public API is decorators. Everything else is implementation detail.
+
+**Rules:**
+- `@tool` registers a function as an MCP tool with automatic JSON schema generation from type hints
+- `@resource` registers a function as an MCP resource with URI and MIME type
+- `@prompt` registers a function as an MCP prompt template
+- `@resource_template` registers a function as an RFC 6570 URI template resource
+- `@requires_auth` marks a tool as requiring OAuth authorization
+- Decorators support both `@tool` and `@tool()` syntax (with and without parentheses)
+- Decorator kwargs map directly to MCP spec fields: `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint`, `output_schema`, `icons`, `meta`
+- Both standalone decorators (module-level `@tool`) and instance decorators (`@mcp.tool`) are supported
+- Standalone decorators register to a global registry; instance decorators register to the server's protocol handler
+- The global registry is consumed and cleared on server creation to avoid duplicate registrations
+
+**Why:** Developers should think about their tools, not about protocol plumbing. A decorator with type hints is all that's needed to produce a fully conformant MCP tool with validated parameters, cached schemas, and proper error handling.
+
+---
+
+## 7. Thread Safety
+
+Global registries are protected. Server instances are isolated.
+
+**Rules:**
+- `_registry_lock` (`threading.Lock`) protects the four global decorator registries (`_global_tools`, `_global_resources`, `_global_prompts`, `_global_resource_templates`)
+- `get_global_*()` returns copies (`.copy()`) to prevent external mutation
+- `clear_global_registry()` uses `.clear()` on the existing lists — never reassigns — to preserve references held by other code
+- Server creation is protected by double-checked locking in `__init__.py`
+- Each `ChukMCPServer` instance has its own `MCPProtocolHandler` — no shared mutable state between servers
+- Session management is per-protocol-handler — no global session state
+- Rate limiter buckets are per-session within a single protocol handler
+
+**Why:** MCP servers may be instantiated from multiple threads (e.g., test runners, ASGI workers). Without locking, concurrent decorator registration corrupts the global registry.
+
+---
+
+## 8. Layered Architecture
+
+ChukMCPServer is a facade. Subsystems are independent and composable.
 
 ```
-stdin (one JSON-RPC line per message)
-  |
-  v
-StdioSyncTransport.run() / StdioTransport.start()
-  - Reads lines from stdin
-  - Parses JSON-RPC
-  |
-  v
-MCPProtocolHandler.handle_request()
-  - Same dispatch as HTTP
-  |
-  v
-stdout (one JSON-RPC response line per message)
+ChukMCPServer (facade / decorator API)
+    |
+    +-- MCPProtocolHandler     (JSON-RPC dispatch, registries, sessions)
+    |   +-- SessionManager     (creation, eviction, protected sessions)
+    |   +-- TokenBucketRateLimiter  (per-session rate limiting)
+    |   +-- Task Store         (long-running request state machines)
+    |
+    +-- HTTPServer             (Streamable HTTP transport via Starlette/Uvicorn)
+    +-- StdioTransport         (STDIO transport with bidirectional support)
+    +-- ProxyManager           (external MCP server composition)
+    +-- SmartConfig            (auto-detection of environment and settings)
+
+Type System (no runtime overhead):
+    +-- ToolHandler            (schema caching, parameter validation, execution)
+    +-- ResourceHandler        (content caching, TTL, URI matching)
+    +-- PromptHandler          (argument schema, template rendering)
+    +-- ResourceTemplateHandler (RFC 6570 URI templates)
+    +-- ToolParameter          (type introspection, JSON schema generation)
 ```
 
-The STDIO transport supports both synchronous (StdioSyncTransport) and
-asynchronous (StdioTransport) modes. The synchronous mode uses readline
-on stdin with the async protocol handler, making it compatible with
-subprocess-based MCP clients.
-
-## Type System
-
-The type system in `types/` avoids a conversion layer between internal
-representations and the MCP protocol. Instead, it uses chuk_mcp types
-directly wherever possible.
-
-```
-types/
-  base.py         Re-exports from chuk_mcp (ServerInfo, etc.)
-                  No wrapper classes, no conversion overhead.
-
-  tools.py        ToolHandler
-                  - Wraps a callable with metadata (name, description, schema)
-                  - Caches both dict representation and orjson bytes
-                  - Schema is computed once from function signature
-                  - Supports annotations (readOnlyHint, destructiveHint, etc.)
-                  - Supports outputSchema for structured tool output
-                  - Supports icons for UI rendering
-
-  resources.py    ResourceHandler + ResourceTemplateHandler
-                  - Wraps a callable with URI pattern
-                  - Supports content caching with TTL
-                  - ResourceTemplateHandler for RFC 6570 URI templates
-                  - Both support icons for UI rendering
-
-  prompts.py      PromptHandler
-                  - Wraps a callable with prompt metadata
-                  - Arguments extracted from function signature
-                  - Supports icons for UI rendering
-
-  parameters.py   ToolParameter + JSON Schema generation
-                  - Converts Python type hints to JSON Schema
-                  - Supports str, int, float, bool, list, dict, Optional
-                  - Handles default values and descriptions
-
-  content.py      Content types (TextContent, ImageContent, etc.)
-                  - format_content() normalizes tool return values
-                  - Content annotations (audience, priority)
-                  - Resource link creation
-
-  errors.py       Error types
-                  - URLElicitationRequiredError for URL mode elicitation
-                  - ParameterValidationError, ToolExecutionError
-
-  serialization.py  orjson-based serialization utilities
-```
-
-### Handler Caching Strategy
-
-```
-Registration time:
-  function + metadata -> ToolHandler
-                         |-- .to_dict()  -> cached dict    (for tools/list)
-                         +-- .to_bytes() -> cached orjson   (for wire format)
-
-Call time:
-  arguments -> function(**args)
-            -> format_content(result)
-            -> orjson.dumps(response)
-```
-
-Each ToolHandler computes its JSON schema and serialized form once at
-registration. Subsequent `tools/list` calls return the pre-computed bytes
-directly without re-serialization.
-
-## Context System
-
-Request context uses Python `contextvars` for async-safe, per-request state.
-This avoids passing context objects through every function signature.
-
-```
-contextvars (context.py):
-  _session_id        : ContextVar[str | None]
-  _user_id           : ContextVar[str | None]
-  _progress_token    : ContextVar[str | int | None]
-  _metadata          : ContextVar[dict | None]
-  _http_request      : ContextVar[Scope | None]
-  _sampling_fn       : ContextVar[Callable | None]
-  _elicitation_fn    : ContextVar[Callable | None]
-  _progress_notify_fn: ContextVar[Callable | None]
-  _roots_fn          : ContextVar[Callable | None]
-  _log_fn            : ContextVar[Callable | None]       # send_log() notifications
-  _resource_links    : ContextVar[list | None]            # add_resource_link() for tool results
-```
-
-The `RequestContext` async context manager sets these variables on entry
-and resets them on exit:
-
-```python
-async with RequestContext(session_id="abc", user_id="user@example.com"):
-    # All code here sees session_id="abc", user_id="user@example.com"
-    result = await my_tool(args)
-    # Tools can call context.get_session_id(), context.get_user_id()
-```
-
-For HTTP, `ContextMiddleware` wraps each request in a `RequestContext`
-automatically. For STDIO, the transport sets context before dispatching
-each message.
-
-## Sampling
-
-Sampling enables server-initiated LLM requests back to the client. This
-is the reverse of the normal flow: the server asks the client to create
-a message using the client's model.
-
-As of MCP 2025-11-25, sampling supports **tool calling**: the server can
-include `tools` and `toolChoice` in the sampling request, allowing the
-client's LLM to invoke tools during the sampled conversation.
-
-```
-Tool code
-  |
-  v
-context.create_message(messages, model_preferences, tools, tool_choice, ...)
-  |
-  v
-_sampling_fn (set in contextvars)
-  |
-  v
-protocol.send_sampling_request()
-  - Builds JSON-RPC request:
-      {"jsonrpc": "2.0",
-       "id": <uuid>,
-       "method": "sampling/createMessage",
-       "params": {messages, modelPreferences, tools, toolChoice, ...}}
-  |
-  v
-transport._send_to_client(request)
-  - HTTP: emits as SSE `server_request` event on open stream
-  - STDIO: writes JSON line to stdout
-  |
-  v
-Client processes request, sends response
-  - HTTP: client POSTs response to /mcp/respond
-  - STDIO: client writes JSON line to stdin
-  |
-  v
-transport reads response -> resolves Future -> CreateMessageResult
-  |
-  v
-Return to tool code
-```
-
-Sampling is optional. If the client does not declare sampling support
-during initialization, `create_message()` raises an error.
-
-### HTTP Bidirectional Transport
-
-HTTP bidirectional uses SSE streaming with a request-response pairing
-mechanism. During tool execution, server-to-client requests are emitted
-as SSE events. The client responds via `POST /mcp/respond`.
-
-```
-Client                                    Server
-  |                                          |
-  |-- POST /mcp (tools/call) ------------->  |
-  |                                          |  [tool starts executing]
-  |<--- SSE event: server_request --------   |  [tool calls create_message()]
-  |                                          |  [server creates Future, waits]
-  |-- POST /mcp/respond {id, result} ----->  |  [resolve Future]
-  |                                          |  [tool continues with result]
-  |<--- SSE event: final tool result -----   |  [tool done, stream ends]
-```
-
-Key components in `endpoints/mcp.py`:
-- `_pending_requests` dict maps request IDs to asyncio Futures
-- `_send_to_client_http()` enqueues server requests to an SSE queue
-- `handle_respond()` resolves pending futures from client POSTs
-- `_sse_stream_generator()` yields SSE events from the queue
-
-Notifications (progress) are fire-and-forget: they are enqueued and
-yielded as SSE events without creating a Future.
-
-## Elicitation, Progress, Logging, and Roots
-
-Additional server-to-client features follow the same pattern as sampling:
-a context variable holds a function injected by the protocol handler
-during tool execution.
-
-```
-Elicitation (structured user input -- form mode):
-  context.create_elicitation(message, schema, ...)
-    -> _elicitation_fn -> protocol.send_elicitation_request()
-    -> transport._send_to_client() -> client responds
-
-Elicitation (URL mode -- MCP 2025-11-25):
-  Tool raises URLElicitationRequiredError(url, description)
-    -> protocol catches error -> returns JSON-RPC error -32042
-    -> client directs user to URL for out-of-band interaction
-
-Progress (fire-and-forget notifications):
-  context.send_progress(progress, total, message)
-    -> _progress_notify_fn -> protocol.send_progress_notification()
-    -> transport._send_to_client() (no response expected)
-
-Logging (fire-and-forget notifications -- MCP 2025-06-18):
-  context.send_log(level, data, logger_name)
-    -> _log_fn -> protocol.send_log_notification()
-    -> transport._send_to_client() (no response expected)
-
-Resource Links (attached to tool results -- MCP 2025-06-18):
-  context.add_resource_link(uri, name, description, mime_type)
-    -> accumulated in _resource_links context var
-    -> protocol attaches links to tool result _meta.links
-
-Roots (filesystem root discovery):
-  context.list_roots()
-    -> _roots_fn -> protocol.send_roots_request()
-    -> transport._send_to_client() -> client responds with root list
-```
-
-Key differences:
-- `send_progress()` and `send_log()` are silent no-ops if unavailable
-- `create_elicitation()` and `list_roots()` raise `RuntimeError` if unavailable
-- Progress and logging notifications have no `id` field (JSON-RPC notifications)
-- Elicitation and roots are request-response (have `id` field)
-- Resource links are accumulated per-request and attached to the final tool result
-
-## Resource Subscriptions and Completions
-
-Two client-to-server features that work on all transports:
-
-```
-Resource Subscriptions:
-  Client sends resources/subscribe   -> server tracks URI per session
-  Client sends resources/unsubscribe -> server removes URI tracking
-  Server calls notify_resource_updated(uri)
-    -> sends notification to all sessions subscribed to that URI
-
-Completions:
-  Client sends completion/complete with ref type + partial value
-    -> server looks up provider in completion_providers dict
-    -> provider returns {values: [...], hasMore: bool}
-    -> server wraps in {completion: result} and returns
-```
-
-Subscription tracking: `protocol._resource_subscriptions` maps
-session_id to a set of subscribed URIs.
-
-Completion providers: `protocol.completion_providers` maps ref type
-(`"ref/resource"` or `"ref/prompt"`) to an async provider function.
-
-## Configuration
-
-The `config/` module provides automatic environment detection through
-independent, composable detectors. Each detector probes one aspect of
-the runtime environment.
-
-```
-SmartConfig (orchestrator)
-  |
-  +-- CloudDetector        GCP / AWS / Azure (env vars, metadata endpoints)
-  +-- ContainerDetector    Docker / Kubernetes (cgroup, service account)
-  +-- EnvironmentDetector  dev / staging / prod / serverless
-  +-- NetworkDetector      host / port (cloud metadata, env vars, defaults)
-  +-- ProjectDetector      project name (pyproject.toml, package.json, git)
-  +-- SystemDetector       CPU count, memory, optimal worker count
-```
-
-Detection results are cached after first probe. The `SmartConfig`
-orchestrator merges results into a single configuration:
-
-```python
-config = SmartConfig()
-# config.host        -> "0.0.0.0" (cloud) or "127.0.0.1" (local)
-# config.port        -> 8080 (Cloud Run) or 3000 (local)
-# config.workers     -> based on CPU count and memory
-# config.cloud       -> "gcp" | "aws" | "azure" | None
-# config.environment -> "production" | "development" | "serverless"
-# config.project     -> "my-project"
-```
-
-When `run()` is called with no arguments, SmartConfig determines all
-server parameters automatically.
-
-## Composition and Proxy
-
-### Server Composition
-
-The composition system allows building MCP servers from other MCP
-servers. Two patterns are supported:
-
-```
-import_server("math_tools", "path/to/math_server.py")
-  - Loads module, imports its registered tools/resources/prompts
-  - Tools appear with optional prefix: "math_tools.add"
-
-mount("/analysis", analysis_server)
-  - Mounts a sub-server at a path prefix
-  - Requests matching the prefix are routed to the sub-server
-```
-
-Composition can also be configured via YAML:
-
-```yaml
-servers:
-  math:
-    module: math_tools.server
-    prefix: math
-  data:
-    module: data_tools.server
-    prefix: data
-```
-
-### Proxy
-
-The proxy system connects to remote MCP servers and exposes their tools
-as local tools. It uses chuk-tool-processor for resilience:
-
-```
-Local Server
-  |
-  v
-ProxyManager
-  |-- connects to remote MCP server(s)
-  |-- discovers remote tools via tools/list
-  |-- wraps each remote tool as a local ToolHandler
-  +-- calls route through chuk-tool-processor:
-        - Timeout enforcement
-        - Retry with backoff
-        - Circuit breaker
-        - Connection pooling
-```
-
-## Performance
-
-### Design Decisions for Throughput
-
-| Layer              | Technique                              | Impact           |
-|--------------------|----------------------------------------|------------------|
-| Serialization      | orjson (Rust-based JSON)               | ~5x vs json      |
-| Schema caching     | Computed once at registration          | Zero per-request |
-| Handler caching    | Pre-serialized bytes on ToolHandler    | Zero per-list    |
-| Protocol dispatch  | Direct dict lookup, no reflection      | O(1) dispatch    |
-| HTTP parser        | httptools (C-based HTTP parsing)       | ~3x vs pure-py   |
-| Event loop         | uvloop (libuv-based event loop)        | ~2x vs asyncio   |
-| Context            | contextvars (C implementation in CPython) | Zero-lock      |
-
-### Benchmark Profile
-
-```
-36,000+ requests/second (tools/call, single worker)
-< 3ms framework overhead per request
-```
-
-The overhead measurement isolates the framework's contribution: JSON-RPC
-parsing, dispatch, context setup, response serialization. Tool execution
-time is not included.
-
-### Resource Caching
-
-ResourceHandler supports TTL-based content caching. When a resource is
-read, the result is cached and subsequent reads within the TTL window
-return the cached value without invoking the handler function.
-
-## Production Hardening (v0.21)
-
-The server includes several production-readiness features added in v0.21:
-
-### Session Lifecycle
-
-When sessions are evicted at capacity, an `on_evict` callback cleans up
-`_resource_subscriptions`, `_sse_event_buffers`, and `_sse_event_counters`
-to prevent memory leaks. Sessions with active SSE streams are protected
-from eviction. `_cleanup_session_state()` centralizes all per-session
-cleanup and is also called during `terminate_session` and `shutdown`.
-
-### Request Validation
-
-Three layers of input validation protect against oversized or malformed
-requests:
-
-- HTTP body size: `MAX_REQUEST_BODY_BYTES` (10 MB) in `endpoints/mcp.py`
-- STDIO message size: Same limit in `stdio_transport.py`
-- Tool arguments: Type check (`dict` required), key count limit (`MAX_ARGUMENT_KEYS = 100`)
-
-### Rate Limiting
-
-`TokenBucketRateLimiter` in `rate_limiter.py` provides per-session
-token bucket rate limiting. Enabled by passing `rate_limit_rps` to
-`MCPProtocolHandler`. Disabled by default (no overhead when off).
-Session buckets are cleaned up on session eviction.
-
-### Thread Safety
-
-Global mutable state is protected with locks:
-
-- `_registry_lock` in `decorators.py` wraps all `_global_*.append()` calls
-- `_server_lock` in `__init__.py` uses double-checked locking for the singleton
-- `clear_global_registry()` uses `.clear()` instead of `= []` to preserve references
-
-### Graceful Shutdown
-
-`MCPProtocolHandler.shutdown(timeout=5.0)` drains in-flight requests
-with a configurable timeout, then cancels remaining tasks and cleans
-all session state. Called from `core.py` on `KeyboardInterrupt`.
-
-### Health Endpoints
-
-| Endpoint | Purpose |
-|----------|---------|
-| `/health` | Liveness probe (status + uptime) |
-| `/health/ready` | Readiness probe (checks tools registered, 200 or 503) |
-| `/health/detailed` | Full state: tools, resources, prompts, sessions, in-flight requests |
-
-### Telemetry
-
-`telemetry.py` provides a thin OpenTelemetry wrapper. `trace_tool_call()`
-creates spans when otel is installed and falls back to a lightweight
-timing dict when not. Zero overhead without the `opentelemetry` package.
-
-## Dependencies
-
-### Required
-
-| Package               | Purpose                                      |
-|-----------------------|----------------------------------------------|
-| chuk-mcp              | MCP protocol types (ServerInfo, etc.)        |
-| chuk-sessions         | Session lifecycle management                 |
-| starlette             | ASGI framework for HTTP transport            |
-| uvicorn               | ASGI server                                  |
-| uvloop                | Fast event loop (libuv-based)                |
-| httptools             | Fast HTTP parser (C-based)                   |
-| orjson                | Fast JSON serialization (Rust-based)         |
-| psutil                | System detection (CPU, memory)               |
-| pyyaml                | YAML configuration loading                   |
-
-### Optional
-
-| Package               | Purpose                                      |
-|-----------------------|----------------------------------------------|
-| chuk-tool-processor   | Proxy resilience (timeouts, retries, circuit breakers) |
-| chuk-artifacts        | Artifact and workspace storage               |
+**Rules:**
+- `ChukMCPServer` coordinates; subsystems do the work
+- Subsystems don't import each other — `HTTPServer` doesn't know about `StdioTransport`
+- Each subsystem is independently testable via `ToolRunner` or direct protocol handler invocation
+- Transport is injected — the same protocol handler works over HTTP, STDIO, or direct calls
+- Configuration flows down — `SmartConfig` settings are passed at construction, not read from globals
+- Optional integrations (`chuk-artifacts`, OpenTelemetry) degrade gracefully when not installed
+
+**Why:** A monolithic server would be untestable and unextendable. Layering lets users deploy over HTTP in production and test via `ToolRunner` with zero transport overhead.
+
+---
+
+## 9. Full MCP Protocol Conformance
+
+Every feature in the MCP specification is implemented or explicitly deferred.
+
+**Rules:**
+- Target the latest MCP specification version (currently 2025-11-25)
+- Protocol version is negotiated during `initialize` handshake
+- All standard methods are dispatched: tools, resources, prompts, sampling, elicitation, roots, progress, completions, logging, cancellation, tasks
+- Server-to-client requests (sampling, elicitation, roots) work over both HTTP (SSE) and STDIO transports
+- Pagination is cursor-based on all list endpoints
+- SSE streams support resumability via event IDs and `Last-Event-ID` header
+- New spec features are tracked in `ROADMAP.md` with gap analysis tables
+- MCP Apps support: `_meta.ui.resourceUri` on tool definitions, `structuredContent` passthrough for pre-formatted results
+
+**Conformance summary:**
+
+| Spec Area | Status |
+|-----------|--------|
+| Lifecycle (initialize, ping) | Complete |
+| Tools (list, call, annotations, structured output, pagination, icons) | Complete |
+| Resources (list, read, subscribe, templates, links, annotations, icons) | Complete |
+| Prompts (list, get, pagination, icons) | Complete |
+| Sampling (createMessage, tool calling) | Complete |
+| Elicitation (form mode, URL mode, defaults) | Complete |
+| Roots (list, notifications) | Complete |
+| Progress (notifications) | Complete |
+| Completions (complete) | Complete |
+| Logging (setLevel, notifications/message) | Complete |
+| Cancellation (notifications/cancelled) | Complete |
+| Tasks (get, result, list, cancel, status notifications) | Complete |
+| Streamable HTTP (single /mcp endpoint, SSE resumability) | Complete |
+| MCP Apps (_meta, structuredContent passthrough) | Complete |
+
+**Why:** Partial protocol implementations create subtle interop failures. Full conformance means ChukMCPServer works with every MCP client without negotiation surprises.
+
+---
+
+## 10. Structured Error Handling
+
+Errors are typed, contextual, and never swallowed silently.
+
+**Rules:**
+- `MCPError` is the base error class with `code`, `suggestion`, and `docs_url` fields
+- `ParameterValidationError` carries `param_name`, `expected_type`, and `actual_value`
+- `ToolExecutionError` wraps handler exceptions with the tool name for context
+- `URLElicitationRequiredError` (-32042) signals URL-mode elicitation to the client
+- Unknown tool names trigger fuzzy matching via `difflib.get_close_matches(cutoff=0.6)` with suggestions in the error message
+- Missing required arguments include the parameter schema in the error for client-side correction
+- Exception handling is narrow: `asyncio.CancelledError` is re-raised, `ValueError`/`TypeError`/`KeyError` map to `INVALID_PARAMS`, generic exceptions return sanitized `"Internal server error"`
+- Never `except Exception: pass` — log and handle or re-raise
+- Import errors for optional dependencies use `try/except` at module level with graceful fallback
+
+**Why:** `ParameterValidationError("user_id", "string", 42)` tells you exactly what went wrong. `TypeError: expected str` tells you nothing about which parameter or which tool.
+
+---
+
+## 11. Zero-Overhead Optionals
+
+Optional features cost nothing when not used.
+
+**Rules:**
+- **OpenTelemetry**: Module-level `_OTEL_AVAILABLE` flag. `trace_tool_call()` is a no-op context manager when otel is not installed — zero import cost, zero runtime cost
+- **Rate limiting**: Disabled by default (`rate_limit_rps=None`). When disabled, the rate limiter object is never created
+- **OAuth**: Only checked if a tool has `@requires_auth`. No middleware overhead for unauthenticated tools
+- **uvloop**: Falls back to standard `asyncio` if not available. Detected at import time
+- **Artifacts**: Optional `chuk-artifacts` import. Server runs without persistent storage
+- **Proxy**: `ProxyManager` only instantiated if `proxy_config` is provided
+- Never add a mandatory dependency for an optional feature
+- Feature detection happens once at import or construction time, not per-request
+
+**Why:** Most MCP servers don't need rate limiting, OAuth, or telemetry. Those that do shouldn't pay for features they didn't enable. Those that don't shouldn't pay anything at all.
+
+---
+
+## 12. No Unnecessary Dependencies
+
+The dependency tree is minimal and intentional.
+
+**Core dependencies** (each justified by measurable benefit):
+
+| Package | Purpose |
+|---------|---------|
+| chuk-mcp | MCP protocol types (ServerInfo, etc.) |
+| chuk-sessions | Session lifecycle management |
+| chuk-tool-processor | Proxy resilience (timeouts, retries, circuit breakers) |
+| orjson | Rust-based JSON serialization (~5x faster than json) |
+| starlette | ASGI framework for HTTP transport |
+| uvicorn | ASGI server |
+| uvloop | libuv-based event loop (~2x faster than asyncio) |
+| httptools | C-based HTTP parsing (~3x faster than pure-py) |
+
+**Rules:**
+- Every dependency must justify its presence with a measurable benefit
+- Optional dependencies are declared in `[project.optional-dependencies]`, not `[project.dependencies]`
+- No dependency on view-specific libraries — `chuk-view-schemas` is a separate optional package that targets ChukMCPServer's `meta` kwarg
+- Pin minimum versions, not exact versions — allow downstream flexibility
+
+**Why:** Every dependency is an attack surface, a potential version conflict, and a build-time cost. MCP servers should be lightweight and fast to install.
+
+---
+
+## 13. Clean Code
+
+Small functions. Clear names. Single responsibility. Minimal coupling.
+
+**Rules:**
+- Functions do one thing; if a function needs a comment explaining what it does, extract sub-functions
+- Modules have a single area of responsibility — types are separate from protocol, transport from dispatch
+- Prefer composition over inheritance — `ChukMCPServer` composes `MCPProtocolHandler`, not extends it
+- No dead code, no commented-out blocks, no `# TODO: maybe later` without a tracking issue
+- Modern Python typing: `str | None` not `Optional[str]`, `collections.abc.Callable` not `typing.Callable`
+- Use `from __future__ import annotations` for forward references, not string literals
+- `@wraps(func)` on all decorator wrappers to preserve function metadata
+- Keep the public API surface small — internal helpers are private (`_ensure_cached_formats`, `_validate_and_convert_arguments`)
+
+**Why:** MCP servers span many concerns (protocol, transport, types, auth, composition). Clarity in each piece makes the whole system debuggable and extensible.
+
+---
+
+## 14. Test Coverage >= 90% Per File
+
+Every source file must have >= 90% line coverage individually.
+
+**Rules:**
+- Each `src/.../foo.py` has corresponding test coverage
+- Coverage is measured per-file, not just as a project aggregate
+- Test both happy paths and error/edge cases
+- Async tests use `pytest-asyncio` with auto mode
+- `ToolRunner` enables transport-free testing — test tool logic without HTTP or STDIO overhead
+- Mock external dependencies (storage backends, LLM callbacks) — never hit real services in unit tests
+- CI enforces: `ruff` (lint + format), `mypy` (type checking), `pytest` (2300+ tests), `bandit` (security)
+- `make check` runs the full suite — all checks must pass before merge
+
+**Current status:** 2334 tests passing, 96.70% aggregate coverage.
+
+**Why:** High coverage catches regressions early. Per-file measurement prevents coverage debt from hiding in low-coverage modules while the aggregate looks healthy.
+
+---
+
+## 15. Observable by Default
+
+Every subsystem exposes structured diagnostics without opt-in.
+
+**Rules:**
+- Module-level loggers: `logger = logging.getLogger(__name__)` in every module
+- Health endpoints: `/health` (liveness), `/health/ready` (readiness), `/health/detailed` (full state)
+- `/health/detailed` exposes: session count, tool/resource/prompt counts, in-flight requests
+- Protocol logging: `logging/setLevel` + `notifications/message` for client-visible log streams
+- OpenTelemetry: Optional but zero-config when installed — `trace_tool_call()` wraps tool execution
+- Observability must not throw — if metrics fail, execution still succeeds
+- Structured log messages include context where available (tool name, session ID, error details)
+
+**Why:** When an MCP tool call fails in production, you need to know: which tool, which session, what arguments, and what error — without redeploying with debug logging.
+
+---
+
+## Checklist for PRs
+
+- [ ] Performance: No per-request allocations for schema data; orjson for all serialization
+- [ ] Type safety: orjson results assigned to typed variables; no `# type: ignore[no-any-return]`
+- [ ] No new magic strings — use enums/constants from `constants.py`
+- [ ] New file has corresponding test coverage with >= 90% line coverage
+- [ ] No blocking I/O in async code paths
+- [ ] Errors use structured exception hierarchy with contextual fields
+- [ ] Thread safety: global mutable state protected by `_registry_lock`
+- [ ] Optional features have zero overhead when disabled
+- [ ] No unnecessary new dependencies — justify each addition
+- [ ] `make check` passes (ruff, mypy, pytest, bandit)
+- [ ] New MCP protocol features tracked in `ROADMAP.md`

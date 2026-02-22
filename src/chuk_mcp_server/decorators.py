@@ -10,6 +10,12 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
+from .constants import (
+    ATTR_MCP_PROMPT,
+    ATTR_MCP_RESOURCE,
+    ATTR_MCP_TOOL,
+    CONTENT_TYPE_PLAIN,
+)
 from .types import PromptHandler, ResourceHandler, ToolHandler
 from .types.resources import ResourceTemplateHandler
 
@@ -77,6 +83,7 @@ def tool(
     open_world_hint: bool | None = None,
     output_schema: dict[str, Any] | None = None,
     icons: list[dict[str, Any]] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to register a function as an MCP tool.
@@ -93,6 +100,10 @@ def tool(
         @tool(read_only_hint=True, idempotent_hint=True)
         def safe_lookup(key: str) -> str:
             return db[key]
+
+        @tool(meta={"ui": {"resourceUri": "https://example.com/view"}})
+        async def show_view() -> dict:
+            return {"type": "chart", "data": [...]}
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -107,6 +118,7 @@ def tool(
             open_world_hint=open_world_hint,
             output_schema=output_schema,
             icons=icons,
+            meta=meta,
         )
 
         # Register globally
@@ -114,7 +126,7 @@ def tool(
             _global_tools.append(mcp_tool)
 
         # Add tool metadata to function
-        func._mcp_tool = mcp_tool  # type: ignore[attr-defined]
+        setattr(func, ATTR_MCP_TOOL, mcp_tool)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -142,7 +154,7 @@ def resource(
     uri: str,
     name: str | None = None,
     description: str | None = None,
-    mime_type: str = "text/plain",
+    mime_type: str = CONTENT_TYPE_PLAIN,
     icons: list[dict[str, Any]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
@@ -169,7 +181,7 @@ def resource(
             _global_resources.append(mcp_resource)
 
         # Add resource metadata to function
-        func._mcp_resource = mcp_resource  # type: ignore[attr-defined]
+        setattr(func, ATTR_MCP_RESOURCE, mcp_resource)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -212,7 +224,7 @@ def prompt(
             _global_prompts.append(mcp_prompt)
 
         # Add prompt metadata to function
-        func._mcp_prompt = mcp_prompt  # type: ignore[attr-defined]
+        setattr(func, ATTR_MCP_PROMPT, mcp_prompt)
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -356,29 +368,29 @@ def requires_auth(scopes: list[str] | None = None) -> Callable[[Callable[..., An
 
 def is_tool(func: Callable[..., Any]) -> bool:
     """Check if a function is decorated as a tool."""
-    return hasattr(func, "_mcp_tool")
+    return hasattr(func, ATTR_MCP_TOOL)
 
 
 def is_resource(func: Callable[..., Any]) -> bool:
     """Check if a function is decorated as a resource."""
-    return hasattr(func, "_mcp_resource")
+    return hasattr(func, ATTR_MCP_RESOURCE)
 
 
 def is_prompt(func: Callable[..., Any]) -> bool:
     """Check if a function is decorated as a prompt."""
-    return hasattr(func, "_mcp_prompt")
+    return hasattr(func, ATTR_MCP_PROMPT)
 
 
 def get_tool_from_function(func: Callable[..., Any]) -> ToolHandler | None:
     """Get the tool metadata from a decorated function."""
-    return getattr(func, "_mcp_tool", None)
+    return getattr(func, ATTR_MCP_TOOL, None)
 
 
 def get_resource_from_function(func: Callable[..., Any]) -> ResourceHandler | None:
     """Get the resource metadata from a decorated function."""
-    return getattr(func, "_mcp_resource", None)
+    return getattr(func, ATTR_MCP_RESOURCE, None)
 
 
 def get_prompt_from_function(func: Callable[..., Any]) -> PromptHandler | None:
     """Get the prompt metadata from a decorated function."""
-    return getattr(func, "_mcp_prompt", None)
+    return getattr(func, ATTR_MCP_PROMPT, None)

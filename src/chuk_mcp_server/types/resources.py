@@ -17,6 +17,13 @@ import orjson
 from pydantic import BaseModel
 
 # types
+from chuk_mcp_server.constants import (
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_MARKDOWN,
+    CONTENT_TYPE_PLAIN,
+    JsonRpcError,
+)
+
 from .base import MCPError, MCPResource
 
 # ============================================================================
@@ -55,7 +62,7 @@ class ResourceHandler:
         func: Callable[..., Any],
         name: str | None = None,
         description: str | None = None,
-        mime_type: str = "text/plain",
+        mime_type: str = CONTENT_TYPE_PLAIN,
         cache_ttl: int | None = None,
         icons: list[dict[str, Any]] | None = None,
     ) -> "ResourceHandler":
@@ -141,23 +148,23 @@ class ResourceHandler:
 
         except Exception as e:
             # Fix: MCPError requires a code parameter
-            raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}", code=-32603) from e
+            raise MCPError(f"Failed to read resource '{self.uri}': {str(e)}", code=JsonRpcError.INTERNAL_ERROR) from e
 
     def _format_content(self, result: Any) -> str:
         """Format content based on MIME type with orjson optimization."""
-        mime_type = self.mime_type or "text/plain"
+        mime_type = self.mime_type or CONTENT_TYPE_PLAIN
 
         # Handle Pydantic models by converting to dict first
         if isinstance(result, BaseModel):
             result = result.model_dump()
 
-        if mime_type == "application/json":
+        if mime_type == CONTENT_TYPE_JSON:
             if isinstance(result, dict | list):
                 # 🚀 Use orjson for 2-3x faster JSON serialization
                 return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             else:
                 return str(orjson.dumps(result).decode())
-        elif mime_type == "text/markdown" or mime_type == "text/plain":
+        elif mime_type in (CONTENT_TYPE_MARKDOWN, CONTENT_TYPE_PLAIN):
             if isinstance(result, dict | list):
                 return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             return str(result)
@@ -299,7 +306,9 @@ class ResourceTemplateHandler:
                 return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
             return str(result)
         except Exception as e:
-            raise MCPError(f"Failed to read resource template '{self.uri_template}': {str(e)}", code=-32603) from e
+            raise MCPError(
+                f"Failed to read resource template '{self.uri_template}': {str(e)}", code=JsonRpcError.INTERNAL_ERROR
+            ) from e
 
 
 # ============================================================================
@@ -312,7 +321,7 @@ def create_resource_from_function(
     func: Callable[..., Any],
     name: str | None = None,
     description: str | None = None,
-    mime_type: str = "text/plain",
+    mime_type: str = CONTENT_TYPE_PLAIN,
     cache_ttl: int | None = None,
 ) -> ResourceHandler:
     """Create a ResourceHandler from a function - convenience function."""
@@ -330,7 +339,7 @@ def create_json_resource(
 ) -> ResourceHandler:
     """Create a JSON resource handler - convenience function."""
     return ResourceHandler.from_function(
-        uri=uri, func=func, name=name, description=description, mime_type="application/json", cache_ttl=cache_ttl
+        uri=uri, func=func, name=name, description=description, mime_type=CONTENT_TYPE_JSON, cache_ttl=cache_ttl
     )
 
 
@@ -343,7 +352,7 @@ def create_markdown_resource(
 ) -> ResourceHandler:
     """Create a Markdown resource handler - convenience function."""
     return ResourceHandler.from_function(
-        uri=uri, func=func, name=name, description=description, mime_type="text/markdown", cache_ttl=cache_ttl
+        uri=uri, func=func, name=name, description=description, mime_type=CONTENT_TYPE_MARKDOWN, cache_ttl=cache_ttl
     )
 
 

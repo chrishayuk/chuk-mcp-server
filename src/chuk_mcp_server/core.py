@@ -11,6 +11,7 @@ from typing import Any
 
 # Import the modular smart configuration system
 from .config import SmartConfig
+from .constants import CONTENT_TYPE_JSON, CONTENT_TYPE_PLAIN
 from .decorators import (
     clear_global_registry,
     get_global_prompts,
@@ -272,6 +273,7 @@ class ChukMCPServer:
                 "open_world_hint",
                 "output_schema",
                 "icons",
+                "meta",
             ):
                 if key in kwargs:
                     annotation_kwargs[key] = kwargs.pop(key)
@@ -325,7 +327,7 @@ class ChukMCPServer:
             # Simple resource creation
             resource_name = name or func.__name__.replace("_", " ").title()
             resource_description = description or func.__doc__ or f"Resource: {uri}"
-            resource_mime_type = mime_type or "application/json"  # Simple default
+            resource_mime_type = mime_type or CONTENT_TYPE_JSON  # Simple default
 
             # Extract icons kwarg for resource handler
             handler_kwargs = {}
@@ -632,7 +634,7 @@ class ChukMCPServer:
         uri: str,
         name: str | None = None,
         description: str | None = None,
-        mime_type: str = "text/plain",
+        mime_type: str = CONTENT_TYPE_PLAIN,
         **kwargs,
     ):
         """Register an existing function as an MCP resource."""

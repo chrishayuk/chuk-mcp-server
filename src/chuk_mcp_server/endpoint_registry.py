@@ -12,8 +12,10 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import Response
 
-# starletter
+# starlette
 from starlette.routing import Route
+
+from .constants import CONTENT_TYPE_JSON, CORS_ALLOW_ALL, HEADER_CORS_ORIGIN
 
 # logger
 logger = logging.getLogger(__name__)
@@ -382,8 +384,8 @@ async def endpoint_registry_info_handler(_request: Request) -> Response:
 
     return Response(
         orjson.dumps(info, option=orjson.OPT_INDENT_2),
-        media_type="application/json",
-        headers={"Access-Control-Allow-Origin": "*"},
+        media_type=CONTENT_TYPE_JSON,
+        headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
     )
 
 

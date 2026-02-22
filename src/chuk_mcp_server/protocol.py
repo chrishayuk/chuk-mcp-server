@@ -582,20 +582,30 @@ class MCPProtocolHandler:
                 set_progress_token(None)
                 set_log_fn(None)
 
-            # Format response content using chuk_mcp content formatting
-            content = format_content(result)
+            # Check if tool returned a pre-formatted MCP result
+            # (e.g., from MCP Apps view wrappers that return
+            # {"content": [...], "structuredContent": {...}})
+            if (
+                isinstance(result, dict)
+                and "content" in result
+                and isinstance(result["content"], list)
+                and ("structuredContent" in result or "_meta" in result)
+            ):
+                # Pre-formatted result — use directly
+                tool_result: dict[str, Any] = result
+            else:
+                # Standard result — format content normally
+                content = format_content(result)
+                tool_result = {"content": content}
 
-            # Build result dict
-            tool_result: dict[str, Any] = {"content": content}
+                # Add structured content if tool has output_schema and result is a dict/model
+                if tool_handler.output_schema is not None and result is not None:
+                    from pydantic import BaseModel as _BaseModel
 
-            # Add structured content if tool has output_schema and result is a dict/model
-            if tool_handler.output_schema is not None and result is not None:
-                from pydantic import BaseModel as _BaseModel
-
-                if isinstance(result, dict):
-                    tool_result["structuredContent"] = result
-                elif isinstance(result, _BaseModel):
-                    tool_result["structuredContent"] = result.model_dump()
+                    if isinstance(result, dict):
+                        tool_result["structuredContent"] = result
+                    elif isinstance(result, _BaseModel):
+                        tool_result["structuredContent"] = result.model_dump()
 
             # Add resource links if any were accumulated during execution
             from .context import get_resource_links

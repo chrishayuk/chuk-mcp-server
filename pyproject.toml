@@ -16,7 +16,6 @@ dependencies = [
     "httptools>=0.6.4",
     "httpx>=0.27.0", # Required for HTTP proxy transport
     "orjson>=3.11.6",
-    "psutil>=7.0.0",
     "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware
     "pyyaml>=6.0", # Required for composition config loading
     "starlette>=0.47.1",
@@ -48,6 +47,9 @@ google_drive = [
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.1",
     "google-api-python-client>=2.100.0",
+]
+monitoring = [
+    "psutil>=7.0.0",
 ]
 docs = [
     "mkdocs>=1.5.0",

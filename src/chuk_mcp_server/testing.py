@@ -8,6 +8,18 @@ a transport layer, making it easy to write unit tests.
 import uuid
 from typing import Any
 
+from .constants import (
+    JSONRPC_KEY,
+    JSONRPC_VERSION,
+    KEY_ERROR,
+    KEY_ID,
+    KEY_METHOD,
+    KEY_PARAMS,
+    KEY_RESULT,
+    MCP_DEFAULT_PROTOCOL_VERSION,
+    McpMethod,
+)
+
 
 class ToolRunner:
     """Test harness for invoking MCP tools without transport.
@@ -50,11 +62,11 @@ class ToolRunner:
             return self._session_id
 
         init_msg = {
-            "jsonrpc": "2.0",
-            "id": "init-1",
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-06-18",
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: "init-1",
+            KEY_METHOD: McpMethod.INITIALIZE,
+            KEY_PARAMS: {
+                "protocolVersion": MCP_DEFAULT_PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {"name": "test-runner", "version": "0.0.0"},
             },
@@ -76,10 +88,10 @@ class ToolRunner:
         """
         session_id = await self._ensure_session()
         request = {
-            "jsonrpc": "2.0",
-            "id": f"test-{uuid.uuid4().hex[:8]}",
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments or {}},
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: f"test-{uuid.uuid4().hex[:8]}",
+            KEY_METHOD: McpMethod.TOOLS_CALL,
+            KEY_PARAMS: {"name": name, "arguments": arguments or {}},
         }
         response, _ = await self.protocol.handle_request(request, session_id)
         result: dict[str, Any] = response
@@ -100,10 +112,10 @@ class ToolRunner:
         """
         response = await self.call_tool(name, arguments)
 
-        if "error" in response:
-            raise RuntimeError(f"Tool error: {response['error'].get('message', response['error'])}")
+        if KEY_ERROR in response:
+            raise RuntimeError(f"Tool error: {response[KEY_ERROR].get('message', response[KEY_ERROR])}")
 
-        content = response["result"]["content"]
+        content = response[KEY_RESULT]["content"]
         parts = []
         for item in content:
             if isinstance(item, dict) and item.get("type") == "text" or isinstance(item, dict) and "text" in item:
@@ -118,13 +130,13 @@ class ToolRunner:
         """
         session_id = await self._ensure_session()
         request = {
-            "jsonrpc": "2.0",
-            "id": f"test-{uuid.uuid4().hex[:8]}",
-            "method": "tools/list",
-            "params": {},
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: f"test-{uuid.uuid4().hex[:8]}",
+            KEY_METHOD: McpMethod.TOOLS_LIST,
+            KEY_PARAMS: {},
         }
         response, _ = await self.protocol.handle_request(request, session_id)
-        tools: list[dict[str, Any]] = response.get("result", {}).get("tools", [])
+        tools: list[dict[str, Any]] = response.get(KEY_RESULT, {}).get("tools", [])
         return tools
 
     async def list_tool_names(self) -> list[str]:

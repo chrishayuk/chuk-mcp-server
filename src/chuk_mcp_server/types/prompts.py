@@ -14,6 +14,8 @@ from typing import Any
 
 import orjson
 
+from chuk_mcp_server.constants import JsonRpcError
+
 from .base import MCPError
 from .errors import ParameterValidationError
 from .parameters import ToolParameter
@@ -311,15 +313,17 @@ class PromptHandler:
             else:
                 result = self.handler(**validated_args)
 
-            # Ensure we return the correct type
-            return result  # type: ignore[no-any-return]
+            validated_result: str | dict[str, Any] = result
+            return validated_result
 
         except ParameterValidationError:
             # Re-raise validation errors as-is
             raise
         except Exception as e:
             # Wrap other errors in MCPError
-            raise MCPError(f"Failed to generate prompt '{self.name}': {str(e)}", code=-32603) from e
+            raise MCPError(
+                f"Failed to generate prompt '{self.name}': {str(e)}", code=JsonRpcError.INTERNAL_ERROR
+            ) from e
 
 
 # ============================================================================

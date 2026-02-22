@@ -180,7 +180,8 @@ from .types.errors import URLElicitationRequiredError
 # Create backward compatibility
 def Capabilities(**kwargs: Any) -> dict[str, Any]:
     """Legacy capabilities function for backward compatibility."""
-    return create_server_capabilities(**kwargs)  # type: ignore[no-any-return]
+    result: dict[str, Any] = create_server_capabilities(**kwargs)
+    return result
 
 
 __version__ = "0.18"

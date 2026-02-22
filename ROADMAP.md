@@ -4,17 +4,18 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.21.0
+## Current State: v0.22.0
 
-**2330+ tests | 97% coverage | 36K+ RPS**
+**2318+ tests | 97% coverage | 36K+ RPS**
 
-ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest). The current release includes:
+ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
 | Area | Capabilities |
 |------|-------------|
 | **Core API** | `@tool`, `@resource`, `@resource_template`, `@prompt` decorators with automatic JSON schema generation |
 | **Transports** | Streamable HTTP (Starlette/Uvicorn), STDIO (sync + async), bidirectional on both transports |
 | **Protocol** | JSON-RPC 2.0, MCP specification 2025-11-25, full protocol surface |
+| **MCP Apps** | `_meta.ui.resourceUri` on tools, `structuredContent` passthrough for interactive HTML UIs (SEP-1865) |
 | **Context** | Session management, user context, progress reporting, log notifications, resource links, metadata, sampling, elicitation, roots |
 | **Types** | `ToolHandler`, `ResourceHandler`, `ResourceTemplateHandler`, `PromptHandler` with orjson caching |
 | **Tool Annotations** | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata on tools |
@@ -46,7 +47,13 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **Health** | `/health` (liveness), `/health/ready` (readiness), `/health/detailed` (full state) |
 | **Telemetry** | Thin OpenTelemetry wrapper, zero overhead without otel |
 
-### Recently Completed (v0.21.0 -- Phase 5: Production Hardening)
+### Recently Completed (v0.22.0 -- MCP Apps Support)
+
+- **Tool `_meta` field** -- `meta` parameter on `@tool` decorator, `ChukMCPServer.tool()`, and `ToolHandler.from_function()`. Emitted as `_meta` in `tools/list` responses. Enables `_meta.ui.resourceUri` for MCP Apps (SEP-1865, `io.modelcontextprotocol/ui`)
+- **Pre-formatted result passthrough** -- When a tool returns `{"content": [...], "structuredContent": {...}}`, the protocol handler passes it through directly instead of re-wrapping via `format_content()`. This enables view-tool decorators (e.g., `chuk-view-schemas`) to return complete MCP Apps responses
+- **Architecture principles** -- New `ARCHITECTURE.md` with 15 governing principles: performance first, orjson type safety, no magic strings, async native, schema caching, decorator-driven API, thread safety, layered architecture, full protocol conformance, structured errors, zero-overhead optionals, minimal dependencies, clean code, test coverage, observability
+
+### Previously Completed (v0.21.0 -- Phase 5: Production Hardening)
 
 - **Session lifecycle cleanup** -- `on_evict` callback cleans up `_resource_subscriptions`, `_sse_event_buffers`, `_sse_event_counters` on session eviction; protected sessions with active SSE streams skip eviction
 - **Request validation** -- 10 MB body size limit on HTTP and STDIO transports, 100-key argument limit, type checking on tool arguments
@@ -96,84 +103,90 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 
 ---
 
-## Code Review Findings
+## Architecture Audit Findings
 
-A comprehensive code review identified the following issues organized by severity. Items marked **Fixed** were addressed in Phase 5 (v0.21).
+A comprehensive audit against `ARCHITECTURE.md` principles identified the following issues. Items marked **Fixed** were addressed in previous phases.
 
-### Critical
-
-| Finding | Location | Description | Status |
-|---------|----------|-------------|--------|
-| Resource subscription memory leak | `protocol.py` | `_resource_subscriptions` dict grows unbounded on session eviction. | **Fixed** (WP1: `on_evict` callback) |
-| Session eviction drops active sessions | `protocol.py` | Oldest session evicted with no check for in-flight requests. | **Fixed** (WP1: protected sessions) |
-| Version drift | `pyproject.toml` vs docs | `pyproject.toml` says `0.16.5` while docs reference `0.18.0`. | Open |
-
-### High
+### Principle 1: Performance First
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Broad exception handling | `protocol.py` | OAuth validation catches bare `Exception`, masking real bugs. | **Fixed** (WP4: narrowed handlers) |
-| No rate limiting or request size limits | Protocol layer | Any client can send unlimited requests or arbitrarily large payloads. | **Fixed** (WP2+WP3: size limits + rate limiter) |
-| Thread safety of global state | `decorators.py`, `__init__.py` | Global mutable lists/singletons with no locking. | **Fixed** (WP5: `_registry_lock` + `_server_lock`) |
-| Large files need splitting | `core.py`, `protocol.py` | Both files handle too many concerns. | Open (Phase 6) |
+| Blocking file I/O in async path | `composition/config_loader.py:49` | `open()` + `yaml.safe_load()` called synchronously from `async apply_to_manager()` | Open (Phase 6) |
+| Multiple `asyncio.run()` calls | `core.py:877,937,940,945` | Proxy start and shutdown create separate event loops instead of reusing | Open (Phase 6) |
 
-### Medium
+### Principle 2: orjson Type Safety
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Pending request cleanup | `stdio_transport.py` | `_pending_requests` entries linger after timeout. | **Fixed** (WP4: `stop()` cancels, limit enforced) |
-| Test suite duplication | `tests/` | Multiple `*_coverage.py` files alongside main counterparts. | Open (Phase 6) |
-| Weak assertions in core tests | `test_core.py` | Tests use `try/except`+`pytest.skip()` patterns. | Open (Phase 6) |
-| No concurrency tests | `tests/` | Zero tests for concurrent tool execution or race conditions. | **Partial** (WP5: thread safety tests) |
-| No input validation at protocol boundary | `protocol.py` | JSON-RPC handler trusts incoming `params` dicts. | **Fixed** (WP2: argument validation) |
+| `type: ignore[no-any-return]` | `__init__.py:183` | `Capabilities()` function — replace with typed variable | Open (Phase 6) |
+| `type: ignore[no-any-return]` | `types/tools.py:165,170` | `.name` and `.description` properties — replace with typed variable | Open (Phase 6) |
+| `type: ignore[no-any-return]` | `types/prompts.py:315` | `get_prompt()` return — replace with typed variable | Open (Phase 6) |
 
-### Low
+### Principle 3: No Magic Strings
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| Import-time side effects | `__init__.py` | `_auto_export_cloud_handlers()` runs at import time. | Open (Phase 6) |
-| Magic numbers | `errors.py`, `protocol.py` | Undocumented constants like `max_sessions=100`. | **Partial** (WP2+WP3+WP4: named constants) |
-| `dist/` in working tree | Repository root | Built distribution files should be gitignored. | Open |
+| Content-type string literals | `http_server.py`, `core.py`, `decorators.py`, `types/resources.py`, `openapi.py`, `cloud/adapters/gcf.py` | ~17 instances of `"application/json"`, `"text/plain"`, `"text/markdown"` should use `CONTENT_TYPE_*` constants | Open (Phase 6) |
+| Error code magic numbers | `types/resources.py:144,302`, `errors.py:17`, `cloud/adapters/gcf.py:202` | Bare `-32603` should use `JsonRpcError.INTERNAL_ERROR` | Open (Phase 6) |
+| JSON-RPC key string literals | `testing.py`, `cloud/adapters/gcf.py` | ~12 instances of `"jsonrpc"`, `"method"`, `"params"`, `"result"` should use constants | Open (Phase 6) |
+| MCP method string comparisons | `endpoints/mcp.py:209,308,340` | `== "initialize"`, `== "tools/call"` should use `McpMethod.*` constants | Open (Phase 6) |
+| Duplicate constants file | `endpoints/constants.py` | Redefines `CONTENT_TYPE_*`, `HEADER_*`, `JSONRPC_VERSION`, `JsonRpcErrorCode` already in `constants.py` | Open (Phase 6) |
+
+### Principle 4: Async Native
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Blocking file I/O in async chain | `composition/config_loader.py:49-50,68` | Sync `open()` + `yaml.safe_load()` called from `async apply_to_manager()` | Open (Phase 6) |
+| `time.sleep()` in thread | `core.py:919` | Browser-opening thread uses blocking sleep instead of async task | Low |
+
+### Principle 8: Layered Architecture
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| `protocol.py` too large | `protocol.py` | 1,453 lines with session management, protocol dispatch, task management, SSE buffering | Open (Phase 6) |
+| `core.py` too large | `core.py` | 1,135 lines with server lifecycle, decorators, composition, component queries, startup printing | Open (Phase 6) |
+| `context.py` too large | `context.py` | 674 lines with 12 ContextVars, RequestContext, 30+ getter/setters, messaging utilities | Open (Phase 6) |
+| `cli.py` too large | `cli.py` | 796 lines with 400+ lines of embedded examples that should be separate | Open (Phase 6) |
+| `__init__.py` too large | `__init__.py` | 587 lines with cloud handler factories, artifact stubs, 50+ exports | Open (Phase 6) |
+| Import-time side effects | `__init__.py:344-395` | `_auto_export_cloud_handlers()` runs at import time, modifies module namespace via `setattr` | Open (Phase 6) |
+| Endpoint→Protocol coupling | `endpoints/mcp.py`, `endpoints/health.py` | HTTP endpoints import `MCPProtocolHandler` directly | Open (Phase 6) |
+| Cloud→Root coupling | `cloud/adapters/gcf.py:285` | GCF adapter imports `get_or_create_global_server` from `__init__.py` | Open (Phase 6) |
+
+### Principle 12: No Unnecessary Dependencies
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| `python-multipart` redundant | `pyproject.toml:20` | Transitive via Starlette — listed as required but never directly imported | Open (Phase 6) |
+| `psutil` should be optional | `pyproject.toml:19`, `config/system_detector.py` | Imported inside try/except with fallback — already behaves as optional | Open (Phase 6) |
+| `pyyaml` imported unconditionally | `composition/config_loader.py:15` | Module-level `import yaml` but only used if composition config is loaded | Low |
+
+### Principle 14: Test Coverage >= 90%
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| `telemetry.py` at 63% | `telemetry.py` | OpenTelemetry-enabled paths (lines 40-51) completely untested | Open (Phase 6) |
+| 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | Open (Phase 6) |
+| `pytest.skip()` masking | `test_core_final_coverage.py` | 7 skipped tests for STDIO detection and decorator fallback paths | Open (Phase 6) |
+| MCP Apps `meta` field untested | `types/tools.py` | No tests verify `meta` field on `ToolHandler` or `_meta` in `tools/list` response | Open (Phase 6) |
+| Pre-formatted passthrough untested | `protocol.py:585-595` | No test verifies the `structuredContent` passthrough conditional | Open (Phase 6) |
+
+### Previously Fixed
+
+| Finding | Status | Phase |
+|---------|--------|-------|
+| Resource subscription memory leak | **Fixed** | Phase 5 |
+| Session eviction drops active sessions | **Fixed** | Phase 5 |
+| Broad exception handling in OAuth | **Fixed** | Phase 5 |
+| No rate limiting or request size limits | **Fixed** | Phase 5 |
+| Thread safety of global state | **Fixed** | Phase 5 |
+| Pending request cleanup in STDIO | **Fixed** | Phase 5 |
+| No input validation at protocol boundary | **Fixed** | Phase 5 |
 
 ---
 
-## MCP Specification Gap Analysis
+## MCP Specification Conformance
 
-The server currently targets **MCP specification 2025-06-18**. The latest specification is **2025-11-25**. This section identifies all gaps against the latest spec, organized by specification version.
-
-### Missing from 2025-03-26
-
-| Feature | Spec Section | Gap | Priority |
-|---------|-------------|-----|----------|
-| **Tool annotations** | `server/tools` | No support for `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata on tools. Clients use these to decide execution policy. | High |
-| **Streamable HTTP transport** | `basic/transports` | Server uses legacy HTTP+SSE (separate GET/POST endpoints). Spec replaced this with Streamable HTTP: single endpoint, POST returns JSON or SSE, GET opens SSE stream, `MCP-Session-Id` header, session termination via DELETE. | High |
-
-### Missing from 2025-06-18
-
-| Feature | Spec Section | Gap | Priority |
-|---------|-------------|-----|----------|
-| **Structured tool output** | `server/tools` | No `outputSchema` on tool definitions. No `structuredContent` in tool results. Tools can only return `content` (text/image/audio), not typed JSON objects. | High |
-| **Resource links in tool results** | `server/tools` | No support for returning `ResourceLink` objects alongside tool content to reference server resources. | Medium |
-| **Resource templates** | `server/resources` | No `resources/templates/list` method. URI template-based resources (RFC 6570) not discoverable. | Medium |
-| **Content annotations** | Multiple | No `annotations` field on content types (`audience`, `priority`, `lastModified`). Used for filtering content by recipient (user vs assistant). | Medium |
-| **Request cancellation** | `basic/utilities` | No `notifications/cancelled` support. Clients cannot cancel in-flight requests; servers cannot cancel sampling/elicitation. | Medium |
-| **Pagination** | `server/utilities` | No cursor-based pagination for `tools/list`, `resources/list`, `prompts/list`, `resources/templates/list`. All responses return full lists. | Medium |
-| **`notifications/message` for logging** | `server/utilities` | `logging/setLevel` is implemented but server does not emit `notifications/message` log entries to clients via the protocol. | Low |
-| **`MCP-Protocol-Version` header** | `basic/transports` | Not sent on HTTP responses. Required by spec for Streamable HTTP transport. | Low (blocked by Streamable HTTP) |
-
-### Missing from 2025-11-25 (Latest)
-
-| Feature | Spec Section | Gap | Priority |
-|---------|-------------|-----|----------|
-| **Tasks system** (experimental) | `basic/utilities/tasks` | No support for `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `notifications/tasks/status`. Tasks are durable state machines for long-running requests with status lifecycle (`working` → `completed`/`failed`/`cancelled`). | High |
-| **URL mode elicitation** | `client/elicitation` | Only form mode implemented. No URL mode for directing users to external URLs for sensitive interactions (OAuth flows, payment, credential entry). No `URLElicitationRequiredError` (-32042). | High |
-| **Tool calling in sampling** | `client/sampling` | `sampling/createMessage` does not support `tools` array or `toolChoice` parameter. Clients cannot provide tools for the sampled LLM to call. | Medium |
-| **Icons** | Multiple | No `icons` field on `Implementation`, `Tool`, `Prompt`, `Resource`, `ResourceTemplate`. Icons enable richer UI rendering. | Medium |
-| **Enhanced Implementation info** | `basic/lifecycle` | Server `initialize` response does not include `title`, `description`, `icons`, or `websiteUrl` in `serverInfo`. | Low |
-| **SSE resumability** | `basic/transports` | No SSE event IDs for reconnection. Clients cannot resume interrupted SSE streams with `Last-Event-ID`. | Low |
-| **Enhanced OAuth** | `basic/authorization` | No Protected Resource Metadata (RFC 9728), no Client ID Metadata Documents, no Resource Indicators (RFC 8707). | Low |
-| **Default values in elicitation schema** | `client/elicitation` | Elicitation `requestedSchema` does not support `default` on primitives. | Low |
-| **Tool name validation** | `server/tools` | No enforcement of 1-128 character limit, case-sensitive, alphanumeric + underscore/hyphen/dot naming rules. | Low |
+The server targets **MCP specification 2025-11-25** (latest) and is fully conformant. The gap analysis below is historical — all items are now implemented.
 
 ### Conformance Summary
 
@@ -197,6 +210,7 @@ The server currently targets **MCP specification 2025-06-18**. The latest specif
 | **Tool annotations** | Implemented |
 | **Structured output** | Implemented |
 | **Icons** | Implemented |
+| **MCP Apps** (`_meta`, structuredContent passthrough) | Implemented |
 
 ---
 
@@ -285,24 +299,68 @@ Address critical findings from the code review. Harden the server for sustained 
 
 ---
 
-## Phase 6: Codebase Quality -- v0.22
+## Phase 6: Codebase Quality -- v0.23
 
-Refactoring and test improvements to keep the codebase maintainable as it grows.
+Refactoring, dependency cleanup, and test improvements driven by the architecture audit against `ARCHITECTURE.md` principles.
+
+### 6A: Module Splitting (Principle 8: Layered Architecture)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Split `core.py` | Planned | Extract composition, proxy, and server lifecycle into separate modules (currently 1031 lines) |
-| Split `protocol.py` | Planned | Extract session management and subscription tracking into separate modules (currently 953 lines) |
-| Consolidate test files | Planned | Merge `*_coverage.py` and `*_final_coverage.py` test variants into their main test files |
-| Strengthen core tests | Planned | Replace `try/except`+`pytest.skip()` patterns in `test_core.py` with proper behavioral assertions |
+| Split `protocol.py` (1,453 lines) | Planned | Extract `SessionManager` (~120 lines), task management (~150 lines), and SSE event buffering (~100 lines) into `session_manager.py`, `protocol_tasks.py`, `protocol_events.py` |
+| Split `core.py` (1,135 lines) | Planned | Extract component registry (~180 lines) and startup/logging (~200 lines) into `component_registry.py` and `startup.py` |
+| Split `cli.py` (796 lines) | Planned | Extract ~400 lines of embedded example tools/resources into `cli_examples.py` |
+| Split `context.py` (674 lines) | Planned | Extract ContextVar declarations, RequestContext, and messaging utilities into focused sub-modules |
+| Slim `__init__.py` (587 lines) | Planned | Move cloud handler factories and artifact stubs out; reduce to pure re-exports (~150 lines) |
+| Remove import-time side effects | Planned | Defer `_auto_export_cloud_handlers()` from import time to first server creation; stop `setattr` on module namespace |
+| Consolidate duplicate constants | Planned | Remove `endpoints/constants.py` duplicates; import from main `constants.py` |
+| Fix endpoint→protocol coupling | Planned | HTTP endpoints should not import `MCPProtocolHandler` directly; introduce interface or pass via DI |
+| Fix cloud→root coupling | Planned | `cloud/adapters/gcf.py` should receive server via injection, not import `get_or_create_global_server` |
+
+### 6B: Magic String Elimination (Principle 3: No Magic Strings)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Content-type constants | Planned | Replace ~17 instances of `"application/json"`, `"text/plain"`, `"text/markdown"` with `CONTENT_TYPE_*` from `constants.py` |
+| Error code constants | Planned | Replace bare `-32603` in `types/resources.py`, `errors.py`, `cloud/adapters/gcf.py` with `JsonRpcError.INTERNAL_ERROR` |
+| JSON-RPC key constants | Planned | Replace `"jsonrpc"`, `"method"`, `"params"`, `"result"` literals in `testing.py` and `gcf.py` with constants |
+| MCP method constants | Planned | Replace `== "initialize"`, `== "tools/call"` in `endpoints/mcp.py` with `McpMethod.*` enum values |
+
+### 6C: Type Safety Cleanup (Principle 2: orjson Type Safety)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Remove `type: ignore[no-any-return]` | Planned | Replace 4 instances in `__init__.py:183`, `types/tools.py:165,170`, `types/prompts.py:315` with typed intermediate variables |
+
+### 6D: Async Correctness (Principle 4: Async Native)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Fix blocking I/O in config loader | Planned | `composition/config_loader.py` calls sync `open()` + `yaml.safe_load()` from async `apply_to_manager()` — make async or use executor |
+| Fix multiple `asyncio.run()` calls | Planned | `core.py` proxy start/shutdown creates separate event loops — reuse existing loop |
+
+### 6E: Dependency Cleanup (Principle 12: No Unnecessary Dependencies)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Remove `python-multipart` from required | Planned | Transitive via Starlette — never directly imported |
+| Move `psutil` to optional extra | Planned | Already guarded with try/except and full fallback in `config/system_detector.py` |
+| Guard `pyyaml` import | Planned | `composition/config_loader.py` imports at module level; move to inside methods |
+
+### 6F: Test Infrastructure (Principle 14: Test Coverage >= 90%)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Fix `telemetry.py` coverage (63%) | Planned | Add tests for OpenTelemetry-enabled code paths by mocking otel imports |
+| Add MCP Apps tests | Planned | Test `meta` field on `ToolHandler`, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
+| Consolidate test files | Planned | Merge 21 `*_coverage.py` and `*_final_coverage.py` variants into main test files (e.g., 7 `test_parameters*.py` → 1) |
+| Fix skipped tests | Planned | Replace 7 `pytest.skip()` patterns in `test_core_final_coverage.py` with proper assertions or integration tests |
 | Add concurrency tests | Planned | Test concurrent tool execution, parallel sampling, race conditions in context system |
 | Add integration tests | Planned | End-to-end HTTP and STDIO transport tests with real client connections |
-| Remove import-time side effects | Planned | Defer `_auto_export_cloud_handlers()` from import time to first server creation |
-| Document magic numbers | Planned | Replace hardcoded values (fuzzy cutoff `0.6`, `max_sessions=100`, `cleanup_interval=10`) with named constants |
 
 ---
 
-## Phase 7: Advanced Composition -- v0.23
+## Phase 7: Advanced Composition -- v0.24
 
 Enable large-scale MCP architectures where servers are composed from many sources and communicate across boundaries.
 
@@ -317,7 +375,7 @@ Enable large-scale MCP architectures where servers are composed from many source
 
 ---
 
-## Phase 8: Security and Enterprise -- v0.24+
+## Phase 8: Security and Enterprise -- v0.25+
 
 Capabilities required for enterprise deployments with strict compliance, governance, and multi-tenancy requirements.
 
@@ -337,6 +395,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.22.0 | MCP Apps: `_meta` on tools, pre-formatted result passthrough, `structuredContent` for interactive HTML UIs |
 | v0.21.0 | Production hardening: session lifecycle cleanup, request validation, rate limiting, exception handling, thread safety, graceful shutdown, health probes, telemetry |
 | v0.20.0 | MCP 2025-11-25: Streamable HTTP, tasks, URL elicitation, tool calling in sampling, icons, enhanced ServerInfo |
 | v0.19.0 | MCP 2025-06-18: Structured output, tool annotations, pagination, resource templates, resource links, content annotations, cancellation, log notifications |
@@ -357,4 +416,4 @@ Contributions are welcome for any roadmap item. If you are interested in working
 
 ---
 
-*This roadmap is a living document. Priorities may shift based on community feedback, MCP specification changes, and production experience. Last updated: 2025-02.*
+*This roadmap is a living document. Priorities may shift based on community feedback, MCP specification changes, and production experience. Last updated: 2026-02.*

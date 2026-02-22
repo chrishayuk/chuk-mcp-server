@@ -1,13 +1,37 @@
 #!/usr/bin/env python3
 """
-Endpoint constants - Single source of truth for magic strings used across endpoints.
+Endpoint constants - re-exports shared constants from the top-level module
+and defines endpoint-specific values (HTTP status codes, pre-computed headers,
+SSE framing, error messages, URL paths).
 """
 
 from enum import IntEnum
 
+# ---------------------------------------------------------------------------
+# Re-export from top-level constants (single source of truth)
+# ---------------------------------------------------------------------------
+from chuk_mcp_server.constants import (  # noqa: F401
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_MARKDOWN,
+    CONTENT_TYPE_SSE,
+    CORS_ALLOW_ALL,
+    FRAMEWORK_DESCRIPTION,
+    HEADER_CONTENT_TYPE,
+    HEADER_CORS_HEADERS,
+    HEADER_CORS_MAX_AGE,
+    HEADER_CORS_METHODS,
+    HEADER_CORS_ORIGIN,
+    HEADER_MCP_PROTOCOL_VERSION,
+    HEADER_MCP_SESSION_ID,
+    JSONRPC_VERSION,
+    POWERED_BY,
+    SERVER_NAME,
+    JsonRpcError,
+)
+
 
 # ---------------------------------------------------------------------------
-# HTTP status codes
+# HTTP status codes (endpoint-specific)
 # ---------------------------------------------------------------------------
 class HttpStatus(IntEnum):
     OK = 200
@@ -20,46 +44,29 @@ class HttpStatus(IntEnum):
 
 
 # ---------------------------------------------------------------------------
-# JSON-RPC error codes
+# JSON-RPC error codes (endpoint-specific alias with INVALID_REQUEST)
 # ---------------------------------------------------------------------------
 class JsonRpcErrorCode(IntEnum):
-    PARSE_ERROR = -32700
-    INVALID_REQUEST = -32600
-    INTERNAL_ERROR = -32603
-
-
-JSONRPC_VERSION = "2.0"
+    PARSE_ERROR = JsonRpcError.PARSE_ERROR
+    INVALID_REQUEST = JsonRpcError.INVALID_REQUEST
+    INTERNAL_ERROR = JsonRpcError.INTERNAL_ERROR
 
 
 # ---------------------------------------------------------------------------
-# Content types
+# Header names (endpoint-specific extras)
 # ---------------------------------------------------------------------------
-CONTENT_TYPE_JSON = "application/json"
-CONTENT_TYPE_MARKDOWN = "text/markdown"
-CONTENT_TYPE_SSE = "text/event-stream"
-
-
-# ---------------------------------------------------------------------------
-# Header names
-# ---------------------------------------------------------------------------
-HEADER_CORS_ORIGIN = "Access-Control-Allow-Origin"
-HEADER_CORS_METHODS = "Access-Control-Allow-Methods"
-HEADER_CORS_HEADERS = "Access-Control-Allow-Headers"
-HEADER_CORS_MAX_AGE = "Access-Control-Max-Age"
 HEADER_CACHE_CONTROL = "Cache-Control"
-HEADER_CONTENT_TYPE = "Content-Type"
 HEADER_CONNECTION = "Connection"
 HEADER_ALLOW = "Allow"
-HEADER_MCP_SESSION_ID = "Mcp-Session-Id"
 HEADER_ACCEPT = "accept"
 HEADER_AUTHORIZATION = "authorization"
 HEADER_HOST = "host"
+HEADER_LAST_EVENT_ID = "Last-Event-ID"
 
 
 # ---------------------------------------------------------------------------
 # Header values
 # ---------------------------------------------------------------------------
-CORS_ALLOW_ALL = "*"
 CACHE_NO_CACHE = "no-cache"
 CACHE_SHORT = "public, max-age=300"
 CACHE_LONG = "public, max-age=3600, immutable"
@@ -98,18 +105,11 @@ HEADERS_INFO: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
-# Framework / protocol identity
+# Framework / protocol identity (endpoint-specific extras)
 # ---------------------------------------------------------------------------
-SERVER_NAME = "ChukMCPServer"
-POWERED_BY = "chuk_mcp"
-FRAMEWORK_DESCRIPTION = "ChukMCPServer with chuk_mcp"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 MCP_PROTOCOL_FULL = "MCP 2025-03-26"
 MCP_TRANSPORT = "HTTP with SSE"
-
-# MCP 2025-11-25 headers
-HEADER_MCP_PROTOCOL_VERSION = "MCP-Protocol-Version"
-HEADER_LAST_EVENT_ID = "Last-Event-ID"
 METHOD_DELETE = "DELETE"
 
 

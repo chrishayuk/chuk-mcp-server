@@ -20,6 +20,7 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
 # chuk_mcp_server - Fix import path
+from ..constants import JSONRPC_KEY, KEY_ID, KEY_METHOD, KEY_PARAMS, McpMethod
 from ..protocol import MCPProtocolHandler
 from .constants import (
     BEARER_PREFIX,
@@ -53,9 +54,6 @@ from .constants import (
 
 # logger
 logger = logging.getLogger(__name__)
-
-# JSON-RPC response key name
-JSONRPC_VERSION_KEY = "jsonrpc"
 
 
 class MCPEndpoint:
@@ -181,7 +179,7 @@ class MCPEndpoint:
                 )
 
             request_data = orjson.loads(body) if body else {}
-            method = request_data.get("method")
+            method = request_data.get(KEY_METHOD)
 
             logger.debug(f"Processing {method} request")
 
@@ -206,9 +204,9 @@ class MCPEndpoint:
         """Handle regular JSON-RPC request."""
 
         # Validate session ID for non-initialize requests
-        if method != "initialize" and not session_id:
+        if method != McpMethod.INITIALIZE and not session_id:
             return self._error_response(
-                request_data.get("id", "server-error"),
+                request_data.get(KEY_ID, "server-error"),
                 JsonRpcErrorCode.INVALID_REQUEST,
                 "Bad Request: Missing session ID",
             )
@@ -246,7 +244,7 @@ class MCPEndpoint:
         try:
             body = await request.body()
             data = orjson.loads(body) if body else {}
-            request_id = str(data.get("id", ""))
+            request_id = str(data.get(KEY_ID, ""))
 
             if request_id in self._pending_requests:
                 future = self._pending_requests[request_id]
@@ -259,7 +257,7 @@ class MCPEndpoint:
                 )
 
             return self._error_response(
-                data.get("id"),
+                data.get(KEY_ID),
                 JsonRpcErrorCode.INVALID_REQUEST,
                 f"No pending request with ID: {request_id}",
             )
@@ -276,7 +274,7 @@ class MCPEndpoint:
         For notifications (no id): enqueue and return immediately.
         For requests (with id): create a future, enqueue, await response via /mcp/respond.
         """
-        request_id = request.get("id")
+        request_id = request.get(KEY_ID)
         if request_id is None:
             # Notification (e.g., progress) — fire and forget
             await sse_queue.put(request)
@@ -302,12 +300,12 @@ class MCPEndpoint:
         """Handle SSE request for Inspector compatibility."""
 
         created_session_id = None
-        method = request_data.get("method")
+        method = request_data.get(KEY_METHOD)
 
         # Create session ID for initialize requests
-        if method == "initialize":
-            client_info = request_data.get("params", {}).get("clientInfo", {})
-            protocol_version = request_data.get("params", {}).get("protocolVersion", MCP_PROTOCOL_VERSION)
+        if method == McpMethod.INITIALIZE:
+            client_info = request_data.get(KEY_PARAMS, {}).get("clientInfo", {})
+            protocol_version = request_data.get(KEY_PARAMS, {}).get("protocolVersion", MCP_PROTOCOL_VERSION)
             created_session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
             logger.info(f"Created SSE session: {created_session_id[:8]}...")
 
@@ -337,7 +335,7 @@ class MCPEndpoint:
         can send requests (sampling, elicitation, roots, progress) to the client
         as SSE events during tool execution.
         """
-        is_tool_call = method == "tools/call"
+        is_tool_call = method == McpMethod.TOOLS_CALL
 
         if is_tool_call:
             # Bidirectional mode: use queue for server-to-client messages
@@ -354,8 +352,8 @@ class MCPEndpoint:
                     await sse_queue.put(("_final_", response))
                 except Exception as exc:
                     error_response = {
-                        JSONRPC_VERSION_KEY: JSONRPC_VERSION,
-                        "id": request_data.get("id"),
+                        JSONRPC_KEY: JSONRPC_VERSION,
+                        KEY_ID: request_data.get(KEY_ID),
                         "error": {
                             "code": JsonRpcErrorCode.INTERNAL_ERROR,
                             "message": str(exc),
@@ -399,8 +397,8 @@ class MCPEndpoint:
             except Exception as e:
                 logger.error(f"SSE stream error: {e}")
                 error_response = {
-                    JSONRPC_VERSION_KEY: JSONRPC_VERSION,
-                    "id": request_data.get("id"),
+                    JSONRPC_KEY: JSONRPC_VERSION,
+                    KEY_ID: request_data.get(KEY_ID),
                     "error": {
                         "code": JsonRpcErrorCode.INTERNAL_ERROR,
                         "message": str(e),
@@ -426,8 +424,8 @@ class MCPEndpoint:
     def _error_response(self, msg_id: Any, code: int, message: str, session_id: str | None = None) -> Response:
         """Create error response."""
         error_response = {
-            JSONRPC_VERSION_KEY: JSONRPC_VERSION,
-            "id": msg_id,
+            JSONRPC_KEY: JSONRPC_VERSION,
+            KEY_ID: msg_id,
             "error": {"code": code, "message": message},
         }
 

@@ -37,6 +37,7 @@ class ToolHandler:
     annotations: dict[str, bool] | None = None  # MCP tool annotations (hints)
     output_schema: dict[str, Any] | None = None  # MCP structured output schema
     icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
+    meta: dict[str, Any] | None = None  # Tool _meta (MCP Apps ui, etc.)
 
     @classmethod
     def from_function(
@@ -50,6 +51,7 @@ class ToolHandler:
         open_world_hint: bool | None = None,
         output_schema: dict[str, Any] | None = None,
         icons: list[dict[str, Any]] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> "ToolHandler":
         """Create ToolHandler from a function with orjson optimization."""
         from chuk_mcp_server.constants import TOOL_NAME_PATTERN
@@ -121,6 +123,7 @@ class ToolHandler:
             annotations=annotations,
             output_schema=output_schema,
             icons=icons,
+            meta=meta,
         )
 
         # Pre-compute and cache both formats during creation for maximum performance
@@ -146,6 +149,10 @@ class ToolHandler:
             if self.icons:
                 fmt["icons"] = [icon.copy() for icon in self.icons]
 
+            # Add _meta if present (MCP Apps, etc.)
+            if self.meta:
+                fmt["_meta"] = self.meta.copy()
+
             self._cached_mcp_format = fmt
 
         if self._cached_mcp_bytes is None:
@@ -155,18 +162,19 @@ class ToolHandler:
     @property
     def name(self) -> str:
         """Get the tool name."""
-        return self.mcp_tool.name  # type: ignore[no-any-return]
+        result: str = self.mcp_tool.name
+        return result
 
     @property
     def description(self) -> str | None:
         """Get the tool description."""
-        return self.mcp_tool.description  # type: ignore[no-any-return]
+        result: str | None = self.mcp_tool.description
+        return result
 
     def to_mcp_format(self) -> dict[str, Any]:
-        """Convert to MCP tool format using cached version for maximum performance."""
+        """Convert to MCP tool format using orjson deep-copy from cached bytes."""
         if self._cached_mcp_bytes is None:
             self._ensure_cached_formats()
-        # Deep copy via orjson round-trip (faster than copy.deepcopy, uses cached bytes)
         assert self._cached_mcp_bytes is not None
         result: dict[str, Any] = orjson.loads(self._cached_mcp_bytes)
         return result

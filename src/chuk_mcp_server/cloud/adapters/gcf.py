@@ -11,6 +11,21 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+from chuk_mcp_server.constants import (
+    CONTENT_TYPE_JSON,
+    CORS_ALLOW_ALL,
+    HEADER_CONTENT_TYPE,
+    HEADER_CORS_HEADERS,
+    HEADER_CORS_MAX_AGE,
+    HEADER_CORS_METHODS,
+    HEADER_CORS_ORIGIN,
+    HEADER_MCP_SESSION_ID,
+    JSONRPC_KEY,
+    JSONRPC_VERSION,
+    JsonRpcError,
+    McpMethod,
+)
+
 from . import CloudAdapter, cloud_adapter
 
 logger = logging.getLogger(__name__)
@@ -136,12 +151,12 @@ class GCFAdapter(CloudAdapter):
             # Handle GET requests as simple commands
             path = request.path.strip("/")
             path_mapping = {
-                "ping": {"method": "ping", "id": "gcf_ping"},
-                "health": {"method": "tools/list", "id": "gcf_health"},
-                "tools": {"method": "tools/list", "id": "gcf_tools"},
-                "resources": {"method": "resources/list", "id": "gcf_resources"},
+                "ping": {"method": McpMethod.PING, "id": "gcf_ping"},
+                "health": {"method": McpMethod.TOOLS_LIST, "id": "gcf_health"},
+                "tools": {"method": McpMethod.TOOLS_LIST, "id": "gcf_tools"},
+                "resources": {"method": McpMethod.RESOURCES_LIST, "id": "gcf_resources"},
             }
-            return path_mapping.get(path, {"method": "tools/list", "id": "gcf_default"})
+            return path_mapping.get(path, {"method": McpMethod.TOOLS_LIST, "id": "gcf_default"})
 
         elif request.method == "POST":
             # Handle JSON-RPC requests
@@ -150,26 +165,26 @@ class GCFAdapter(CloudAdapter):
                 if data and isinstance(data, dict):
                     return data
                 else:
-                    return {"method": "tools/list", "id": "gcf_invalid_json"}
+                    return {"method": McpMethod.TOOLS_LIST, "id": "gcf_invalid_json"}
             except Exception:
-                return {"method": "tools/list", "id": "gcf_parse_error"}
+                return {"method": McpMethod.TOOLS_LIST, "id": "gcf_parse_error"}
 
         else:
-            return {"method": "tools/list", "id": "gcf_unsupported_method"}
+            return {"method": McpMethod.TOOLS_LIST, "id": "gcf_unsupported_method"}
 
     def _convert_mcp_to_gcf_response(self, response_data: dict | None, session_id: str | None):
         """Convert MCP response to GCF HTTP response."""
         import json
 
         headers = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            HEADER_CONTENT_TYPE: CONTENT_TYPE_JSON,
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+            HEADER_CORS_METHODS: "GET, POST, OPTIONS",
+            HEADER_CORS_HEADERS: "Content-Type, Authorization",
         }
 
         if session_id:
-            headers["Mcp-Session-Id"] = session_id
+            headers[HEADER_MCP_SESSION_ID] = session_id
 
         if response_data:
             body = json.dumps(response_data, separators=(",", ":"))
@@ -180,10 +195,10 @@ class GCFAdapter(CloudAdapter):
     def _cors_preflight_response(self):
         """Auto-generated CORS preflight response."""
         headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "3600",
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
+            HEADER_CORS_METHODS: "GET, POST, OPTIONS",
+            HEADER_CORS_HEADERS: "Content-Type, Authorization",
+            HEADER_CORS_MAX_AGE: "3600",
         }
         return ("", 204, headers)
 
@@ -192,14 +207,14 @@ class GCFAdapter(CloudAdapter):
         import json
 
         headers = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
+            HEADER_CONTENT_TYPE: CONTENT_TYPE_JSON,
+            HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
         }
 
         body = json.dumps(
             {
-                "jsonrpc": "2.0",
-                "error": {"code": -32603, "message": f"GCF Handler Error: {error_message}"},
+                JSONRPC_KEY: JSONRPC_VERSION,
+                "error": {"code": JsonRpcError.INTERNAL_ERROR, "message": f"GCF Handler Error: {error_message}"},
                 "id": "gcf_error",
             },
             separators=(",", ":"),

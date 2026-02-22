@@ -65,7 +65,9 @@ class CompositionConfigLoader:
             Dictionary with statistics about what was loaded
         """
         if not self.config:
-            self.load()
+            import asyncio
+
+            await asyncio.to_thread(self.load)
 
         stats = {
             "imported": 0,

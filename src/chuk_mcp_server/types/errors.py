@@ -8,6 +8,8 @@ and debugging information for tool execution and parameter validation.
 
 from typing import Any
 
+from chuk_mcp_server.constants import JsonRpcError
+
 from .base import MCPError, ValidationError
 
 
@@ -38,8 +40,7 @@ class ToolExecutionError(MCPError):  # type: ignore[misc]
         message = f"Tool '{tool_name}' execution failed: {main_error_msg}"
 
         data = {"tool": tool_name, "error_type": type(error).__name__, "error_message": data_error_msg}
-        # MCPError expects a code parameter - use -32603 for internal error
-        super().__init__(message, code=-32603, data=data)
+        super().__init__(message, code=JsonRpcError.INTERNAL_ERROR, data=data)
 
 
 class URLElicitationRequiredError(Exception):

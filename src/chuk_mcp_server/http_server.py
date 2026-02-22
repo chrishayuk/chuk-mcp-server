@@ -14,6 +14,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .constants import CONTENT_TYPE_JSON, CORS_ALLOW_ALL, HEADER_CORS_ORIGIN, HEADER_MCP_SESSION_ID
 from .endpoint_registry import http_endpoint_registry
 
 # Import optimized endpoints
@@ -39,8 +40,8 @@ def internal_error_response() -> Response:
     return Response(
         '{"error": "Internal server error", "code": 500}',
         status_code=500,
-        media_type="application/json",
-        headers={"Access-Control-Allow-Origin": "*"},
+        media_type=CONTENT_TYPE_JSON,
+        headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
     )
 
 
@@ -115,8 +116,8 @@ class HTTPServer:
             spec = generate_openapi_spec(protocol)
             return Response(
                 orjson.dumps(spec),
-                media_type="application/json",
-                headers={"Access-Control-Allow-Origin": "*"},
+                media_type=CONTENT_TYPE_JSON,
+                headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
             )
 
         return openapi_handler
@@ -141,7 +142,7 @@ class HTTPServer:
                 allow_origins=["*"],
                 allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
                 allow_headers=["*"],
-                expose_headers=["Mcp-Session-Id"],
+                expose_headers=[HEADER_MCP_SESSION_ID],
                 max_age=86400,  # Long cache for preflight
             ),
             # Remove GZip middleware for benchmarking (it adds overhead)

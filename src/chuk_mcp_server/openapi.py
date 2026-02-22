@@ -7,6 +7,7 @@ making it easy to document and explore the server's API.
 
 from typing import Any
 
+from .constants import CONTENT_TYPE_JSON
 from .protocol import MCPProtocolHandler
 
 
@@ -30,7 +31,7 @@ def generate_openapi_spec(protocol: MCPProtocolHandler) -> dict[str, Any]:
                 "requestBody": {
                     "required": True,
                     "content": {
-                        "application/json": {
+                        CONTENT_TYPE_JSON: {
                             "schema": schema,
                         }
                     },
@@ -39,7 +40,7 @@ def generate_openapi_spec(protocol: MCPProtocolHandler) -> dict[str, Any]:
                     "200": {
                         "description": "Tool execution result",
                         "content": {
-                            "application/json": {
+                            CONTENT_TYPE_JSON: {
                                 "schema": {
                                     "type": "object",
                                     "properties": {

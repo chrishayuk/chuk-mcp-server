@@ -7,6 +7,8 @@ Provides actionable errors with fix suggestions and documentation links.
 from difflib import get_close_matches
 from typing import Any
 
+from .constants import JsonRpcError
+
 
 class MCPError(Exception):
     """Structured MCP error with fix suggestions."""
@@ -14,7 +16,7 @@ class MCPError(Exception):
     def __init__(
         self,
         message: str,
-        code: int = -32603,
+        code: int = JsonRpcError.INTERNAL_ERROR,
         suggestion: str | None = None,
         docs_url: str | None = None,
     ):
