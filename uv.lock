@@ -581,7 +581,7 @@ requires-dist = [
     { name = "chuk-artifacts", marker = "extra == 'artifacts'", specifier = ">=0.11.1" },
     { name = "chuk-mcp", specifier = ">=0.9.1" },
     { name = "chuk-sessions", specifier = ">=0.6.1" },
-    { name = "chuk-tool-processor", specifier = ">=0.20.1" },
+    { name = "chuk-tool-processor", specifier = ">=0.22.1" },
     { name = "chuk-virtual-fs", marker = "extra == 'artifacts'", specifier = ">=0.5.1" },
     { name = "google-api-python-client", marker = "extra == 'google-drive'", specifier = ">=2.100.0" },
     { name = "google-auth", marker = "extra == 'google-drive'", specifier = ">=2.23.0" },
