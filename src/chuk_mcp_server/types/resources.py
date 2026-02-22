@@ -11,7 +11,7 @@ import inspect
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import orjson
 from pydantic import BaseModel
@@ -78,22 +78,22 @@ class ResourceHandler:
     @property
     def uri(self) -> str:
         """Get the resource URI."""
-        return self.mcp_resource.uri  # type: ignore[no-any-return]
+        return cast(str, self.mcp_resource.uri)
 
     @property
     def name(self) -> str:
         """Get the resource name."""
-        return self.mcp_resource.name  # type: ignore[no-any-return]
+        return cast(str, self.mcp_resource.name)
 
     @property
     def description(self) -> str | None:
         """Get the resource description."""
-        return self.mcp_resource.description  # type: ignore[no-any-return]
+        return cast("str | None", self.mcp_resource.description)
 
     @property
     def mime_type(self) -> str | None:
         """Get the resource MIME type."""
-        return self.mcp_resource.mimeType  # type: ignore[no-any-return]
+        return cast("str | None", self.mcp_resource.mimeType)
 
     def to_mcp_format(self) -> dict[str, Any]:
         """Convert to MCP resource format using cached version."""

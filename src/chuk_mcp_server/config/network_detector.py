@@ -62,7 +62,7 @@ class NetworkDetector(ConfigDetector):
                 self.logger.debug(f"Using platform-specific port {port} for {env_var}")
                 return port
 
-        # Then check environment variable (most common in production)
+        # Then check environment variable (most common in deployed environments)
         env_port = self.get_env_var(ENV_PORT)
         if env_port:
             try:

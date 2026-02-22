@@ -59,4 +59,4 @@ docker-compose up
 
 - [HTTP Mode](http-mode.md) - HTTP configuration
 - [Cloud Deployment](cloud.md) - Cloud platforms
-- [Production Guide](production.md) - Best practices
+- [Deployment Guide](production.md) - Best practices

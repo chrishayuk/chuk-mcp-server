@@ -269,7 +269,7 @@ To set this up (one-time):
 1. Go to https://pypi.org/manage/account/publishing/
 2. Add a new publisher:
    - **PyPI Project Name**: `chuk-mcp-server`
-   - **Owner**: `chrishayuk`
+   - **Owner**: `chuk-ai`
    - **Repository name**: `chuk-mcp-server`
    - **Workflow name**: `publish.yml`
    - **Environment name**: `pypi`

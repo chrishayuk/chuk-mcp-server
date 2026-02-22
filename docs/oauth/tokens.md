@@ -51,7 +51,7 @@ from chuk_mcp_server.oauth import TokenStore
 token_store = TokenStore(sandbox_id="my-app")
 ```
 
-### Production (Redis)
+### Distributed Deployment (Redis)
 
 ```bash
 export SESSION_PROVIDER=redis
@@ -136,7 +136,7 @@ New refresh token issued on each refresh:
 ```
 
 ### 3. Secure Storage
-Use Redis in production:
+Use Redis for distributed deployments:
 
 ```bash
 export SESSION_PROVIDER=redis

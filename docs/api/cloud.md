@@ -35,4 +35,4 @@ if adapter:
 
 - [Cloud Deployment](../deployment/cloud.md) - Deploy guide
 - [Docker](../deployment/docker.md) - Containers
-- [Production](../deployment/production.md) - Best practices
+- [Deployment Guide](../deployment/production.md) - Best practices

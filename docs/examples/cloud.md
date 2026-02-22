@@ -36,4 +36,4 @@ curl https://REGION-PROJECT.cloudfunctions.net/my-mcp-server/health
 
 - [Cloud Deployment Guide](../deployment/cloud.md) - All platforms
 - [Docker Deployment](../deployment/docker.md) - Containers
-- [Production Guide](../deployment/production.md) - Best practices
+- [Deployment Guide](../deployment/production.md) - Best practices

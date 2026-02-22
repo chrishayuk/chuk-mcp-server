@@ -404,7 +404,7 @@ run()
 
 - [Building Tools](../tools/basic.md) - Create more sophisticated tools
 - [OAuth Authentication](../oauth/overview.md) - Add authentication
-- [Deployment](../deployment/http-mode.md) - Deploy to production
+- [Deployment](../deployment/http-mode.md) - Deploy your server
 
 ## Support
 

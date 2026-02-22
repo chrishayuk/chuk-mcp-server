@@ -139,4 +139,4 @@ mcp.run()
 
 - [Logging](logging.md) - Advanced logging
 - [Performance](performance.md) - Optimization tips
-- [Deployment](../deployment/production.md) - Production setup
+- [Deployment](../deployment/production.md) - Deployment setup

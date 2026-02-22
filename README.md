@@ -8,7 +8,7 @@ Build production-ready [Model Context Protocol](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Tests](https://github.com/chrishayuk/chuk-mcp-server/actions/workflows/test.yml/badge.svg)](https://github.com/chrishayuk/chuk-mcp-server/actions)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ```python
 from chuk_mcp_server import tool, run
@@ -159,7 +159,7 @@ mcp = ChukMCPServer(
 async def process_data(data: str) -> dict:
     return {"processed": data}
 
-mcp.run(host="0.0.0.0", port=8000)  # Production-ready HTTP server
+mcp.run(host="0.0.0.0", port=8000)  # HTTP server
 ```
 
 ### Cloud Deployment (Auto-Detection)
@@ -220,7 +220,7 @@ mcp.run()  # All tools available under unified namespaces
 
 ## 🏆 Performance
 
-ChukMCPServer is built for production:
+ChukMCPServer is built for high throughput:
 
 - **36,348 RPS** peak throughput (performance test)
 - **39,261 RPS** with max optimizations (ultra test)
@@ -248,7 +248,7 @@ Contributions welcome! See [Contributing Guide](https://chrishayuk.github.io/chu
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache 2.0 License - see [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 

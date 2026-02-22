@@ -86,7 +86,7 @@ if __name__ == "__main__":
 - ✅ Scope-based access control
 - ✅ Multi-tenant support with sandbox isolation
 - ✅ Session management
-- ✅ Redis backend for production
+- ✅ Redis backend for distributed deployments
 
 ## OAuth Endpoints
 
@@ -236,7 +236,7 @@ from chuk_mcp_server.oauth import TokenStore
 token_store = TokenStore(sandbox_id="my-app")
 ```
 
-**Production (Redis Backend)**
+**Distributed Deployment (Redis Backend)**
 ```python
 # Set environment variables
 import os
@@ -319,7 +319,7 @@ provider = MyOAuthProvider(
 )
 ```
 
-### 5. HTTPS in Production
+### 5. HTTPS for Deployed Servers
 
 Use HTTPS for all OAuth endpoints:
 

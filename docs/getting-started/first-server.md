@@ -53,7 +53,7 @@ def get_weather(city: str) -> dict:
     Returns:
         Weather information including temperature and conditions
     """
-    # In production, call a real weather API
+    # In deployment, call a real weather API
     # For demo, return mock data
     return {
         "city": city,
@@ -197,7 +197,7 @@ from chuk_mcp_server import resource
 def get_config() -> dict:
     """Server configuration."""
     return {
-        "api_key": "your-api-key",  # In production, use env vars!
+        "api_key": "your-api-key",  # Use env vars for real deployments!
         "default_units": "imperial",
         "cache_timeout": 300
     }
@@ -341,7 +341,7 @@ if __name__ == "__main__":
 
 - [Add to Claude Desktop](claude-desktop.md) - Use your server with Claude
 - [Building Tools](../tools/basic.md) - Learn advanced tool patterns
-- [Deployment](../deployment/http-mode.md) - Deploy to production
+- [Deployment](../deployment/http-mode.md) - Deploy your server
 - [Examples](../examples/weather.md) - See the complete weather server
 
 ## Common Issues

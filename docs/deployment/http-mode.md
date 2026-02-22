@@ -1,6 +1,6 @@
 # HTTP Mode
 
-Deploy your MCP server as an HTTP API for web applications, production services, or testing.
+Deploy your MCP server as an HTTP API for web applications, deployed services, or testing.
 
 ## Quick Start
 
@@ -22,7 +22,7 @@ Access at `http://localhost:8000`
 
 | Feature         | STDIO          | HTTP                 |
 | --------------- | -------------- | -------------------- |
-| **Use Case**    | Claude Desktop | Web APIs, Production |
+| **Use Case**    | Claude Desktop | Web APIs, Deployment |
 | **Transport**   | stdin/stdout   | HTTP/HTTPS           |
 | **Performance** | N/A (local)    | 36,000+ RPS          |
 | **Testing**     | Pipe commands  | curl, browser        |
@@ -44,7 +44,7 @@ def my_tool(param: str) -> dict:
 mcp.run(host="0.0.0.0", port=8000)
 ```
 
-### Production Settings
+### Deployment Settings
 
 ```python
 mcp.run(
@@ -189,7 +189,7 @@ Automatically enabled on Linux/macOS:
 pip install uvloop  # Included by default
 ```
 
-### 3. Production Server
+### 3. Direct Server
 
 Use uvicorn directly for more control:
 
@@ -199,7 +199,7 @@ uvicorn my_server:mcp.app --host 0.0.0.0 --port 8000 --workers 4
 
 ## SSL/HTTPS
 
-For production, use HTTPS:
+For deployment, use HTTPS:
 
 ```python
 mcp.run(
@@ -255,5 +255,5 @@ HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 
 - [Docker Deployment](docker.md) - Containerize your server
 - [Cloud Deployment](cloud.md) - Deploy to AWS, GCP, Azure
-- [Production Guide](production.md) - Best practices
+- [Deployment Guide](production.md) - Best practices
 - [Performance](../performance/benchmarks.md) - Optimization guide
