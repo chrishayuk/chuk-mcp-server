@@ -393,5 +393,68 @@ def test_create_server_capabilities_experimental_none():
     assert "experimental" not in result or result.get("experimental") is None
 
 
+def test_enable_experimental_dynamically():
+    """Test that experimental can be enabled after creation (e.g. when a tool with _meta is registered)."""
+    from chuk_mcp_server.types.capabilities import create_server_capabilities
+
+    caps = create_server_capabilities(tools=True, experimental=None)
+
+    # Initially no experimental
+    result = caps.model_dump(exclude_none=True)
+    assert "experimental" not in result
+
+    # Enable dynamically
+    caps.enable_experimental()
+
+    result = caps.model_dump(exclude_none=True)
+    assert "experimental" in result
+    assert result["experimental"] == {}
+
+
+def test_register_tool_with_meta_enables_experimental():
+    """Test that registering a tool with _meta auto-enables experimental capability."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    # Initially no experimental
+    assert "experimental" not in caps.model_dump(exclude_none=True)
+
+    # Register a tool WITH _meta (simulating an MCP Apps view tool)
+    def dummy_tool(x: str) -> str:
+        """Dummy."""
+        return x
+
+    tool = ToolHandler.from_function(dummy_tool, name="view_tool", meta={"ui": {"resourceUri": "https://example.com"}})
+    protocol.register_tool(tool)
+
+    # experimental should now be enabled
+    result = caps.model_dump(exclude_none=True)
+    assert "experimental" in result
+    assert result["experimental"] == {}
+
+
+def test_register_tool_without_meta_no_experimental():
+    """Test that registering a plain tool does NOT enable experimental."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def plain_tool(x: str) -> str:
+        """Plain."""
+        return x
+
+    tool = ToolHandler.from_function(plain_tool, name="plain")
+    protocol.register_tool(tool)
+
+    # experimental should NOT be enabled
+    result = caps.model_dump(exclude_none=True)
+    assert "experimental" not in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

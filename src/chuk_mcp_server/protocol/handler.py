@@ -146,8 +146,17 @@ class MCPProtocolHandler:
     # ================================================================
 
     def register_tool(self, tool: ToolHandler) -> None:
-        """Register a tool handler."""
+        """Register a tool handler.
+
+        Automatically enables ``experimental`` capability when a tool
+        carries ``_meta`` (e.g. MCP Apps view tools), matching FastMCP
+        behaviour so clients know structured content is supported.
+        """
         self.tools[tool.name] = tool
+        if tool.meta and not getattr(self.capabilities, "experimental", None):
+            if hasattr(self.capabilities, "enable_experimental"):
+                self.capabilities.enable_experimental()
+                logger.debug("Enabled experimental capability (tool with _meta registered)")
         logger.debug(f"Registered tool: {tool.name}")
 
     def register_resource(self, resource: ResourceHandler) -> None:
