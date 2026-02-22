@@ -4,9 +4,9 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.22.0
+## Current State: v0.23.0
 
-**2335 tests | 95.90% coverage | 36K+ RPS**
+**2388 tests | 95.96% coverage | 36K+ RPS | 0 mypy errors**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
@@ -112,7 +112,7 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
 | Blocking file I/O in async path | `composition/config_loader.py:49` | `open()` + `yaml.safe_load()` called synchronously from `async apply_to_manager()` | **Fixed** |
-| Multiple `asyncio.run()` calls | `core.py:877,937,940,945` | Proxy start and shutdown create separate event loops instead of reusing | Open (Phase 6) |
+| Multiple `asyncio.run()` calls | `core.py:877,937,940,945` | Proxy start and shutdown create separate event loops instead of reusing | **Fixed** |
 | `json.dumps()` in GCF adapter | `cloud/adapters/gcf.py:177,207,214` | Used stdlib `json` instead of `orjson` for response serialization | **Fixed** |
 | Per-request event loop | `cloud/adapters/gcf.py:131-139` | Created and closed new `asyncio` event loop for every request | **Fixed** |
 
@@ -179,15 +179,15 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 |---------|----------|-------------|--------|
 | `python-multipart` redundant | `pyproject.toml:20` | Transitive via Starlette — listed as required but never directly imported | Open (Phase 6) |
 | `psutil` should be optional | `pyproject.toml:19`, `config/system_detector.py` | Imported inside try/except with fallback — already behaves as optional | **Fixed** |
-| `pyyaml` imported unconditionally | `composition/config_loader.py:15` | Module-level `import yaml` but only used if composition config is loaded | Low |
+| `pyyaml` imported unconditionally | `composition/config_loader.py:15` | Module-level `import yaml` but only used if composition config is loaded | **Fixed** |
 
 ### Principle 14: Test Coverage >= 90%
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
 | `telemetry.py` at 63% | `telemetry.py` | OpenTelemetry-enabled paths (lines 40-51) completely untested | **Fixed** (100%) |
-| 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | Open (Phase 6) |
-| `pytest.skip()` masking | `test_core_final_coverage.py` | 7 skipped tests for STDIO detection and decorator fallback paths | Open (Phase 6) |
+| 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | Deferred |
+| `pytest.skip()` masking | `test_core_final_coverage.py` | 7 skipped tests for STDIO detection and decorator fallback paths | **Fixed** |
 | MCP Apps `meta` field untested | `types/tools.py` | No tests verify `meta` field on `ToolHandler` or `_meta` in `tools/list` response | **Fixed** |
 | Pre-formatted passthrough untested | `protocol.py:585-595` | No test verifies the `structuredContent` passthrough conditional | **Fixed** |
 
@@ -224,7 +224,7 @@ The server targets **MCP specification 2025-11-25** (latest) and is fully confor
 | **Completions** (complete) | Implemented |
 | **Logging** (setLevel, notifications/message) | Implemented (all 8 MCP levels) |
 | **Cancellation** | Implemented |
-| **Tasks** | Implemented (infrastructure; not auto-wired to tool execution) |
+| **Tasks** | Implemented (auto-wired to tool execution; `strict_init` mode available) |
 | **Pagination** | Implemented |
 | **Streamable HTTP** | Implemented (SSE resumability with Last-Event-ID) |
 | **Content annotations** | Implemented |
@@ -321,7 +321,7 @@ Address critical findings from the code review. Harden the server for sustained 
 
 ---
 
-## Phase 6: Codebase Quality -- v0.23
+## Phase 6: Codebase Quality -- v0.23 (Complete)
 
 Refactoring, dependency cleanup, and test improvements driven by the architecture audit against `ARCHITECTURE.md` principles.
 
@@ -356,13 +356,14 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 | Remove `type: ignore[no-any-return]` | **Done** | Replaced with typed intermediate variables in `types/tools.py`, `types/prompts.py` |
 | Fix `orjson.dumps()` inline usage | **Done** | 28+ instances in endpoints, http_server, registries now use `body: bytes = orjson.dumps(...)` pattern |
 | Replace `json` with `orjson` | **Done** | `config/base.py` now uses `orjson.loads()` instead of `json.loads()` |
+| Zero mypy errors | **Done** | Fixed all 34 mypy errors across 5 files: handler.py (typed returns), telemetry.py (typed assignment), oauth/middleware.py (correct ignore codes), artifacts_context.py (TYPE_CHECKING stubs + typed returns), cli/__init__.py (correct ignore codes), __init__.py (typed stubs) |
 
 ### 6D: Async Correctness (Principle 4: Async Native)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Fix blocking I/O in config loader | **Done** | Changed to `await asyncio.to_thread(self.load)` in `apply_to_manager()` |
-| Fix multiple `asyncio.run()` calls | Planned | `core.py` proxy start/shutdown creates separate event loops — reuse existing loop |
+| Fix multiple `asyncio.run()` calls | **Done** | Consolidated shutdown into `_shutdown_all()` coroutine — single `asyncio.run()` call |
 
 ### 6E: Dependency Cleanup (Principle 12: No Unnecessary Dependencies)
 
@@ -370,7 +371,7 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 |---------|--------|-------------|
 | Remove `python-multipart` from required | Deferred | Needed by OAuth middleware's `request.form()` |
 | Move `psutil` to optional extra | **Done** | Moved to `[project.optional-dependencies]` monitoring group |
-| Guard `pyyaml` import | Planned | `composition/config_loader.py` imports at module level; move to inside methods |
+| Guard `pyyaml` import | **Done** | Moved `import yaml` inside `load()` with helpful `ImportError` message |
 
 ### 6F: Test Infrastructure (Principle 14: Test Coverage >= 90%)
 
@@ -378,10 +379,10 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 |---------|--------|-------------|
 | Fix `telemetry.py` coverage (63%) | **Done** | Added mock-otel tests; now at 100% coverage |
 | Add MCP Apps tests | **Done** | 12 tests for `meta` field, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
-| Consolidate test files | Planned | Merge 21 `*_coverage.py` and `*_final_coverage.py` variants into main test files |
-| Fix skipped tests | Planned | Replace 7 `pytest.skip()` patterns in `test_core_final_coverage.py` with proper assertions |
-| Add concurrency tests | Planned | Test concurrent tool execution, parallel sampling, race conditions in context system |
-| Add integration tests | Planned | End-to-end HTTP and STDIO transport tests with real client connections |
+| Consolidate test files | Deferred | 21 `*_coverage.py` variants — low priority, tests pass and coverage is above 95% |
+| Fix skipped tests | **Done** | Replaced 7 `pytest.skip()` in `test_core_final_coverage.py` with real STDIO detection and shutdown tests; removed dead decorator fallback tests |
+| Add concurrency tests | **Done** | 7 tests: parallel tool execution, context isolation across coroutines, concurrent registration and session creation |
+| Add integration tests | **Done** | 14 tests: full lifecycle flows (init → list → call → task → resource → prompt), strict init enforcement, error handling, multi-session |
 
 ### 6G: MCP Spec Compliance Fixes
 
@@ -391,8 +392,8 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 | Missing logging levels | **Done** | Added `notice`, `alert`, `emergency` mappings to `_handle_logging_set_level` |
 | SSE resumability | **Done** | Connected `Last-Event-ID` header → `get_missed_events()` replay in GET handler |
 | OAuth error sanitization | **Done** | Replaced `str(e)` with generic messages in OAuth error responses |
-| Tasks auto-wire | Planned | Wire `_create_task` into `_handle_tools_call` for long-running tool execution |
-| Pre-initialize enforcement | Planned | Protocol handler should reject method calls on uninitialized sessions |
+| Tasks auto-wire | **Done** | `_create_task` wired into `_handle_tools_call` — tasks created/updated automatically on tool execution |
+| Pre-initialize enforcement | **Done** | `strict_init=True` on `MCPProtocolHandler` rejects requests with invalid/expired session IDs (off by default) |
 
 ---
 
@@ -431,6 +432,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.23.0 | Codebase quality: module splitting, magic string elimination, type safety, async fixes, dependency cleanup, test infrastructure, MCP spec compliance |
 | v0.22.0 | MCP Apps: `_meta` on tools, pre-formatted result passthrough, `structuredContent` for interactive HTML UIs |
 | v0.21.0 | Production hardening: session lifecycle cleanup, request validation, rate limiting, exception handling, thread safety, graceful shutdown, health probes, telemetry |
 | v0.20.0 | MCP 2025-11-25: Streamable HTTP, tasks, URL elicitation, tool calling in sampling, icons, enhanced ServerInfo |

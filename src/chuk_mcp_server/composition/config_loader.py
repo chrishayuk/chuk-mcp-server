@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +41,13 @@ class CompositionConfigLoader:
         """
         if not self.config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
+
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "PyYAML is required for composition config loading. Install with: pip install pyyaml"
+            ) from None
 
         logger.info(f"Loading configuration from {self.config_path}")
 

@@ -202,13 +202,14 @@ async def create_blob_namespace(
         scope = Scope.SESSION
 
     store = get_artifact_store()
-    return await store.create_namespace(
+    ns: NamespaceInfo = await store.create_namespace(
         type=NamespaceType.BLOB,
         scope=scope,
         session_id=session_id,
         user_id=user_id,
         **kwargs,
     )
+    return ns
 
 
 async def create_workspace_namespace(
@@ -252,7 +253,7 @@ async def create_workspace_namespace(
         scope = Scope.SESSION
 
     store = get_artifact_store()
-    return await store.create_namespace(
+    ns: NamespaceInfo = await store.create_namespace(
         type=NamespaceType.WORKSPACE,
         name=name,
         scope=scope,
@@ -261,6 +262,7 @@ async def create_workspace_namespace(
         provider_type=provider_type,
         **kwargs,
     )
+    return ns
 
 
 async def write_blob(namespace_id: str, data: bytes, mime: str | None = None) -> None:
@@ -348,7 +350,8 @@ def get_namespace_vfs(namespace_id: str) -> AsyncVirtualFileSystem:
         >>> entries = await vfs.list_directory("/")
     """
     store = get_artifact_store()
-    return store.get_namespace_vfs(namespace_id)
+    vfs: AsyncVirtualFileSystem = store.get_namespace_vfs(namespace_id)
+    return vfs
 
 
 __all__ = [

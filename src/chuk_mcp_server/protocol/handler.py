@@ -68,6 +68,7 @@ class MCPProtocolHandler:
         oauth_provider_getter: Any = None,
         extra_server_info: dict[str, Any] | None = None,
         rate_limit_rps: float | None = None,
+        strict_init: bool = False,
     ):
         # Use chuk_mcp types directly - no conversion needed
         self.server_info = server_info
@@ -106,6 +107,9 @@ class MCPProtocolHandler:
 
         # SSE event buffer for resumability
         self._sse_events = SSEEventBuffer()
+
+        # Pre-initialize enforcement (off by default for backward compat)
+        self._strict_init = strict_init
 
         # Rate limiter (off by default)
         self._rate_limiter: Any = None
@@ -253,6 +257,22 @@ class MCPProtocolHandler:
                 if not self._rate_limiter.allow(session_id):
                     return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Rate limit exceeded"), None
 
+            # Pre-initialize enforcement: reject requests with stale/invalid session IDs.
+            # Only applies when strict_init=True and session_id is provided but doesn't
+            # map to a valid session (indicating the session expired or was never initialized).
+            # Notifications (no msg_id) and lifecycle methods are always allowed through.
+            if self._strict_init:
+                _PRE_INIT_METHODS = {McpMethod.INITIALIZE, McpMethod.INITIALIZED, McpMethod.PING}
+                if (
+                    session_id is not None
+                    and method not in _PRE_INIT_METHODS
+                    and msg_id is not None  # Skip enforcement for notifications
+                    and self.session_manager.get_session(session_id) is None
+                ):
+                    return self._create_error_response(
+                        msg_id, JsonRpcError.INVALID_REQUEST, "Server not initialized"
+                    ), None
+
             # Route to appropriate handler
             if method == McpMethod.INITIALIZE:
                 return await self._handle_initialize(params, msg_id)
@@ -368,6 +388,7 @@ class MCPProtocolHandler:
         self, params: dict[str, Any], msg_id: Any, oauth_token: str | None = None
     ) -> tuple[dict[str, Any], None]:
         """Handle tools/call request."""
+        task_id: str | None = None
         tool_name: str = params.get("name", "")
         arguments = params.get("arguments", {})
 
@@ -518,10 +539,14 @@ class MCPProtocolHandler:
             if task is not None and msg_id is not None:
                 self._in_flight_requests[msg_id] = task
 
+            # Create a task entry for this tool execution
+            task_id = self._create_task(msg_id, tool_name)
+
             try:
                 # Execute the tool
                 result = await tool_handler.execute(arguments)
             except asyncio.CancelledError:
+                self._update_task_status(task_id, "cancelled")
                 logger.debug(f"Tool execution cancelled for {tool_name} (request {msg_id})")
                 return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Request cancelled"), None
             finally:
@@ -571,6 +596,9 @@ class MCPProtocolHandler:
 
             response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: tool_result}
 
+            # Mark task completed
+            self._update_task_status(task_id, "completed", result=tool_result)
+
             logger.debug(f"🔧 Executed tool {tool_name}")
             return response, None
 
@@ -597,6 +625,8 @@ class MCPProtocolHandler:
                 }, None
 
             logger.error(f"Tool execution error for {tool_name}: {e}")
+            if task_id is not None:
+                self._update_task_status(task_id, "failed", error={"type": type(e).__name__, "message": str(e)})
             return self._create_error_response(
                 msg_id, JsonRpcError.INTERNAL_ERROR, f"Tool execution error: {type(e).__name__}: {e}"
             ), None

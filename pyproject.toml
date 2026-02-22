@@ -201,6 +201,7 @@ module = [
     "chuk_mcp_server.config.*",
     "chuk_mcp_server.core",
     "chuk_mcp_server.protocol",
+    "chuk_mcp_server.protocol.*",
     "chuk_mcp_server.mcp_registry",
     "chuk_mcp_server.endpoint_registry",
     "chuk_mcp_server.endpoints.*",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Final tests to push core.py coverage above 95%"""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,32 +11,80 @@ from chuk_mcp_server.core import ChukMCPServer
 class TestStdioModeDetailed:
     """Test STDIO mode configuration in detail."""
 
-    @pytest.mark.skip(reason="Complex STDIO detection logic - covered by integration tests")
     def test_run_with_stdio_env_var_MCP_STDIO(self):
-        """Test run() detecting stdio via MCP_STDIO env var (lines 747-776)."""
-        pass
+        """Test run() detecting stdio via MCP_STDIO env var."""
+        server = ChukMCPServer()
 
-    @pytest.mark.skip(reason="Complex STDIO detection logic - covered by integration tests")
+        with (
+            patch("chuk_mcp_server.core.logging.basicConfig"),
+            patch.object(
+                server.smart_config.environment_detector,
+                "get_env_var",
+                side_effect=lambda key: "1" if key == "MCP_STDIO" else None,
+            ),
+            patch("chuk_mcp_server.stdio_transport.run_stdio_server") as mock_stdio,
+        ):
+            server.run()
+            mock_stdio.assert_called_once_with(server.protocol)
+
     def test_run_with_stdio_env_var_USE_STDIO(self):
         """Test run() detecting stdio via USE_STDIO env var."""
-        pass
+        server = ChukMCPServer()
 
-    @pytest.mark.skip(reason="Complex STDIO detection logic - covered by integration tests")
+        with (
+            patch("chuk_mcp_server.core.logging.basicConfig"),
+            patch.object(
+                server.smart_config.environment_detector,
+                "get_env_var",
+                side_effect=lambda key: "1" if key == "USE_STDIO" else None,
+            ),
+            patch("chuk_mcp_server.stdio_transport.run_stdio_server") as mock_stdio,
+        ):
+            server.run()
+            mock_stdio.assert_called_once_with(server.protocol)
+
     def test_run_with_stdio_env_var_MCP_TRANSPORT(self):
-        """Test run() detecting stdio via MCP_TRANSPORT env var."""
-        pass
+        """Test run() detecting stdio via MCP_TRANSPORT=stdio env var."""
+        server = ChukMCPServer()
 
-    @pytest.mark.skip(reason="Complex STDIO detection logic - covered by integration tests")
+        with (
+            patch("chuk_mcp_server.core.logging.basicConfig"),
+            patch.object(
+                server.smart_config.environment_detector,
+                "get_env_var",
+                side_effect=lambda key: "stdio" if key == "MCP_TRANSPORT" else None,
+            ),
+            patch("chuk_mcp_server.stdio_transport.run_stdio_server") as mock_stdio,
+        ):
+            server.run()
+            mock_stdio.assert_called_once_with(server.protocol)
+
     def test_run_stdio_mode_logging_suppression(self):
-        """Test that stdio mode suppresses logging to CRITICAL (lines 760-776)."""
-        pass
+        """Test that stdio mode suppresses logging to CRITICAL."""
+        server = ChukMCPServer()
+        import logging
+
+        with (
+            patch("chuk_mcp_server.core.logging.basicConfig") as mock_basic,
+            patch.object(
+                server.smart_config.environment_detector,
+                "get_env_var",
+                side_effect=lambda key: "1" if key == "MCP_STDIO" else None,
+            ),
+            patch("chuk_mcp_server.stdio_transport.run_stdio_server"),
+        ):
+            server.run()
+
+            # Second basicConfig call should set CRITICAL for stdio mode
+            calls = mock_basic.call_args_list
+            assert any(call.kwargs.get("level") == logging.CRITICAL for call in calls)
 
 
 class TestProxyStartupErrors:
     """Test proxy startup error handling."""
 
     def test_run_with_proxy_startup_error(self):
-        """Test run() with proxy startup error (lines 798-799)."""
+        """Test run() with proxy startup error."""
         server = ChukMCPServer()
 
         mock_proxy = MagicMock()
@@ -63,7 +111,7 @@ class TestModuleLoaderErrors:
     """Test module loader error handling."""
 
     def test_run_with_module_loader_error(self):
-        """Test run() with module loader error (lines 811-812)."""
+        """Test run() with module loader error."""
         server = ChukMCPServer()
 
         mock_loader = MagicMock()
@@ -90,7 +138,7 @@ class TestDebugModeBranches:
     """Test debug mode specific branches."""
 
     def test_run_without_debug_no_banner(self):
-        """Test run() without debug mode doesn't print banner (line 781->785)."""
+        """Test run() without debug mode doesn't print banner."""
         server = ChukMCPServer(debug=False)
 
         with (
@@ -114,7 +162,7 @@ class TestProxyManagerNoneBranches:
 
     @pytest.mark.asyncio
     async def test_start_proxy_when_none(self):
-        """Test _start_proxy_if_enabled when proxy_manager is None (line 692->exit)."""
+        """Test _start_proxy_if_enabled when proxy_manager is None."""
         server = ChukMCPServer()
         server.proxy_manager = None
 
@@ -123,7 +171,7 @@ class TestProxyManagerNoneBranches:
 
     @pytest.mark.asyncio
     async def test_stop_proxy_when_none(self):
-        """Test _stop_proxy_if_enabled when proxy_manager is None (line 698->exit)."""
+        """Test _stop_proxy_if_enabled when proxy_manager is None."""
         server = ChukMCPServer()
         server.proxy_manager = None
 
@@ -131,30 +179,34 @@ class TestProxyManagerNoneBranches:
         await server._stop_proxy_if_enabled()
 
 
-class TestAlternativeHandlerPaths:
-    """Test alternative handler creation paths.
+class TestShutdownAll:
+    """Test the _shutdown_all method."""
 
-    Note: Lines 201, 211, 227 are defensive fallback code paths that are
-    difficult to test without modifying the internal decorator implementation.
-    These lines handle the case where decorator objects have a 'handler' attribute,
-    which is typically set by the framework itself. Coverage for these lines
-    would require integration tests with the actual decorator implementation.
-    """
+    @pytest.mark.asyncio
+    async def test_shutdown_all_with_proxy(self):
+        """Test _shutdown_all shuts down protocol and proxy."""
+        server = ChukMCPServer()
 
-    @pytest.mark.skip(reason="Defensive fallback path - requires internal decorator state manipulation")
-    def test_tool_registration_with_existing_handler_attr(self):
-        """Test tool registration when tool has handler attribute (line 201)."""
-        pass
+        mock_proxy = MagicMock()
+        mock_proxy.stop_servers = AsyncMock()
+        server.proxy_manager = mock_proxy
 
-    @pytest.mark.skip(reason="Defensive fallback path - requires internal decorator state manipulation")
-    def test_resource_registration_with_existing_handler_attr(self):
-        """Test resource registration when resource has handler attribute (line 211)."""
-        pass
+        with patch.object(server.protocol, "shutdown", new_callable=AsyncMock) as mock_shutdown:
+            await server._shutdown_all()
 
-    @pytest.mark.skip(reason="Defensive fallback path - requires internal decorator state manipulation")
-    def test_prompt_registration_with_existing_handler_attr(self):
-        """Test prompt registration when prompt has handler attribute (line 227)."""
-        pass
+            mock_shutdown.assert_awaited_once()
+            mock_proxy.stop_servers.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_all_without_proxy(self):
+        """Test _shutdown_all without proxy manager."""
+        server = ChukMCPServer()
+        server.proxy_manager = None
+
+        with patch.object(server.protocol, "shutdown", new_callable=AsyncMock) as mock_shutdown:
+            await server._shutdown_all()
+
+            mock_shutdown.assert_awaited_once()
 
 
 if __name__ == "__main__":

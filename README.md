@@ -7,7 +7,7 @@ Build production-ready [Model Context Protocol](https://modelcontextprotocol.io)
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Tests](https://github.com/chrishayuk/chuk-mcp-server/actions/workflows/test.yml/badge.svg)](https://github.com/chrishayuk/chuk-mcp-server/actions)
-[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ```python

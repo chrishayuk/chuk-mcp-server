@@ -756,6 +756,11 @@ class ChukMCPServer:
             await self.proxy_manager.stop_servers()
             logger.info("Proxy manager stopped")
 
+    async def _shutdown_all(self) -> None:
+        """Shut down protocol handler and proxy in a single event loop."""
+        await self.protocol.shutdown()
+        await self._stop_proxy_if_enabled()
+
     def run(
         self,
         host: str | None = None,
@@ -908,16 +913,10 @@ class ChukMCPServer:
                 )
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
-                # Gracefully shut down protocol handler (drain in-flight requests)
-                asyncio.run(self.protocol.shutdown())
-                # Stop proxy servers on shutdown
-                if self.proxy_manager:
-                    asyncio.run(self._stop_proxy_if_enabled())
+                asyncio.run(self._shutdown_all())
             except Exception as e:
                 logger.error(f"❌ Server error: {e}")
-                # Stop proxy servers on error
-                if self.proxy_manager:
-                    asyncio.run(self._stop_proxy_if_enabled())
+                asyncio.run(self._shutdown_all())
                 raise
 
     def run_stdio(self, debug: bool | None = None, log_level: str = "warning"):
