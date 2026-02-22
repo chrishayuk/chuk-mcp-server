@@ -527,3 +527,72 @@ class TestMCPEndpoint:
         """Test that error responses include MCP-Protocol-Version header."""
         response = self.endpoint._error_response("test-id", -32600, "Bad request")
         assert "MCP-Protocol-Version" in response.headers
+
+    # ================================================================
+    # GET SSE stream tests (streamable-http)
+    # ================================================================
+
+    @pytest.mark.asyncio
+    async def test_handle_get_sse_stream_with_valid_session(self):
+        """Test GET with Accept: text/event-stream and valid session opens SSE stream."""
+        self.mock_protocol.session_manager.get_session.return_value = {
+            "id": "test-session-123",
+            "protocol_version": "2025-03-26",
+        }
+        request = MockRequest(
+            method="GET",
+            headers={"accept": "text/event-stream", "mcp-session-id": "test-session-123"},
+        )
+
+        response = await self.endpoint.handle_request(request)
+
+        assert isinstance(response, StreamingResponse)
+        assert response.media_type == "text/event-stream"
+        assert "Cache-Control" in response.headers
+        assert response.headers["Mcp-Session-Id"] == "test-session-123"
+
+    @pytest.mark.asyncio
+    async def test_handle_get_sse_stream_unknown_session(self):
+        """Test GET with Accept: text/event-stream and unknown session returns error."""
+        self.mock_protocol.session_manager.get_session.return_value = None
+        request = MockRequest(
+            method="GET",
+            headers={"accept": "text/event-stream", "mcp-session-id": "unknown-session"},
+        )
+
+        response = await self.endpoint.handle_request(request)
+
+        assert response.status_code == 400
+        body = orjson.loads(response.body)
+        assert "Session not found" in body["error"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_handle_get_sse_stream_no_session_id(self):
+        """Test GET with Accept: text/event-stream but no session ID returns info page."""
+        request = MockRequest(
+            method="GET",
+            headers={"accept": "text/event-stream"},
+        )
+
+        response = await self.endpoint.handle_request(request)
+
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        body = orjson.loads(response.body)
+        assert body["name"] == "TestServer"
+
+    @pytest.mark.asyncio
+    async def test_handle_get_without_accept_sse_returns_info(self):
+        """Test GET without SSE accept header returns JSON info (unchanged behavior)."""
+        request = MockRequest(
+            method="GET",
+            headers={"accept": "application/json", "mcp-session-id": "test-session-123"},
+        )
+
+        response = await self.endpoint.handle_request(request)
+
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        body = orjson.loads(response.body)
+        assert body["name"] == "TestServer"
+        assert body["status"] == "ready"

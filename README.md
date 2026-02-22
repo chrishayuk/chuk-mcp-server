@@ -89,7 +89,7 @@ Restart Claude Desktop - your tools are now available!
 - **🏷️ Tool Annotations**: `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint`
 - **📊 Structured Output**: `output_schema` on tools with typed `structuredContent` responses
 - **🎨 Icons**: Icons on tools, resources, prompts, and server info
-- **📦 Dual Transport**: STDIO + Streamable HTTP, both with bidirectional support
+- **📦 Dual Transport**: STDIO + Streamable HTTP (with GET SSE streams), both with bidirectional support
 - **🧩 Full Protocol Surface**: Sampling, elicitation, progress, roots, subscriptions, completions, tasks, cancellation
 - **🛡️ Production Hardened**: Rate limiting, request validation, graceful shutdown, thread safety, health probes
 - **🧪 ToolRunner**: Test tools without transport overhead

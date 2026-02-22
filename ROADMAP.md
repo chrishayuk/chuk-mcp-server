@@ -4,16 +4,16 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.23.0
+## Current State: v0.23.1
 
-**2388 tests | 95.96% coverage | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call | 0 mypy errors**
+**2396 tests | 95.79% coverage | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call | 0 mypy errors**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
 | Area | Capabilities |
 |------|-------------|
 | **Core API** | `@tool`, `@resource`, `@resource_template`, `@prompt` decorators with automatic JSON schema generation |
-| **Transports** | Streamable HTTP (Starlette/Uvicorn), STDIO (sync + async), bidirectional on both transports |
+| **Transports** | Streamable HTTP (Starlette/Uvicorn) with GET SSE streams, STDIO (sync + async), bidirectional on both transports |
 | **Protocol** | JSON-RPC 2.0, MCP specification 2025-11-25, full protocol surface |
 | **MCP Apps** | `_meta.ui.resourceUri` on tools, `structuredContent` passthrough for interactive HTML UIs (SEP-1865) |
 | **Context** | Session management, user context, progress reporting, log notifications, resource links, metadata, sampling, elicitation, roots |
@@ -47,7 +47,11 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **Health** | `/health` (liveness), `/health/ready` (readiness), `/health/detailed` (full state) |
 | **Telemetry** | Thin OpenTelemetry wrapper, zero overhead without otel |
 
-### Recently Completed (v0.22.0 -- MCP Apps Support)
+### Recently Completed (v0.23.1 -- Streamable HTTP GET SSE Streams)
+
+- **GET SSE stream for streamable-http** -- `GET /mcp` with `Accept: text/event-stream` and a valid session ID now opens a persistent SSE stream for server-to-client notifications and requests, matching the streamable-http transport spec. Previously, GET always returned a JSON info page, which caused Claude.ai's MCP connector to hang. Backward compatible: GET without the SSE accept header still returns the JSON info page.
+
+### Previously Completed (v0.22.0 -- MCP Apps Support)
 
 - **Tool `_meta` field** -- `meta` parameter on `@tool` decorator, `ChukMCPServer.tool()`, and `ToolHandler.from_function()`. Emitted as `_meta` in `tools/list` responses. Enables `_meta.ui.resourceUri` for MCP Apps (SEP-1865, `io.modelcontextprotocol/ui`)
 - **Pre-formatted result passthrough** -- When a tool returns `{"content": [...], "structuredContent": {...}}`, the protocol handler passes it through directly instead of re-wrapping via `format_content()`. This enables view-tool decorators (e.g., `chuk-view-schemas`) to return complete MCP Apps responses
@@ -226,7 +230,7 @@ The server targets **MCP specification 2025-11-25** (latest) and is fully confor
 | **Cancellation** | Implemented |
 | **Tasks** | Implemented (auto-wired to tool execution; `strict_init` mode available) |
 | **Pagination** | Implemented |
-| **Streamable HTTP** | Implemented (SSE resumability with Last-Event-ID) |
+| **Streamable HTTP** | Implemented (GET SSE streams, SSE resumability with Last-Event-ID) |
 | **Content annotations** | Implemented |
 | **Tool annotations** | Implemented |
 | **Structured output** | Implemented |
@@ -432,6 +436,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.23.1 | Streamable HTTP GET SSE streams: `GET /mcp` opens persistent SSE stream for server-to-client messages, fixes Claude.ai connector compatibility |
 | v0.23.0 | Codebase quality: module splitting, magic string elimination, type safety, async fixes, dependency cleanup, test infrastructure, MCP spec compliance |
 | v0.22.0 | MCP Apps: `_meta` on tools, pre-formatted result passthrough, `structuredContent` for interactive HTML UIs |
 | v0.21.0 | Production hardening: session lifecycle cleanup, request validation, rate limiting, exception handling, thread safety, graceful shutdown, health probes, telemetry |

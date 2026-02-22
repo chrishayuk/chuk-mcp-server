@@ -64,6 +64,8 @@ class MCPEndpoint:
         self.protocol = protocol_handler
         # Pending server-to-client requests awaiting responses via /mcp/respond
         self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        # Active GET SSE streams per session (streamable-http)
+        self._get_streams: dict[str, asyncio.Queue[Any]] = {}
 
     def _get_protocol_version(self, session_id: str | None) -> str:
         """Get the negotiated protocol version for a session."""
@@ -104,7 +106,10 @@ class MCPEndpoint:
         terminated = self.protocol.terminate_session(session_id)
         if not terminated:
             return self._error_response(
-                None, JsonRpcErrorCode.INVALID_REQUEST, f"Unknown session: {session_id}", session_id
+                None,
+                JsonRpcErrorCode.INVALID_REQUEST,
+                f"Unknown session: {session_id}",
+                session_id,
             )
 
         headers: dict[str, str] = {
@@ -125,9 +130,10 @@ class MCPEndpoint:
         )
 
     async def _handle_get(self, request: Request) -> Response:
-        """Handle GET request - return server info or resume SSE stream."""
+        """Handle GET request - server info, SSE resumption, or streamable-http SSE stream."""
         session_id = request.headers.get(HEADER_MCP_SESSION_ID.lower())
         last_event_id = request.headers.get(HEADER_LAST_EVENT_ID.lower())
+        accept_header = request.headers.get(HEADER_ACCEPT, "")
 
         # SSE resumption: replay missed events
         if last_event_id and session_id:
@@ -147,6 +153,24 @@ class MCPEndpoint:
                     headers=self._sse_headers(session_id),
                 )
 
+        # Streamable-HTTP: open persistent SSE stream for server-to-client messages
+        if CONTENT_TYPE_SSE in accept_header and session_id:
+            session = self.protocol.session_manager.get_session(session_id)
+            if not session:
+                return self._error_response(
+                    None,
+                    JsonRpcErrorCode.INVALID_REQUEST,
+                    "Session not found",
+                    session_id,
+                )
+
+            logger.debug(f"Opening GET SSE stream for session {session_id[:8]}...")
+            return StreamingResponse(
+                self._get_stream_generator(session_id),
+                media_type=CONTENT_TYPE_SSE,
+                headers=self._sse_headers(session_id),
+            )
+
         # Default: return server information
         server_info = {
             "name": self.protocol.server_info.name,
@@ -160,6 +184,27 @@ class MCPEndpoint:
 
         body: bytes = orjson.dumps(server_info)
         return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_ONLY)
+
+    async def _get_stream_generator(self, session_id: str):
+        """Long-lived SSE generator for streamable-http GET streams.
+
+        Keeps the connection open so the server can push notifications
+        and requests to the client at any time.
+        """
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._get_streams[session_id] = queue
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    # Shutdown signal
+                    break
+                for line in self._emit_sse_event(SSE_EVENT_MESSAGE, item, session_id):
+                    yield line
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._get_streams.pop(session_id, None)
 
     async def _handle_post(self, request: Request) -> Response:
         """Handle POST request - process MCP protocol messages."""
@@ -223,7 +268,11 @@ class MCPEndpoint:
             return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, "Internal error")
 
     async def _handle_json_request(
-        self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
+        self,
+        request_data: dict[str, Any],
+        session_id: str | None,
+        method: str,
+        oauth_token: str | None = None,
     ) -> Response:
         """Handle regular JSON-RPC request."""
 
@@ -322,7 +371,10 @@ class MCPEndpoint:
             self._pending_requests.pop(request_id_str, None)
 
     async def _handle_sse_request(
-        self, request_data: dict[str, Any], session_id: str | None, oauth_token: str | None = None
+        self,
+        request_data: dict[str, Any],
+        session_id: str | None,
+        oauth_token: str | None = None,
     ) -> StreamingResponse:
         """Handle SSE request for Inspector compatibility."""
 
@@ -355,7 +407,11 @@ class MCPEndpoint:
         return tuple(lines)
 
     async def _sse_stream_generator(
-        self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
+        self,
+        request_data: dict[str, Any],
+        session_id: str | None,
+        method: str,
+        oauth_token: str | None = None,
     ):
         """Generate SSE stream response with bidirectional support.
 
