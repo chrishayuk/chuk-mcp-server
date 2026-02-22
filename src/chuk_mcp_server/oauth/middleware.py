@@ -471,13 +471,14 @@ class OAuthMiddleware:
             )
 
         except Exception as e:
+            logger.error(f"Authorization callback error: {e}")
             return HTMLResponse(
-                f"""
+                """
                 <html>
                     <head><title>Error</title></head>
                     <body>
                         <h1>Authorization Error</h1>
-                        <p>{html.escape(str(e))}</p>
+                        <p>An unexpected error occurred during authorization.</p>
                     </body>
                 </html>
                 """,

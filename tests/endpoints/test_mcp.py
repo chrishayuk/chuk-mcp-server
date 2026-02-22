@@ -229,7 +229,7 @@ class TestMCPEndpoint:
         body = orjson.loads(response.body)
         assert body["jsonrpc"] == "2.0"
         assert body["error"]["code"] == -32603
-        assert "Internal error: Test error" in body["error"]["message"]
+        assert body["error"]["message"] == "Internal error"
 
     @pytest.mark.asyncio
     async def test_handle_post_sse_request_initialize(self):
@@ -336,7 +336,7 @@ class TestMCPEndpoint:
         assert error_response["jsonrpc"] == "2.0"
         assert error_response["id"] == "test-id"
         assert error_response["error"]["code"] == -32603
-        assert "Test SSE error" in error_response["error"]["message"]
+        assert error_response["error"]["message"] == "Internal server error"
 
         assert stream_data[3] == "\r\n"
 

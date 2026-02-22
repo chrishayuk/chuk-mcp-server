@@ -508,8 +508,7 @@ class TestStdioSyncTransportHandleMessage:
         mock_send_error.assert_called_once()
         args = mock_send_error.call_args[0]
         assert args[0] == -32603  # INTERNAL_ERROR
-        assert "Internal error" in args[1]
-        assert "unexpected failure" in args[1]
+        assert args[1] == "Internal error"
 
     @pytest.mark.asyncio
     async def test_handle_message_with_new_session_id(self, transport):

@@ -320,7 +320,7 @@ class TestStdioTransport:
             error_args = mock_send_error.call_args[0]
             assert error_args[0] == 1  # request id
             assert error_args[1] == -32603  # Internal error code
-            assert "Handler error" in error_args[2]
+            assert error_args[2] == "Internal error"
 
     @pytest.mark.asyncio
     async def test_send_response_with_no_writer(self, stdio_transport):

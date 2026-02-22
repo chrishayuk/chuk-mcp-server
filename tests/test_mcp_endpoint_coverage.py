@@ -257,7 +257,7 @@ class TestHandleRespondEdgeCases:
 
         assert "error" in resp_body
         assert resp_body["error"]["code"] == -32603  # INTERNAL_ERROR
-        assert "boom" in resp_body["error"]["message"]
+        assert resp_body["error"]["message"] == "Internal error"
 
 
 # ---------------------------------------------------------------------------

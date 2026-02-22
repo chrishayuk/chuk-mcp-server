@@ -328,12 +328,12 @@ class TestGCFAdapter:
     def test_error_response(self):
         """Test error response generation."""
         adapter = GCFAdapter(Mock())
-        body, status, headers = adapter._error_response("Test error")
+        body, status, headers = adapter._error_response()
 
         assert status == 500
         response_data = json.loads(body)
         assert response_data["error"]["code"] == -32603
-        assert "Test error" in response_data["error"]["message"]
+        assert response_data["error"]["message"] == "Internal server error"
 
     @patch("logging.getLogger")
     def test_apply_gcf_optimizations(self, mock_get_logger):

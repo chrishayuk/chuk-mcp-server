@@ -6,10 +6,13 @@ Google Cloud Functions Adapter
 Modular adapter that automatically configures ChukMCPServer for Google Cloud Functions.
 """
 
+import asyncio
 import logging
 import os
 from collections.abc import Callable
 from typing import Any
+
+import orjson
 
 from chuk_mcp_server.constants import (
     CONTENT_TYPE_JSON,
@@ -125,25 +128,26 @@ class GCFAdapter(CloudAdapter):
             # Convert GCF request to MCP format
             mcp_request = self._convert_gcf_to_mcp_request(request)
 
-            # Process through MCP protocol (async handling)
-            import asyncio
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
+            # Reuse existing event loop or create one for this thread
             try:
-                response_data, session_id = loop.run_until_complete(
-                    self.server.protocol.handle_request(mcp_request, session_id=None)
-                )
-            finally:
-                loop.close()
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            response_data, session_id = loop.run_until_complete(
+                self.server.protocol.handle_request(mcp_request, session_id=None)
+            )
 
             # Convert response back to GCF format
             return self._convert_mcp_to_gcf_response(response_data, session_id)
 
         except Exception as e:
             logger.error(f"GCF request handling error: {e}")
-            return self._error_response(str(e))
+            return self._error_response()
 
     def _convert_gcf_to_mcp_request(self, request) -> dict[str, Any]:
         """Convert GCF request to MCP JSON-RPC format."""
@@ -166,7 +170,8 @@ class GCFAdapter(CloudAdapter):
                     return data
                 else:
                     return {"method": McpMethod.TOOLS_LIST, "id": "gcf_invalid_json"}
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse GCF request JSON: %s", e)
                 return {"method": McpMethod.TOOLS_LIST, "id": "gcf_parse_error"}
 
         else:
@@ -174,8 +179,6 @@ class GCFAdapter(CloudAdapter):
 
     def _convert_mcp_to_gcf_response(self, response_data: dict | None, session_id: str | None):
         """Convert MCP response to GCF HTTP response."""
-        import json
-
         headers = {
             HEADER_CONTENT_TYPE: CONTENT_TYPE_JSON,
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
@@ -187,10 +190,10 @@ class GCFAdapter(CloudAdapter):
             headers[HEADER_MCP_SESSION_ID] = session_id
 
         if response_data:
-            body = json.dumps(response_data, separators=(",", ":"))
+            body: str = orjson.dumps(response_data).decode()
             return (body, 200, headers)
         else:
-            return ('{"status": "ok"}', 200, headers)
+            return ('{"status":"ok"}', 200, headers)
 
     def _cors_preflight_response(self):
         """Auto-generated CORS preflight response."""
@@ -202,23 +205,20 @@ class GCFAdapter(CloudAdapter):
         }
         return ("", 204, headers)
 
-    def _error_response(self, error_message: str):
-        """Generate error response."""
-        import json
-
+    def _error_response(self):
+        """Generate generic error response (details logged server-side)."""
         headers = {
             HEADER_CONTENT_TYPE: CONTENT_TYPE_JSON,
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
         }
 
-        body = json.dumps(
+        body: str = orjson.dumps(
             {
                 JSONRPC_KEY: JSONRPC_VERSION,
-                "error": {"code": JsonRpcError.INTERNAL_ERROR, "message": f"GCF Handler Error: {error_message}"},
+                "error": {"code": JsonRpcError.INTERNAL_ERROR, "message": "Internal server error"},
                 "id": "gcf_error",
             },
-            separators=(",", ":"),
-        )
+        ).decode()
 
         return (body, 500, headers)
 
@@ -297,9 +297,9 @@ def get_gcf_handler():
         return adapter.get_handler()
 
     # Try to auto-setup if not already done
-    from ... import get_or_create_global_server
+    import chuk_mcp_server
 
-    server = get_or_create_global_server()
+    server = chuk_mcp_server.get_or_create_global_server()
 
     gcf_adapter = GCFAdapter(server)
     if gcf_adapter.is_compatible() and gcf_adapter.setup():

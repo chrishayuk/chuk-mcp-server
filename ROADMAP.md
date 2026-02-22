@@ -6,7 +6,7 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ## Current State: v0.22.0
 
-**2334 tests | 96.23% coverage | 36K+ RPS**
+**2335 tests | 95.90% coverage | 36K+ RPS**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
@@ -113,6 +113,8 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 |---------|----------|-------------|--------|
 | Blocking file I/O in async path | `composition/config_loader.py:49` | `open()` + `yaml.safe_load()` called synchronously from `async apply_to_manager()` | **Fixed** |
 | Multiple `asyncio.run()` calls | `core.py:877,937,940,945` | Proxy start and shutdown create separate event loops instead of reusing | Open (Phase 6) |
+| `json.dumps()` in GCF adapter | `cloud/adapters/gcf.py:177,207,214` | Used stdlib `json` instead of `orjson` for response serialization | **Fixed** |
+| Per-request event loop | `cloud/adapters/gcf.py:131-139` | Created and closed new `asyncio` event loop for every request | **Fixed** |
 
 ### Principle 2: orjson Type Safety
 
@@ -123,6 +125,7 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 | `type: ignore[no-any-return]` | `types/prompts.py:315` | `get_prompt()` return — replace with typed variable | **Fixed** |
 | `orjson.dumps()` inline usage | `endpoints/*.py`, `http_server.py`, etc. | ~28 instances of `orjson.dumps()` passed directly without typed variable assignment | **Fixed** |
 | `json` module usage | `config/base.py` | Used `json.loads()` instead of `orjson.loads()` | **Fixed** |
+| `.decode()` without typed var | `types/resources.py`, `types/content.py` | ~7 instances of `orjson.dumps().decode()` without typed variable assignment | **Fixed** |
 
 ### Principle 3: No Magic Strings
 
@@ -146,20 +149,29 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
-| `protocol.py` too large | `protocol.py` | 1,500+ lines with session management, protocol dispatch, task management, SSE buffering | Open (Phase 6) |
-| `core.py` too large | `core.py` | 1,135 lines with server lifecycle, decorators, composition, component queries, startup printing | Open (Phase 6) |
-| `context.py` too large | `context.py` | 674 lines with 12 ContextVars, RequestContext, 30+ getter/setters, messaging utilities | Open (Phase 6) |
-| `cli.py` too large | `cli.py` | 796 lines with 400+ lines of embedded examples that should be separate | Open (Phase 6) |
-| `__init__.py` too large | `__init__.py` | 587 lines with cloud handler factories, artifact stubs, 50+ exports | Open (Phase 6) |
-| Import-time side effects | `__init__.py:344-395` | `_auto_export_cloud_handlers()` runs at import time, modifies module namespace via `setattr` | Open (Phase 6) |
-| Endpoint→Protocol coupling | `endpoints/mcp.py`, `endpoints/health.py` | HTTP endpoints import `MCPProtocolHandler` directly | Open (Phase 6) |
-| Cloud→Root coupling | `cloud/adapters/gcf.py:285` | GCF adapter imports `get_or_create_global_server` from `__init__.py` | Open (Phase 6) |
+| `protocol.py` too large | `protocol/` package | 1,500 → 1,379 lines; extracted SessionManager, SSEEventBuffer, TaskManager | **Fixed** |
+| `core.py` too large | `core.py` | 1,135 → 1,061 lines; extracted ComponentRegistry and startup functions | **Fixed** |
+| `context.py` too large | `context.py` | 674 lines — highly cohesive, splitting deferred | Deferred |
+| `cli.py` too large | `cli/` package | 797 → 251 lines; extracted templates to `cli/templates.py` | **Fixed** |
+| `__init__.py` too large | `__init__.py` | 589 → 355 lines; extracted cloud functions to `cloud/exports.py` | **Fixed** |
+| Import-time side effects | `__init__.py` | `_auto_export_cloud_handlers()` still runs at import; body moved to `cloud/exports.py` | Deferred |
+| Endpoint→Protocol coupling | `endpoints/mcp.py`, `endpoints/health.py` | Clean DI already in place | Deferred |
+| Cloud→Root coupling | `cloud/adapters/gcf.py` | Changed to lazy `import chuk_mcp_server` pattern | **Fixed** |
+
+### Principle 7: Thread Safety by Default
+
+| Finding | Location | Description | Status |
+|---------|----------|-------------|--------|
+| Unprotected global store | `artifacts_context.py:56` | `_global_artifact_store` read/write without lock | **Fixed** |
 
 ### Principle 10: Structured Error Handling
 
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
 | OAuth error leakage | `oauth/middleware.py:349-392` | `str(e)` and `traceback.format_exc()` leaked to clients in error responses | **Fixed** |
+| `str(e)` in client responses | `protocol/handler.py`, `endpoints/mcp.py`, `stdio_transport.py` | ~15 instances of `str(e)` exposed in JSON-RPC error messages | **Fixed** |
+| `str(e)` in HTML response | `oauth/middleware.py:480` | Exception details exposed in authorization error HTML page | **Fixed** |
+| Bare `except` without logging | `cloud/adapters/gcf.py:169` | JSON parse error silently swallowed | **Fixed** |
 
 ### Principle 12: No Unnecessary Dependencies
 
@@ -317,15 +329,15 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Split `protocol.py` (1,500+ lines) | Planned | Extract `SessionManager` (~120 lines), task management (~150 lines), and SSE event buffering (~100 lines) into `session_manager.py`, `protocol_tasks.py`, `protocol_events.py` |
-| Split `core.py` (1,135 lines) | Planned | Extract component registry (~180 lines) and startup/logging (~200 lines) into `component_registry.py` and `startup.py` |
-| Split `cli.py` (796 lines) | Planned | Extract ~400 lines of embedded example tools/resources into `cli_examples.py` |
-| Split `context.py` (674 lines) | Planned | Extract ContextVar declarations, RequestContext, and messaging utilities into focused sub-modules |
-| Slim `__init__.py` (587 lines) | Planned | Move cloud handler factories and artifact stubs out; reduce to pure re-exports (~150 lines) |
-| Remove import-time side effects | Planned | Defer `_auto_export_cloud_handlers()` from import time to first server creation; stop `setattr` on module namespace |
+| Split `protocol.py` (1,500 → 1,379 lines) | **Done** | Converted to `protocol/` package: extracted `SessionManager` to `session_manager.py` (84 lines), `SSEEventBuffer` to `events.py` (41 lines), `TaskManager` to `tasks.py` (164 lines). Backward-compat properties preserve test access. |
+| Split `core.py` (1,135 → 1,061 lines) | **Done** | Extracted `ComponentRegistry` to `component_registry.py` (104 lines) and startup functions to `startup.py` (139 lines). Decorator methods delegate to `self._components`. |
+| Split `cli.py` (797 → 251 lines) | **Done** | Converted to `cli/` package: extracted ~567 lines of scaffold templates to `cli/templates.py`. Added `encoding="utf-8"` to `write_text()` calls for Windows CI compat. |
+| Slim `__init__.py` (589 → 355 lines) | **Done** | Moved cloud handler getters, detection helpers, auto-export, and examples to `cloud/exports.py` (266 lines). Functions use lazy `import chuk_mcp_server` for test patch compat. |
+| Skip `context.py` (674 lines) | Deferred | Highly cohesive — 11 ContextVars with paired accessors sharing private state; splitting adds coupling with no benefit |
+| Remove import-time side effects | Deferred | `_auto_export_cloud_handlers()` still runs at import; body moved to `cloud/exports.py` |
 | Consolidate duplicate constants | **Done** | `endpoints/constants.py` now re-exports from main `constants.py` |
-| Fix endpoint→protocol coupling | Planned | HTTP endpoints should not import `MCPProtocolHandler` directly; introduce interface or pass via DI |
-| Fix cloud→root coupling | Planned | `cloud/adapters/gcf.py` should receive server via injection, not import `get_or_create_global_server` |
+| Fix endpoint→protocol coupling | Deferred | Already clean DI in `mcp.py`; `health.py` module global is acceptable |
+| Fix cloud→root coupling | **Done** | `cloud/adapters/gcf.py` now uses `import chuk_mcp_server` lazy pattern instead of relative `from ... import` |
 
 ### 6B: Magic String Elimination (Principle 3: No Magic Strings)
 

@@ -34,7 +34,7 @@ def format_content(content: Any, annotations: Annotations | dict[str, Any] | Non
         text_content = create_text_content(content)
         result = [content_to_dict(text_content)]
     elif isinstance(content, dict):
-        json_str = orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
+        json_str: str = orjson.dumps(content, option=orjson.OPT_INDENT_2).decode()
         text_content = create_text_content(json_str)
         result = [content_to_dict(text_content)]
     elif isinstance(content, TextContent | ImageContent | AudioContent | EmbeddedResource):
@@ -42,8 +42,8 @@ def format_content(content: Any, annotations: Annotations | dict[str, Any] | Non
         result = [content_to_dict(content)]
     elif isinstance(content, BaseModel):
         # Handle other Pydantic models by converting to dict first
-        json_str = orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
-        text_content = create_text_content(json_str)
+        json_str2: str = orjson.dumps(content.model_dump(), option=orjson.OPT_INDENT_2).decode()
+        text_content = create_text_content(json_str2)
         result = [content_to_dict(text_content)]
     elif isinstance(content, list):
         items = []

@@ -160,18 +160,22 @@ class ResourceHandler:
 
         if mime_type == CONTENT_TYPE_JSON:
             if isinstance(result, dict | list):
-                # 🚀 Use orjson for 2-3x faster JSON serialization
-                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
+                # Use orjson for 2-3x faster JSON serialization
+                formatted: str = orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return formatted
             else:
-                return str(orjson.dumps(result).decode())
+                formatted2: str = orjson.dumps(result).decode()
+                return formatted2
         elif mime_type in (CONTENT_TYPE_MARKDOWN, CONTENT_TYPE_PLAIN):
             if isinstance(result, dict | list):
-                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
+                formatted3: str = orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return formatted3
             return str(result)
         else:
             # For unknown MIME types, convert to string with orjson
             if isinstance(result, dict | list):
-                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
+                formatted4: str = orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return formatted4
             else:
                 return str(result)
 
@@ -303,7 +307,8 @@ class ResourceTemplateHandler:
             if isinstance(result, BaseModel):
                 result = result.model_dump()
             if isinstance(result, dict | list):
-                return str(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode())
+                formatted: str = orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+                return formatted
             return str(result)
         except Exception as e:
             raise MCPError(

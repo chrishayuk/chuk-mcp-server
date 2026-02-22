@@ -217,10 +217,10 @@ class MCPEndpoint:
 
         except orjson.JSONDecodeError as e:
             logger.error(f"JSON decode error: {e}")
-            return self._error_response(None, JsonRpcErrorCode.PARSE_ERROR, f"Parse error: {str(e)}")
+            return self._error_response(None, JsonRpcErrorCode.PARSE_ERROR, "Parse error")
         except Exception as e:
             logger.error(f"Request processing error: {e}")
-            return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, f"Internal error: {str(e)}")
+            return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, "Internal error")
 
     async def _handle_json_request(
         self, request_data: dict[str, Any], session_id: str | None, method: str, oauth_token: str | None = None
@@ -289,10 +289,11 @@ class MCPEndpoint:
             )
 
         except orjson.JSONDecodeError as e:
-            return self._error_response(None, JsonRpcErrorCode.PARSE_ERROR, f"Parse error: {str(e)}")
+            logger.debug(f"JSON decode error in /mcp/respond: {e}")
+            return self._error_response(None, JsonRpcErrorCode.PARSE_ERROR, "Parse error")
         except Exception as e:
             logger.error(f"Error handling /mcp/respond: {e}")
-            return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, f"Internal error: {str(e)}")
+            return self._error_response(None, JsonRpcErrorCode.INTERNAL_ERROR, "Internal error")
 
     async def _send_to_client_http(self, request: dict[str, Any], sse_queue: asyncio.Queue[Any]) -> dict[str, Any]:
         """Send a server-to-client request via SSE and await response.
@@ -428,7 +429,7 @@ class MCPEndpoint:
                     KEY_ID: request_data.get(KEY_ID),
                     "error": {
                         "code": JsonRpcErrorCode.INTERNAL_ERROR,
-                        "message": str(e),
+                        "message": "Internal server error",
                     },
                 }
                 for line in self._emit_sse_event(SSE_EVENT_ERROR, error_response, session_id):

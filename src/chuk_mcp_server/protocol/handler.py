@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-# src/chuk_mcp_server/protocol.py
+# src/chuk_mcp_server/protocol/handler.py
 """
 ChukMCPServer Protocol Handler - Core MCP protocol implementation with chuk_mcp
 """
 
 import asyncio
 import logging
-import time
 import uuid
 from collections.abc import Callable
 from typing import Any
 
-from .constants import (
+from ..constants import (
     JSONRPC_KEY,
     JSONRPC_VERSION,
     KEY_CAPABILITIES,
@@ -39,7 +38,7 @@ from .constants import (
     McpMethod,
     McpTaskMethod,
 )
-from .types import (
+from ..types import (
     PromptHandler,
     ResourceHandler,
     ServerCapabilities,
@@ -47,82 +46,11 @@ from .types import (
     ToolHandler,
     format_content,
 )
+from .events import SSEEventBuffer
+from .session_manager import SessionManager
+from .tasks import TaskManager
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Session Management
-# ============================================================================
-
-
-class SessionManager:
-    """Manage MCP sessions."""
-
-    def __init__(
-        self,
-        max_sessions: int = 1000,
-        cleanup_interval: int = 100,
-        on_evict: Callable[[str], None] | None = None,
-        protected_sessions: Callable[[], set[str]] | None = None,
-    ):
-        self.sessions: dict[str, dict[str, Any]] = {}
-        self.max_sessions = max_sessions
-        self.cleanup_interval = cleanup_interval
-        self._creation_count = 0
-        self._on_evict = on_evict
-        self._protected_sessions = protected_sessions
-
-    def _evict_session(self, session_id: str) -> None:
-        """Evict a session, calling the on_evict callback first."""
-        if self._on_evict is not None:
-            self._on_evict(session_id)
-        del self.sessions[session_id]
-
-    def create_session(self, client_info: dict[str, Any], protocol_version: str) -> str:
-        """Create a new session."""
-        self._creation_count += 1
-
-        # Periodic cleanup of expired sessions
-        if self._creation_count % self.cleanup_interval == 0:
-            self.cleanup_expired()
-
-        # Evict oldest session if at capacity
-        if len(self.sessions) >= self.max_sessions:
-            protected = self._protected_sessions() if self._protected_sessions else set()
-            candidates = [sid for sid in self.sessions if sid not in protected]
-            if candidates:
-                oldest_sid = min(candidates, key=lambda sid: self.sessions[sid]["last_activity"])
-                self._evict_session(oldest_sid)
-                logger.debug(f"Evicted oldest session {oldest_sid[:8]}... (max_sessions reached)")
-
-        session_id = str(uuid.uuid4()).replace("-", "")
-        self.sessions[session_id] = {
-            "id": session_id,
-            "client_info": client_info,
-            "protocol_version": protocol_version,
-            "created_at": time.time(),
-            "last_activity": time.time(),
-        }
-        logger.debug(f"Created session {session_id[:8]}... for {client_info.get('name', 'unknown')}")
-        return session_id
-
-    def get_session(self, session_id: str) -> dict[str, Any] | None:
-        """Get session by ID."""
-        return self.sessions.get(session_id)
-
-    def update_activity(self, session_id: str) -> None:
-        """Update session last activity."""
-        if session_id in self.sessions:
-            self.sessions[session_id]["last_activity"] = time.time()
-
-    def cleanup_expired(self, max_age: int = 3600) -> None:
-        """Remove expired sessions."""
-        now = time.time()
-        expired = [sid for sid, session in self.sessions.items() if now - session["last_activity"] > max_age]
-        for sid in expired:
-            self._evict_session(sid)
-            logger.debug(f"Cleaned up expired session {sid[:8]}...")
 
 
 # ============================================================================
@@ -173,23 +101,45 @@ class MCPProtocolHandler:
         # In-flight request tracking for cancellation support
         self._in_flight_requests: dict[Any, asyncio.Task[Any]] = {}
 
-        # Task store for MCP 2025-11-25 Tasks system
-        self._task_store: dict[str, dict[str, Any]] = {}
+        # Task manager for MCP 2025-11-25 Tasks system
+        self._task_manager = TaskManager()
 
-        # SSE event buffer for resumability (session_id → list of (event_id, data))
-        self._sse_event_buffers: dict[str, list[tuple[int, dict[str, Any]]]] = {}
-        self._sse_event_counters: dict[str, int] = {}
+        # SSE event buffer for resumability
+        self._sse_events = SSEEventBuffer()
 
         # Rate limiter (off by default)
         self._rate_limiter: Any = None
         if rate_limit_rps is not None:
-            from .rate_limiter import TokenBucketRateLimiter
+            from ..rate_limiter import TokenBucketRateLimiter
 
             burst = rate_limit_rps * 2  # Default burst = 2x rate
             self._rate_limiter = TokenBucketRateLimiter(rate=rate_limit_rps, burst=burst)
 
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
+
+    # ================================================================
+    # Backward-compatible properties for extracted subsystems
+    # ================================================================
+
+    @property
+    def _task_store(self) -> dict[str, dict[str, Any]]:
+        """Backward-compat access to the task store dict."""
+        return self._task_manager._task_store
+
+    @property
+    def _sse_event_buffers(self) -> dict[str, list[tuple[int, dict[str, Any]]]]:
+        """Backward-compat access to SSE event buffers."""
+        return self._sse_events._buffers
+
+    @property
+    def _sse_event_counters(self) -> dict[str, int]:
+        """Backward-compat access to SSE event counters."""
+        return self._sse_events._counters
+
+    # ================================================================
+    # Registration
+    # ================================================================
 
     def register_tool(self, tool: ToolHandler) -> None:
         """Register a tool handler."""
@@ -293,7 +243,7 @@ class MCPProtocolHandler:
 
             # Set session context for this request
             if session_id:
-                from .context import set_session_id
+                from ..context import set_session_id
 
                 set_session_id(session_id)
                 self.session_manager.update_activity(session_id)
@@ -418,7 +368,7 @@ class MCPProtocolHandler:
         self, params: dict[str, Any], msg_id: Any, oauth_token: str | None = None
     ) -> tuple[dict[str, Any], None]:
         """Handle tools/call request."""
-        tool_name = params.get("name")
+        tool_name: str = params.get("name", "")
         arguments = params.get("arguments", {})
 
         # Validate arguments
@@ -427,7 +377,7 @@ class MCPProtocolHandler:
                 msg_id, JsonRpcError.INVALID_PARAMS, f"arguments must be an object, got {type(arguments).__name__}"
             ), None
 
-        from .constants import MAX_ARGUMENT_KEYS
+        from ..constants import MAX_ARGUMENT_KEYS
 
         if len(arguments) > MAX_ARGUMENT_KEYS:
             return self._create_error_response(
@@ -437,7 +387,7 @@ class MCPProtocolHandler:
             ), None
 
         if tool_name not in self.tools:
-            from .errors import format_unknown_tool_error
+            from ..errors import format_unknown_tool_error
 
             error_msg = format_unknown_tool_error(tool_name, list(self.tools.keys()))
             return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, error_msg), None
@@ -494,7 +444,7 @@ class MCPProtocolHandler:
 
                         # Also set user_id in context for application code to access
                         # This allows apps to use get_current_user_id() instead of passing _user_id everywhere
-                        from .context import set_user_id
+                        from ..context import set_user_id
 
                         set_user_id(user_id)
 
@@ -504,11 +454,11 @@ class MCPProtocolHandler:
                     # OAuth validation failed for a tool that requires it
                     logger.error(f"OAuth validation failed for {tool_name}: {e}")
                     return self._create_error_response(
-                        msg_id, JsonRpcError.INTERNAL_ERROR, f"OAuth validation failed: {str(e)}"
+                        msg_id, JsonRpcError.INTERNAL_ERROR, "OAuth validation failed"
                     ), None
 
             # Set up server-to-client context if client supports it
-            from .context import (
+            from ..context import (
                 set_elicitation_fn,
                 set_log_fn,
                 set_progress_notify_fn,
@@ -611,7 +561,7 @@ class MCPProtocolHandler:
                         tool_result["structuredContent"] = result.model_dump()
 
             # Add resource links if any were accumulated during execution
-            from .context import get_resource_links
+            from ..context import get_resource_links
 
             links = get_resource_links()
             if links:
@@ -626,10 +576,10 @@ class MCPProtocolHandler:
 
         except Exception as e:
             # Check for URL elicitation required (MCP 2025-11-25)
-            from .types.errors import URLElicitationRequiredError
+            from ..types.errors import URLElicitationRequiredError
 
             if isinstance(e, URLElicitationRequiredError):
-                from .constants import MCP_ERROR_URL_ELICITATION_REQUIRED
+                from ..constants import MCP_ERROR_URL_ELICITATION_REQUIRED
 
                 error_data: dict[str, Any] = {"url": e.url}
                 if e.description is not None:
@@ -648,7 +598,7 @@ class MCPProtocolHandler:
 
             logger.error(f"Tool execution error for {tool_name}: {e}")
             return self._create_error_response(
-                msg_id, JsonRpcError.INTERNAL_ERROR, f"Tool execution error: {str(e)}"
+                msg_id, JsonRpcError.INTERNAL_ERROR, f"Tool execution error: {type(e).__name__}: {e}"
             ), None
 
     def _client_supports_sampling(self, tool_call_params: dict[str, Any]) -> bool:
@@ -657,7 +607,7 @@ class MCPProtocolHandler:
             return False
 
         # Find the session and check client capabilities
-        from .context import get_session_id
+        from ..context import get_session_id
 
         session_id = get_session_id()
         if not session_id:
@@ -675,7 +625,7 @@ class MCPProtocolHandler:
         if self._send_to_client is None:
             return False
 
-        from .context import get_session_id
+        from ..context import get_session_id
 
         session_id = get_session_id()
         if not session_id:
@@ -693,7 +643,7 @@ class MCPProtocolHandler:
         if self._send_to_client is None:
             return False
 
-        from .context import get_session_id
+        from ..context import get_session_id
 
         session_id = get_session_id()
         if not session_id:
@@ -787,7 +737,7 @@ class MCPProtocolHandler:
             error = response[KEY_ERROR]
             raise RuntimeError(f"Sampling request failed: {error.get('message', 'Unknown error')}")
 
-        result = response.get(KEY_RESULT, {})
+        result: dict[str, Any] = response.get(KEY_RESULT, {})
         return result
 
     async def send_elicitation_request(
@@ -838,7 +788,8 @@ class MCPProtocolHandler:
             error = response[KEY_ERROR]
             raise RuntimeError(f"Elicitation request failed: {error.get('message', 'Unknown error')}")
 
-        return response.get(KEY_RESULT, {})
+        elicitation_result: dict[str, Any] = response.get(KEY_RESULT, {})
+        return elicitation_result
 
     async def send_progress_notification(
         self,
@@ -906,8 +857,9 @@ class MCPProtocolHandler:
             error = response[KEY_ERROR]
             raise RuntimeError(f"Roots request failed: {error.get('message', 'Unknown error')}")
 
-        result = response.get(KEY_RESULT, {})
-        return result.get("roots", [])
+        roots_result: dict[str, Any] = response.get(KEY_RESULT, {})
+        roots_list: list[dict[str, Any]] = roots_result.get("roots", [])
+        return roots_list
 
     async def notify_resource_updated(self, uri: str) -> None:
         """
@@ -1053,13 +1005,13 @@ class MCPProtocolHandler:
 
         except Exception as e:
             logger.error(f"Completion error: {e}")
-            return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, f"Completion error: {str(e)}"), None
+            return self._create_error_response(msg_id, JsonRpcError.INTERNAL_ERROR, "Completion error"), None
 
     async def _handle_resources_subscribe(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle resources/subscribe request."""
         uri = params.get("uri", "")
 
-        from .context import get_session_id
+        from ..context import get_session_id
 
         session_id = get_session_id()
         if session_id:
@@ -1072,7 +1024,7 @@ class MCPProtocolHandler:
         """Handle resources/unsubscribe request."""
         uri = params.get("uri", "")
 
-        from .context import get_session_id
+        from ..context import get_session_id
 
         session_id = get_session_id()
         if session_id and session_id in self._resource_subscriptions:
@@ -1113,7 +1065,7 @@ class MCPProtocolHandler:
         except Exception as e:
             logger.error(f"Resource read error for {uri}: {e}")
             return self._create_error_response(
-                msg_id, JsonRpcError.INTERNAL_ERROR, f"Resource read error: {str(e)}"
+                msg_id, JsonRpcError.INTERNAL_ERROR, f"Resource read error: {type(e).__name__}: {e}"
             ), None
 
     async def _handle_resources_templates_list(
@@ -1198,7 +1150,7 @@ class MCPProtocolHandler:
         except Exception as e:
             logger.error(f"Prompt generation error for {prompt_name}: {e}")
             return self._create_error_response(
-                msg_id, JsonRpcError.INTERNAL_ERROR, f"Prompt generation error: {str(e)}"
+                msg_id, JsonRpcError.INTERNAL_ERROR, f"Prompt generation error: {type(e).__name__}: {e}"
             ), None
 
     async def _handle_logging_set_level(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
@@ -1255,7 +1207,7 @@ class MCPProtocolHandler:
         Returns:
             Result dict with paginated items and optional nextCursor.
         """
-        from .constants import DEFAULT_PAGE_SIZE, KEY_CURSOR, KEY_NEXT_CURSOR
+        from ..constants import DEFAULT_PAGE_SIZE, KEY_CURSOR, KEY_NEXT_CURSOR
 
         cursor = params.get(KEY_CURSOR)
         offset = 0
@@ -1290,8 +1242,7 @@ class MCPProtocolHandler:
         eviction/expiry callbacks to prevent memory leaks.
         """
         self._resource_subscriptions.pop(session_id, None)
-        self._sse_event_buffers.pop(session_id, None)
-        self._sse_event_counters.pop(session_id, None)
+        self._sse_events.cleanup_session(session_id)
         if self._rate_limiter is not None:
             self._rate_limiter.cleanup(session_id)
         logger.debug(f"Cleaned up state for session {session_id[:8]}...")
@@ -1311,7 +1262,7 @@ class MCPProtocolHandler:
                     pass
         # Simpler heuristic: protect sessions that have SSE event counters,
         # since those are actively streaming.
-        for sid in self._sse_event_counters:
+        for sid in self._sse_events._counters:
             if sid in self.session_manager.sessions:
                 protected.add(sid)
         return protected
@@ -1343,22 +1294,15 @@ class MCPProtocolHandler:
 
     def next_sse_event_id(self, session_id: str) -> int:
         """Get next SSE event ID for a session."""
-        counter = self._sse_event_counters.get(session_id, 0) + 1
-        self._sse_event_counters[session_id] = counter
-        return counter
+        return self._sse_events.next_event_id(session_id)
 
     def buffer_sse_event(self, session_id: str, event_id: int, data: dict[str, Any]) -> None:
         """Buffer an SSE event for resumability."""
-        buf = self._sse_event_buffers.setdefault(session_id, [])
-        buf.append((event_id, data))
-        # Keep only last 100 events
-        if len(buf) > 100:
-            self._sse_event_buffers[session_id] = buf[-100:]
+        self._sse_events.buffer_event(session_id, event_id, data)
 
     def get_missed_events(self, session_id: str, last_event_id: int) -> list[tuple[int, dict[str, Any]]]:
         """Get events after the given event ID for resumability."""
-        buf = self._sse_event_buffers.get(session_id, [])
-        return [(eid, data) for eid, data in buf if eid > last_event_id]
+        return self._sse_events.get_missed_events(session_id, last_event_id)
 
     # ================================================================
     # Tasks system (MCP 2025-11-25)
@@ -1366,19 +1310,7 @@ class MCPProtocolHandler:
 
     def _create_task(self, request_id: Any, tool_name: str) -> str:
         """Create a task for a tool execution."""
-        task_id = str(uuid.uuid4()).replace("-", "")[:16]
-        self._task_store[task_id] = {
-            "id": task_id,
-            "status": "working",
-            "requestId": request_id,
-            "toolName": tool_name,
-            "createdAt": time.time(),
-            "updatedAt": time.time(),
-            "result": None,
-            "error": None,
-            "message": None,
-        }
-        return task_id
+        return self._task_manager.create_task(request_id, tool_name)
 
     def _update_task_status(
         self,
@@ -1389,79 +1321,29 @@ class MCPProtocolHandler:
         message: str | None = None,
     ) -> None:
         """Update a task's status."""
-        task = self._task_store.get(task_id)
-        if task is None:
-            return
-        task["status"] = status
-        task["updatedAt"] = time.time()
-        if result is not None:
-            task["result"] = result
-        if error is not None:
-            task["error"] = error
-        if message is not None:
-            task["message"] = message
+        self._task_manager.update_task_status(task_id, status, result=result, error=error, message=message)
 
     async def _handle_tasks_get(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle tasks/get request."""
-        task_id = params.get("id", "")
-        task = self._task_store.get(task_id)
-        if task is None:
-            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
-        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+        return await self._task_manager.handle_tasks_get(params, msg_id, self._create_error_response)
 
     async def _handle_tasks_result(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle tasks/result request."""
-        task_id = params.get("id", "")
-        task = self._task_store.get(task_id)
-        if task is None:
-            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
-        if task["status"] not in ("completed", "failed"):
-            return self._create_error_response(
-                msg_id, JsonRpcError.INVALID_PARAMS, f"Task {task_id} is not yet complete (status: {task['status']})"
-            ), None
-        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+        return await self._task_manager.handle_tasks_result(params, msg_id, self._create_error_response)
 
     async def _handle_tasks_list(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle tasks/list request with pagination."""
-        tasks_list = list(self._task_store.values())
-        result = self._paginate(tasks_list, "tasks", params)
-        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: result}, None
+        return await self._task_manager.handle_tasks_list(params, msg_id, self._paginate)
 
     async def _handle_tasks_cancel(self, params: dict[str, Any], msg_id: Any) -> tuple[dict[str, Any], None]:
         """Handle tasks/cancel request."""
-        task_id = params.get("id", "")
-        task = self._task_store.get(task_id)
-        if task is None:
-            return self._create_error_response(msg_id, JsonRpcError.INVALID_PARAMS, f"Unknown task: {task_id}"), None
-        if task["status"] in ("completed", "failed", "cancelled"):
-            return self._create_error_response(
-                msg_id, JsonRpcError.INVALID_PARAMS, f"Task {task_id} is already in terminal state: {task['status']}"
-            ), None
-        self._update_task_status(task_id, "cancelled")
-        # Also cancel the in-flight request if tracked
-        request_id = task.get("requestId")
-        if request_id is not None:
-            in_flight = self._in_flight_requests.pop(request_id, None)
-            if in_flight is not None:
-                in_flight.cancel()
-        return {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: task}, None
+        return await self._task_manager.handle_tasks_cancel(
+            params, msg_id, self._create_error_response, self._in_flight_requests
+        )
 
     async def send_task_status_notification(self, task_id: str) -> None:
         """Send a notifications/tasks/status to the client."""
-        if self._send_to_client is None:
-            return
-        task = self._task_store.get(task_id)
-        if task is None:
-            return
-        notification = {
-            JSONRPC_KEY: JSONRPC_VERSION,
-            KEY_METHOD: McpTaskMethod.NOTIFICATIONS_TASKS_STATUS,
-            KEY_PARAMS: task,
-        }
-        try:
-            await self._send_to_client(notification)
-        except Exception as e:
-            logger.debug(f"Failed to send task status notification: {e}")
+        await self._task_manager.send_task_status_notification(task_id, self._send_to_client)
 
     async def shutdown(self, timeout: float = 5.0) -> None:
         """Gracefully shut down the protocol handler.
@@ -1489,7 +1371,7 @@ class MCPProtocolHandler:
         self.session_manager.sessions.clear()
 
         # Clear task store
-        self._task_store.clear()
+        self._task_manager.clear()
 
         logger.debug("Protocol handler shut down")
 

@@ -150,10 +150,10 @@ class StdioTransport:
                 break
             except (orjson.JSONDecodeError, ValueError) as e:
                 logger.debug(f"Parse error in stdio listener: {e}")
-                await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
+                await self._send_error(None, JsonRpcError.PARSE_ERROR, "Parse error")
             except Exception as e:
                 logger.debug(f"Error in stdio listener: {e}")
-                await self._send_error(None, JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
+                await self._send_error(None, JsonRpcError.INTERNAL_ERROR, "Internal error")
 
     async def _handle_message(self, message: str) -> None:
         """
@@ -213,11 +213,11 @@ class StdioTransport:
 
         except (orjson.JSONDecodeError, ValueError) as e:
             logger.debug(f"Invalid JSON in stdio message: {e}")
-            await self._send_error(None, JsonRpcError.PARSE_ERROR, f"Parse error: {str(e)}")
+            await self._send_error(None, JsonRpcError.PARSE_ERROR, "Parse error")
         except Exception as e:
             logger.debug(f"Error handling stdio message: {e}")
             request_id = request_data.get(KEY_ID) if "request_data" in locals() else None
-            await self._send_error(request_id, JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
+            await self._send_error(request_id, JsonRpcError.INTERNAL_ERROR, "Internal error")
 
     async def _send_response(self, response: dict[str, Any]) -> None:
         """
@@ -416,7 +416,7 @@ class StdioSyncTransport:
                     error_response = {
                         JSONRPC_KEY: JSONRPC_VERSION,
                         KEY_ID: None,
-                        KEY_ERROR: {"code": JsonRpcError.INTERNAL_ERROR, "message": f"Transport error: {str(e)}"},
+                        KEY_ERROR: {"code": JsonRpcError.INTERNAL_ERROR, "message": "Transport error"},
                     }
                     self._send_response(error_response)
 
@@ -459,7 +459,7 @@ class StdioSyncTransport:
             self._send_error(JsonRpcError.PARSE_ERROR, "Parse error")
         except Exception as e:
             logger.error(f"Message handling error: {e}")
-            self._send_error(JsonRpcError.INTERNAL_ERROR, f"Internal error: {str(e)}")
+            self._send_error(JsonRpcError.INTERNAL_ERROR, "Internal error")
 
     def _send_response(self, response: dict[str, Any]) -> None:
         """

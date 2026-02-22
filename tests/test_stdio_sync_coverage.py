@@ -69,7 +69,6 @@ class TestStdioSyncTransportCoverage:
                 assert mock_write.called
                 written = "".join(call.args[0] for call in mock_write.call_args_list)
                 assert "Transport error" in written
-                assert "Test exception in loop" in written
 
     @pytest.mark.asyncio
     async def test_handle_message_json_decode_error(self, transport, mock_protocol):
@@ -98,8 +97,7 @@ class TestStdioSyncTransportCoverage:
             # Should call _send_error with internal error
             mock_send_error.assert_called_once()
             assert mock_send_error.call_args[0][0] == -32603
-            assert "Internal error" in mock_send_error.call_args[0][1]
-            assert "Handler error" in mock_send_error.call_args[0][1]
+            assert mock_send_error.call_args[0][1] == "Internal error"
 
     def test_send_response_with_exception(self, transport):
         """Test _send_response with exception during send (lines 84-85)."""

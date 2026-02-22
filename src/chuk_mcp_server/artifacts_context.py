@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import threading
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, cast
 
@@ -54,6 +55,7 @@ _artifact_store: ContextVar[ArtifactStore | None] = ContextVar("artifact_store",
 
 # Global singleton store (fallback when context not available)
 _global_artifact_store: ArtifactStore | None = None
+_global_store_lock = threading.Lock()
 
 
 def set_artifact_store(store: ArtifactStore) -> None:
@@ -94,9 +96,9 @@ def get_artifact_store() -> ArtifactStore:
         return store
 
     # Fall back to global singleton
-    global _global_artifact_store
-    if _global_artifact_store is not None:
-        return _global_artifact_store
+    with _global_store_lock:
+        if _global_artifact_store is not None:
+            return _global_artifact_store
 
     # No store available
     raise RuntimeError(
@@ -118,7 +120,8 @@ def set_global_artifact_store(store: ArtifactStore) -> None:
         >>> set_global_artifact_store(store)
     """
     global _global_artifact_store
-    _global_artifact_store = store
+    with _global_store_lock:
+        _global_artifact_store = store
     logger.debug("Set global artifact store")
 
 
@@ -154,7 +157,8 @@ def clear_artifact_store() -> None:
     """
     global _global_artifact_store
     _artifact_store.set(None)
-    _global_artifact_store = None
+    with _global_store_lock:
+        _global_artifact_store = None
     logger.debug("Cleared artifact store from context and global")
 
 
