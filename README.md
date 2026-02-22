@@ -162,6 +162,53 @@ async def process_data(data: str) -> dict:
 mcp.run(host="0.0.0.0", port=8000)  # HTTP server
 ```
 
+### MCP Apps — Rich UI Views in Claude.ai
+
+Render interactive charts, maps, tables, and more directly in Claude.ai using [MCP Apps](https://modelcontextprotocol.io) structured content.
+
+```python
+from chuk_mcp_server import ChukMCPServer
+
+mcp = ChukMCPServer(name="my-view-server", version="1.0.0")
+
+@mcp.tool(
+    name="show_chart",
+    description="Show sales data as a chart.",
+    meta={
+        "ui": {
+            "resourceUri": "ui://my-view-server/chart",
+            "viewUrl": "https://chuk-mcp-ui-views.fly.dev/chart/v1",
+        }
+    },
+)
+async def show_chart(chart_type: str = "bar") -> dict:
+    return {
+        "content": [{"type": "text", "text": "Sales chart."}],
+        "structuredContent": {
+            "type": "chart",
+            "version": "1.0",
+            "title": "Q1 Sales",
+            "chartType": chart_type,
+            "data": [{"label": "Revenue", "values": [
+                {"label": "Jan", "value": 4200},
+                {"label": "Feb", "value": 5100},
+                {"label": "Mar", "value": 4800},
+            ]}],
+        },
+    }
+
+mcp.run()
+```
+
+**How it works:**
+- `meta.ui.resourceUri` — a `ui://` URI identifying the view
+- `meta.ui.viewUrl` — HTTPS URL serving the view's HTML/JS bundle
+- The server **automatically** registers an MCP resource at the `resourceUri` that fetches the HTML from `viewUrl`
+- The server **automatically** enables the `experimental` capability
+- Claude.ai reads the HTML via `resources/read`, renders it in an iframe, and passes `structuredContent` as the data payload
+
+See [`examples/mcp_apps_view_example.py`](examples/mcp_apps_view_example.py) for a complete example.
+
 ### Cloud Deployment (Auto-Detection)
 
 ```python
@@ -239,6 +286,7 @@ See [Performance Benchmarks](https://IBM.github.io/chuk-mcp-server/benchmarks) f
 
 ### Real-World Examples
 
+- **[chuk-mcp-chart](https://github.com/chrishayuk/chuk-mcp-chart)** - Interactive chart server with MCP Apps views
 - **[chuk-mcp-linkedin](https://github.com/IBM/chuk-mcp-linkedin)** - LinkedIn OAuth integration
 - **[chuk-mcp-stage](https://github.com/IBM/chuk-mcp-stage)** - 3D scene management with Google Drive
 

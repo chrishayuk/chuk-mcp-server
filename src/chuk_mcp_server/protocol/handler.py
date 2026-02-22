@@ -146,9 +146,82 @@ class MCPProtocolHandler:
     # ================================================================
 
     def register_tool(self, tool: ToolHandler) -> None:
-        """Register a tool handler."""
+        """Register a tool handler.
+
+        Automatically enables ``experimental`` capability when a tool
+        carries ``_meta`` (e.g. MCP Apps view tools), matching FastMCP
+        behaviour so clients know structured content is supported.
+
+        When a tool has ``_meta.ui.resourceUri`` and ``_meta.ui.viewUrl``,
+        a resource handler is auto-registered so that clients (e.g. Claude.ai)
+        can ``resources/read`` the view HTML inline.
+        """
         self.tools[tool.name] = tool
+        if tool.meta and not getattr(self.capabilities, "experimental", None):
+            if hasattr(self.capabilities, "enable_experimental"):
+                self.capabilities.enable_experimental()
+                logger.debug("Enabled experimental capability (tool with _meta registered)")
+
+        # Auto-register view resource when tool has _meta.ui with viewUrl
+        if tool.meta:
+            self._maybe_register_view_resource(tool.meta)
+
         logger.debug(f"Registered tool: {tool.name}")
+
+    def _maybe_register_view_resource(self, meta: dict[str, Any]) -> None:
+        """Auto-register an MCP resource for a view tool's HTML.
+
+        When a tool declares ``_meta.ui.resourceUri`` (a ``ui://`` URI) and
+        ``_meta.ui.viewUrl`` (the HTTPS URL serving the view HTML), the
+        server automatically creates a resource handler that fetches the
+        HTML from the CDN and serves it via ``resources/read``.  This is
+        required for clients like Claude.ai that load MCP Apps views inline.
+        """
+        if not isinstance(meta, dict):
+            return
+        ui = meta.get("ui")
+        if not ui:
+            return
+
+        resource_uri = ui.get("resourceUri", "")
+        view_url = ui.get("viewUrl")
+
+        if not resource_uri or not view_url:
+            return
+
+        # Only handle ui:// scheme URIs
+        if not resource_uri.startswith("ui://"):
+            return
+
+        # Skip if already registered
+        if resource_uri in self.resources:
+            return
+
+        try:
+            import httpx  # noqa: F811 — lazy import, transitive dep
+
+            async def _fetch_view_html() -> str:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(view_url, follow_redirects=True)
+                    resp.raise_for_status()
+                    return resp.text
+
+            # Derive a short name from the URI (e.g. "ui://server/chart" → "chart")
+            view_name = resource_uri.rsplit("/", 1)[-1] if "/" in resource_uri else resource_uri
+
+            resource = ResourceHandler.from_function(
+                uri=resource_uri,
+                func=_fetch_view_html,
+                name=view_name,
+                description=f"{view_name.title()} view HTML",
+                mime_type="text/html;profile=mcp-app",
+                cache_ttl=3600,  # Cache for 1 hour — view HTML rarely changes
+            )
+            self.register_resource(resource)
+            logger.debug(f"Auto-registered view resource: {resource_uri} → {view_url}")
+
+        except ImportError:
+            logger.debug("httpx not available; skipping auto view resource for %s", resource_uri)
 
     def register_resource(self, resource: ResourceHandler) -> None:
         """Register a resource handler."""

@@ -306,12 +306,11 @@ class TestMCPEndpoint:
         async for chunk in self.endpoint._sse_stream_generator(request_data, "test-session", "tools/list"):
             stream_data.append(chunk)
 
-        # Verify SSE format: event, id, data, blank line
-        assert len(stream_data) == 4
+        # Verify SSE format: event, data, blank line (no id: field, matching FastMCP)
+        assert len(stream_data) == 3
         assert stream_data[0] == "event: message\r\n"
-        assert stream_data[1] == "id: 1\r\n"
-        assert stream_data[2] == f"data: {orjson.dumps(mock_response).decode()}\r\n"
-        assert stream_data[3] == "\r\n"
+        assert stream_data[1] == f"data: {orjson.dumps(mock_response).decode()}\r\n"
+        assert stream_data[2] == "\r\n"
 
     @pytest.mark.asyncio
     async def test_sse_stream_generator_notification(self):
@@ -338,20 +337,19 @@ class TestMCPEndpoint:
         async for chunk in self.endpoint._sse_stream_generator(request_data, "test-session", "tools/list"):
             stream_data.append(chunk)
 
-        # Verify error event format: event, id, data, blank line
-        assert len(stream_data) == 4
+        # Verify error event format: event, data, blank line (no id: field, matching FastMCP)
+        assert len(stream_data) == 3
         assert stream_data[0] == "event: error\r\n"
-        assert stream_data[1] == "id: 1\r\n"
 
         # Parse error data
-        error_data = stream_data[2].replace("data: ", "").replace("\r\n", "")
+        error_data = stream_data[1].replace("data: ", "").replace("\r\n", "")
         error_response = orjson.loads(error_data)
         assert error_response["jsonrpc"] == "2.0"
         assert error_response["id"] == "test-id"
         assert error_response["error"]["code"] == -32603
         assert error_response["error"]["message"] == "Internal server error"
 
-        assert stream_data[3] == "\r\n"
+        assert stream_data[2] == "\r\n"
 
     def test_cors_response(self):
         """Test CORS response generation."""
@@ -436,8 +434,8 @@ class TestMCPEndpoint:
         with patch("chuk_mcp_server.endpoints.mcp.logger") as mock_logger:
             await self.endpoint.handle_request(request)
 
-            # Verify debug logging was called
-            mock_logger.debug.assert_called_with("Processing tools/list request")
+            # Verify method logging was called
+            mock_logger.warning.assert_any_call("MCP: tools/list (session=test-ses)")
 
     @pytest.mark.asyncio
     async def test_complex_sse_initialize_flow(self):

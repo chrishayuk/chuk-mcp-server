@@ -247,7 +247,7 @@ class MCPEndpoint:
             request_data = orjson.loads(body) if body else {}
             method = request_data.get(KEY_METHOD)
 
-            logger.debug(f"Processing {method} request")
+            logger.warning(f"MCP: {method} (session={session_id and session_id[:8]})")
 
             # Notifications (no "id") get a 202 immediately — no SSE stream needed
             is_notification = KEY_ID not in request_data
@@ -296,7 +296,14 @@ class MCPEndpoint:
                 HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
                 HEADER_MCP_PROTOCOL_VERSION: protocol_version,
             }
-            return Response("", status_code=HttpStatus.ACCEPTED, headers=headers)
+            if effective_session:
+                headers[HEADER_MCP_SESSION_ID] = effective_session
+            return Response(
+                "",
+                status_code=HttpStatus.ACCEPTED,
+                media_type=CONTENT_TYPE_JSON,
+                headers=headers,
+            )
 
         # Build response headers
         headers = {
@@ -388,18 +395,24 @@ class MCPEndpoint:
             created_session_id = self.protocol.session_manager.create_session(client_info, protocol_version)
             logger.info(f"Created SSE session: {created_session_id[:8]}...")
 
+        effective_session = created_session_id or session_id
         return StreamingResponse(
-            self._sse_stream_generator(request_data, created_session_id or session_id, method, oauth_token),
-            headers=self._sse_headers(created_session_id),
+            self._sse_stream_generator(request_data, effective_session, method, oauth_token),
+            headers=self._sse_headers(effective_session),
         )
 
     def _emit_sse_event(self, event_type: str, data: dict[str, Any], session_id: str | None) -> tuple[str, ...]:
-        """Build SSE event lines with optional event ID for resumability."""
+        """Build SSE event lines.
+
+        Events are buffered internally for Last-Event-ID resumability but
+        the ``id:`` field is NOT emitted in the SSE stream (matching FastMCP
+        behaviour).  The replay path (_handle_get with Last-Event-ID) does
+        include ``id:`` so clients can resume correctly.
+        """
         lines: list[str] = [event_type]
         if session_id:
             event_id = self.protocol.next_sse_event_id(session_id)
             self.protocol.buffer_sse_event(session_id, event_id, data)
-            lines.append(f"id: {event_id}\r\n")
         data_str: str = orjson.dumps(data).decode()
         lines.append(f"data: {data_str}\r\n")
         lines.append(SSE_LINE_END)

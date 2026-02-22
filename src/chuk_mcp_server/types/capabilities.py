@@ -33,6 +33,17 @@ class _FilteredServerCapabilities(ServerCapabilities):  # type: ignore[misc]
         self._filter_kwargs: dict[str, Any] = _filter_kwargs or {}
         self._experimental: dict[str, Any] | None = _experimental
 
+    def enable_experimental(self, value: dict[str, Any] | None = None) -> None:
+        """Dynamically enable the ``experimental`` capability.
+
+        Called automatically when a tool with ``_meta`` is registered so
+        that clients (e.g. Claude.ai) know structured content is supported.
+        """
+        exp = value if value is not None else {}
+        self._experimental = exp
+        self._filter_kwargs["experimental"] = exp
+        object.__setattr__(self, "experimental", exp)
+
     def model_dump(self, **dump_kwargs: Any) -> dict[str, Any]:
         """Filter out unwanted fields from model_dump"""
         result = super().model_dump(**dump_kwargs)
