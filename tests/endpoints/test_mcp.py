@@ -154,6 +154,23 @@ class TestMCPEndpoint:
         assert "Access-Control-Allow-Origin" in response.headers
 
     @pytest.mark.asyncio
+    async def test_handle_post_notification_with_sse_accept_returns_202(self):
+        """Test that notifications return 202 even when Accept includes text/event-stream."""
+        request_data = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+        request = MockRequest(
+            method="POST",
+            body_data=request_data,
+            headers={"mcp-session-id": "test-session", "accept": "application/json, text/event-stream"},
+        )
+
+        self.mock_protocol.handle_request.return_value = (None, None)
+
+        response = await self.endpoint.handle_request(request)
+
+        assert response.status_code == 202
+        assert not isinstance(response, StreamingResponse)
+
+    @pytest.mark.asyncio
     async def test_handle_post_json_request_with_new_session(self):
         """Test handling POST request that returns a new session ID."""
         request_data = {"jsonrpc": "2.0", "id": "test-id", "method": "initialize", "params": {}}
@@ -356,8 +373,9 @@ class TestMCPEndpoint:
         headers = self.endpoint._sse_headers(None)
 
         assert headers["Access-Control-Allow-Origin"] == "*"
-        assert headers["Cache-Control"] == "no-cache"
+        assert headers["Cache-Control"] == "no-cache, no-transform"
         assert headers["Connection"] == "keep-alive"
+        assert headers["X-Accel-Buffering"] == "no"
         assert "Mcp-Session-Id" not in headers
 
     def test_sse_headers_with_session(self):
@@ -365,8 +383,9 @@ class TestMCPEndpoint:
         headers = self.endpoint._sse_headers("test-session-123")
 
         assert headers["Access-Control-Allow-Origin"] == "*"
-        assert headers["Cache-Control"] == "no-cache"
+        assert headers["Cache-Control"] == "no-cache, no-transform"
         assert headers["Connection"] == "keep-alive"
+        assert headers["X-Accel-Buffering"] == "no"
         assert headers["Mcp-Session-Id"] == "test-session-123"
 
     def test_error_response_parse_error(self):

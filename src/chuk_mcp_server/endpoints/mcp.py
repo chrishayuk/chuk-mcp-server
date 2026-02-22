@@ -24,7 +24,6 @@ from ..constants import JSONRPC_KEY, KEY_ID, KEY_METHOD, KEY_PARAMS, McpMethod
 from ..protocol import MCPProtocolHandler
 from .constants import (
     BEARER_PREFIX,
-    CACHE_NO_CACHE,
     CONNECTION_KEEP_ALIVE,
     CONTENT_TYPE_JSON,
     CONTENT_TYPE_SSE,
@@ -252,12 +251,15 @@ class MCPEndpoint:
 
             logger.debug(f"Processing {method} request")
 
+            # Notifications (no "id") get a 202 immediately — no SSE stream needed
+            is_notification = KEY_ID not in request_data
+
             # Route based on Accept header
-            if CONTENT_TYPE_SSE in accept_header:
+            if CONTENT_TYPE_SSE in accept_header and not is_notification:
                 # SSE streaming
                 return await self._handle_sse_request(request_data, session_id, oauth_token)
             else:
-                # Regular JSON-RPC request
+                # Regular JSON-RPC request (or notification)
                 return await self._handle_json_request(request_data, session_id, method, oauth_token)
 
         except orjson.JSONDecodeError as e:
@@ -495,9 +497,10 @@ class MCPEndpoint:
         """Build SSE response headers."""
         headers = {
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
-            HEADER_CACHE_CONTROL: CACHE_NO_CACHE,
+            HEADER_CACHE_CONTROL: "no-cache, no-transform",
             HEADER_CONNECTION: CONNECTION_KEEP_ALIVE,
             HEADER_MCP_PROTOCOL_VERSION: self._get_protocol_version(session_id),
+            "X-Accel-Buffering": "no",
         }
 
         if session_id:
