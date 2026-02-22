@@ -456,5 +456,101 @@ def test_register_tool_without_meta_no_experimental():
     assert "experimental" not in result
 
 
+def test_register_tool_with_view_meta_auto_registers_resource():
+    """Test that registering a tool with _meta.ui auto-registers a view resource."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True, resources=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def view_tool(x: str) -> str:
+        """View tool."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="show_chart",
+        meta={
+            "ui": {
+                "resourceUri": "ui://test/chart",
+                "viewUrl": "https://example.com/chart/v1",
+            }
+        },
+    )
+    protocol.register_tool(tool)
+
+    # Resource should be auto-registered
+    assert "ui://test/chart" in protocol.resources
+    rh = protocol.resources["ui://test/chart"]
+    assert rh.mime_type == "text/html;profile=mcp-app"
+    assert rh.cache_ttl == 3600
+
+
+def test_register_tool_with_view_meta_no_duplicate_resource():
+    """Test that auto-registration skips if resource already exists."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ResourceHandler, ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True, resources=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    # Pre-register a resource
+    existing = ResourceHandler.from_function(
+        uri="ui://test/chart",
+        func=lambda: "custom",
+        name="chart",
+        mime_type="text/html",
+    )
+    protocol.register_resource(existing)
+
+    def view_tool(x: str) -> str:
+        """View tool."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="show_chart",
+        meta={
+            "ui": {
+                "resourceUri": "ui://test/chart",
+                "viewUrl": "https://example.com/chart/v1",
+            }
+        },
+    )
+    protocol.register_tool(tool)
+
+    # Should keep the pre-existing resource, not overwrite
+    assert protocol.resources["ui://test/chart"].mime_type == "text/html"
+
+
+def test_register_tool_with_non_ui_resource_uri_no_auto_register():
+    """Test that auto-registration only happens for ui:// scheme."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def view_tool(x: str) -> str:
+        """View tool."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="show_chart",
+        meta={
+            "ui": {
+                "resourceUri": "https://example.com/chart",
+                "viewUrl": "https://example.com/chart/v1",
+            }
+        },
+    )
+    protocol.register_tool(tool)
+
+    # Should NOT auto-register (not ui:// scheme)
+    assert "https://example.com/chart" not in protocol.resources
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
