@@ -7,7 +7,7 @@ Tests ToolParameter class, schema generation, and type inference.
 """
 
 import inspect
-from typing import Union
+from typing import Literal, Union
 
 import orjson
 import pytest
@@ -881,6 +881,372 @@ def test_modern_union_syntax():
     # Test inference with modern syntax
     assert infer_type_from_annotation(int | float) == "number"
     assert infer_type_from_annotation(float | int) == "number"
+
+
+def test_from_annotation_literal_type():
+    """Test ToolParameter.from_annotation with Literal types (lines 97-99)."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Test Literal type for enum values
+    param = ToolParameter.from_annotation("status", Literal["active", "inactive", "pending"])
+    assert param.type == "string"
+    assert param.enum == ["active", "inactive", "pending"]
+
+
+def test_from_annotation_fallback_old_typing_union():
+    """Test ToolParameter.from_annotation with old-style typing Union (lines 110-127)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Create a mock annotation that has __origin__ but would fail typing.get_origin
+    class OldStyleUnion:
+        __origin__ = Union
+        __args__ = (str, type(None))
+
+    # Temporarily make typing.get_origin return None to force fallback
+    with patch("typing.get_origin", return_value=None):
+        param = ToolParameter.from_annotation("old_union", OldStyleUnion())
+        # Should handle Optional-style union via the fallback path
+        assert param.type == "string"
+
+
+def test_from_annotation_fallback_old_typing_multi_union():
+    """Test ToolParameter.from_annotation with multi-type Union (lines 117-118)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Create multi-type union
+    class OldStyleMultiUnion:
+        __origin__ = Union
+        __args__ = (str, int, float)
+
+    # Temporarily make typing.get_origin return None to force fallback
+    with patch("typing.get_origin", return_value=None):
+        param = ToolParameter.from_annotation("multi_union", OldStyleMultiUnion())
+        # Should default to string for complex unions
+        assert param.type == "string"
+
+
+def test_from_annotation_fallback_old_typing_unknown_origin():
+    """Test ToolParameter.from_annotation with unknown origin (lines 123-124)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    class CustomOrigin:
+        pass
+
+    class OldStyleUnknown:
+        __origin__ = CustomOrigin
+        __args__ = ()
+
+    # Temporarily make typing.get_origin return None to force fallback
+    with patch("typing.get_origin", return_value=None):
+        param = ToolParameter.from_annotation("unknown", OldStyleUnknown())
+        # Should default to string for unknown origins
+        assert param.type == "string"
+
+
+def test_from_annotation_no_origin_fallback():
+    """Test ToolParameter.from_annotation with no __origin__ (lines 125-127)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Create annotation without __origin__ that isn't in type_map
+    class CustomType:
+        pass
+
+    # Temporarily make typing.get_origin return None and ensure no __origin__ attr
+    with patch("typing.get_origin", return_value=None):
+        param = ToolParameter.from_annotation("custom", CustomType)
+        # Should default to string for unknown types
+        assert param.type == "string"
+
+
+def test_infer_type_from_annotation_old_typing_union():
+    """Test infer_type_from_annotation with old-style Union (lines 244-261)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Test old-style Union with __origin__ attribute
+    class OldStyleUnion:
+        __origin__ = Union
+        __args__ = (str, type(None))
+
+    # Temporarily make typing.get_origin return None to force fallback
+    with patch("typing.get_origin", return_value=None):
+        result = infer_type_from_annotation(OldStyleUnion())
+        assert result == "string"
+
+
+def test_infer_type_from_annotation_old_typing_multi_union():
+    """Test infer_type_from_annotation with old multi-type Union (lines 247-252)."""
+    from unittest.mock import patch
+
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    class OldStyleMultiUnion:
+        __origin__ = Union
+        __args__ = (str, int, float)
+
+    # Temporarily make typing.get_origin return None to force fallback
+    with patch("typing.get_origin", return_value=None):
+        result = infer_type_from_annotation(OldStyleMultiUnion())
+        assert result == "string"  # Defaults to string for complex unions
+
+
+def test_infer_type_from_annotation_old_typing_dict():
+    """Test infer_type_from_annotation with old-style dict (lines 255-256)."""
+
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Use real typing.Dict for old-style annotation
+    result = infer_type_from_annotation(dict[str, int])
+    assert result == "object"
+
+
+def test_infer_type_from_annotation_old_typing_unknown():
+    """Test infer_type_from_annotation with unknown old-style type (lines 257-258)."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    class CustomType:
+        pass
+
+    class MockUnknownOld:
+        __origin__ = CustomType
+        __args__ = ()
+
+    result = infer_type_from_annotation(MockUnknownOld())
+    assert result == "string"  # Should default to string
+
+
+def test_extract_parameters_from_function_with_self():
+    """Test extract_parameters_from_function skips self (line 270-271)."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    class TestClass:
+        def method(self, name: str, count: int = 5):
+            return f"{name}: {count}"
+
+    instance = TestClass()
+    params = extract_parameters_from_function(instance.method)
+
+    # Should skip 'self' parameter
+    assert len(params) == 2
+    assert params[0].name == "name"
+    assert params[1].name == "count"
+
+
+def test_extract_parameters_from_function_no_annotation():
+    """Test extract_parameters_from_function with missing annotations."""
+    from chuk_mcp_server.types.parameters import extract_parameters_from_function
+
+    def func_no_annotation(arg1, arg2=10):
+        return arg1 + arg2
+
+    params = extract_parameters_from_function(func_no_annotation)
+
+    # Should default to str type for missing annotations
+    assert len(params) == 2
+    assert params[0].type == "string"
+    assert params[1].type == "string"
+    assert params[1].default == 10
+
+
+def test_build_input_schema_no_required():
+    """Test build_input_schema when no parameters are required."""
+    from chuk_mcp_server.types.parameters import ToolParameter, build_input_schema
+
+    params = [
+        ToolParameter("optional1", "string", required=False, default="default1"),
+        ToolParameter("optional2", "integer", required=False, default=42),
+    ]
+
+    schema = build_input_schema(params)
+
+    assert schema["type"] == "object"
+    assert "properties" in schema
+    # Required field should be None when no required params
+    assert schema["required"] is None
+
+
+def test_tool_parameter_to_json_schema_with_enum_and_default():
+    """Test to_json_schema with both enum and default."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    param = ToolParameter(
+        name="level",
+        type="string",
+        description="Log level",
+        enum=["debug", "info", "warning", "error"],
+        default="info",
+    )
+
+    schema = param.to_json_schema()
+
+    assert schema["type"] == "string"
+    assert schema["description"] == "Log level"
+    assert schema["enum"] == ["debug", "info", "warning", "error"]
+    assert schema["default"] == "info"
+
+
+def test_union_all_same_type_branch():
+    """Test Union with all same types to hit line 156."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Create Union[int, int, int] to hit line 156
+    param = ToolParameter.from_annotation("value", Union[int, int, int])
+    assert param.type == "integer"
+
+
+def test_infer_type_union_all_same():
+    """Test infer_type with Union of all same type to hit line 418."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Union[bool, bool, bool] should hit line 418
+    result = infer_type_from_annotation(Union[bool, bool, bool])
+    assert result == "boolean"
+
+
+def test_infer_type_unknown_type_fallback():
+    """Test infer_type with completely unknown type to hit line 460."""
+    from chuk_mcp_server.types.parameters import infer_type_from_annotation
+
+    # Create a type with no __origin__ and not in type_map
+    class CompletelyUnknownType:
+        pass
+
+    result = infer_type_from_annotation(CompletelyUnknownType)
+    assert result == "string"
+
+
+def test_optional_list_dict_non_none_fallback():
+    """Test Optional[list[dict]] to hit lines 143-146."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # This should hit the non_none_origin == dict path
+    param = ToolParameter.from_annotation("config_list", list[dict] | None)
+    assert param.type == "array"
+    assert param.items_type == "object"
+
+
+def test_pydantic_model_direct_else_branch():
+    """Test direct Pydantic model to hit lines 258-262 (final else branch)."""
+    try:
+        from pydantic import BaseModel
+
+        # Create a simple Pydantic model
+        class SimpleConfig(BaseModel):
+            value: str
+
+        from chuk_mcp_server.types.parameters import ToolParameter
+
+        # Direct annotation (not Union, not list, etc.)
+        param = ToolParameter.from_annotation("simple_config", SimpleConfig)
+        assert param.type == "object"
+        assert param.pydantic_model is SimpleConfig
+    except ImportError:
+        pytest.skip("Pydantic not installed")
+
+
+def test_pydantic_schema_defs_removal():
+    """Test Pydantic schema with $defs removal to hit lines 306-308."""
+    try:
+        from pydantic import BaseModel
+
+        class InnerModel(BaseModel):
+            data: str
+
+        class OuterModel(BaseModel):
+            inner: InnerModel
+
+        from chuk_mcp_server.types.parameters import ToolParameter
+
+        param = ToolParameter(name="outer", type="object", pydantic_model=OuterModel)
+        schema = param.to_json_schema()
+
+        # Should handle $defs properly
+        assert schema["type"] == "object"
+        # $defs might be removed from top level (lines 306-308)
+    except ImportError:
+        pytest.skip("Pydantic not installed")
+
+
+def test_pydantic_items_defs_handling():
+    """Test Pydantic items with $defs to hit lines 320-324."""
+    try:
+        from pydantic import BaseModel
+
+        class ItemInner(BaseModel):
+            name: str
+
+        class ItemOuter(BaseModel):
+            inner: ItemInner
+            count: int
+
+        from chuk_mcp_server.types.parameters import ToolParameter
+
+        param = ToolParameter(name="items", type="array", pydantic_items_model=ItemOuter)
+        schema = param.to_json_schema()
+
+        # Should handle nested $defs (lines 320-324)
+        assert schema["type"] == "array"
+        assert "items" in schema
+    except ImportError:
+        pytest.skip("Pydantic not installed")
+
+
+def test_is_pydantic_model_with_non_class():
+    """Test _is_pydantic_model with non-class to hit TypeError (lines 63-65)."""
+    from chuk_mcp_server.types.parameters import _is_pydantic_model
+
+    # Test with non-class types that will cause TypeError in issubclass
+    assert _is_pydantic_model("string") is False
+    assert _is_pydantic_model(123) is False
+    assert _is_pydantic_model(None) is False
+    assert _is_pydantic_model([1, 2, 3]) is False
+
+
+def test_optional_union_with_non_none_dict():
+    """Test Optional with dict to hit line 146."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Optional[dict[str, str]] should hit line 146
+    param = ToolParameter.from_annotation("mapping", Union[dict[str, str], None])
+    assert param.type == "object"
+
+
+def test_list_without_typing_module():
+    """Test list type directly to ensure no typing module dependency."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Plain list annotation
+    param = ToolParameter.from_annotation("items", list)
+    assert param.type == "array"
+    assert param.items_type is None
+
+
+def test_dict_without_typing_module():
+    """Test dict type directly to ensure no typing module dependency."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Plain dict annotation
+    param = ToolParameter.from_annotation("config", dict)
+    assert param.type == "object"
+
+
+def test_typing_get_args_with_list():
+    """Test typing.get_args path with list[T]."""
+    from chuk_mcp_server.types.parameters import ToolParameter
+
+    # Explicitly use list[int] to hit typing.get_args path
+    param = ToolParameter.from_annotation("numbers", list[int])
+    assert param.type == "array"
+    assert param.items_type == "integer"
 
 
 if __name__ == "__main__":

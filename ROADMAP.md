@@ -6,7 +6,7 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ## Current State: v0.23.0
 
-**2388 tests | 95.96% coverage | 36K+ RPS | 0 mypy errors**
+**2388 tests | 95.96% coverage | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call | 0 mypy errors**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
@@ -36,7 +36,7 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **Logging** | `logging/setLevel` handler + `notifications/message` log entries to clients |
 | **Audio** | `AudioContent` type support via chuk_mcp |
 | **Artifacts** | Optional `chuk-artifacts` integration for persistent storage |
-| **Performance** | 36K+ requests per second with schema and orjson caching |
+| **Performance** | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call (in-process); 36K+ RPS over HTTP |
 | **CLI** | Project scaffolding (`init`), Claude Desktop integration (`--claude`), `--reload`, `--inspect` |
 | **Testing** | `ToolRunner` test harness for invoking tools without transport |
 | **OpenAPI** | Auto-generated OpenAPI 3.1.0 spec from tool schemas at `/openapi.json` |
@@ -186,7 +186,7 @@ A comprehensive audit against `ARCHITECTURE.md` principles identified the follow
 | Finding | Location | Description | Status |
 |---------|----------|-------------|--------|
 | `telemetry.py` at 63% | `telemetry.py` | OpenTelemetry-enabled paths (lines 40-51) completely untested | **Fixed** (100%) |
-| 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | Deferred |
+| 21 duplicate test files | `tests/` | `*_coverage.py` and `*_final_coverage.py` variants (e.g., 7 variants of `test_parameters*.py`) | **Fixed** |
 | `pytest.skip()` masking | `test_core_final_coverage.py` | 7 skipped tests for STDIO detection and decorator fallback paths | **Fixed** |
 | MCP Apps `meta` field untested | `types/tools.py` | No tests verify `meta` field on `ToolHandler` or `_meta` in `tools/list` response | **Fixed** |
 | Pre-formatted passthrough untested | `protocol.py:585-595` | No test verifies the `structuredContent` passthrough conditional | **Fixed** |
@@ -379,7 +379,7 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 |---------|--------|-------------|
 | Fix `telemetry.py` coverage (63%) | **Done** | Added mock-otel tests; now at 100% coverage |
 | Add MCP Apps tests | **Done** | 12 tests for `meta` field, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
-| Consolidate test files | Deferred | 21 `*_coverage.py` variants — low priority, tests pass and coverage is above 95% |
+| Consolidate test files | **Done** | 21 `*_coverage.py` files consolidated: 6 orphans renamed, 15 supplements merged into base files, all deleted |
 | Fix skipped tests | **Done** | Replaced 7 `pytest.skip()` in `test_core_final_coverage.py` with real STDIO detection and shutdown tests; removed dead decorator fallback tests |
 | Add concurrency tests | **Done** | 7 tests: parallel tool execution, context isolation across coroutines, concurrent registration and session creation |
 | Add integration tests | **Done** | 14 tests: full lifecycle flows (init → list → call → task → resource → prompt), strict init enforcement, error handling, multi-session |

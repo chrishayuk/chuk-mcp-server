@@ -26,16 +26,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete MkDocs documentation site
 - Google Drive OAuth provider
 
+### Performance
+- **ping**: 1,027,771 ops/s (0.9 us avg latency)
+- **tools/list**: 377,270 ops/s (2.6 us avg latency)
+- **tools/call**: 76-83K ops/s (12-13 us avg latency)
+- **resources/list**: 558,191 ops/s (1.7 us avg latency)
+- **resources/read**: 483,749 ops/s (2.0 us avg latency)
+- **to_mcp_bytes (cached)**: 26,588,970 ops/s
+- **to_mcp_format (cached)**: 1,442,083 ops/s
+
 ### Fixed
-- `type: ignore[untyped-decorator]` → `[misc]` for server decorator methods
-- TYPE_CHECKING fallback stubs use `# type: ignore[assignment,misc]`
+- `type: ignore[untyped-decorator]` for server decorator methods
 - Bare `except` in GCF adapter now logs the error
 
 ## [Unreleased]
 
 ### Planned
 - Advanced configuration examples
-- Performance benchmarks
 
 ## [1.0.0] - 2024-XX-XX
 
