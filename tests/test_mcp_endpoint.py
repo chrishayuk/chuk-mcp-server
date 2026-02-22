@@ -435,14 +435,13 @@ class TestHandleRequestRouting:
         assert "Access-Control-Allow-Origin" in response.headers
 
     @pytest.mark.asyncio
-    async def test_get_returns_server_info(self):
-        """GET returns server information."""
+    async def test_get_without_sse_accept_returns_406(self):
+        """GET without Accept: text/event-stream returns 406."""
         protocol = _make_protocol()
         endpoint = MCPEndpoint(protocol)
 
         req = _mock_request(method="GET")
         response = await endpoint.handle_request(req)
 
-        body = json.loads(response.body.decode())
-        assert body["name"] == "test-server"
-        assert body["status"] == "ready"
+        assert response.status_code == 406
+        assert b"text/event-stream" in response.body

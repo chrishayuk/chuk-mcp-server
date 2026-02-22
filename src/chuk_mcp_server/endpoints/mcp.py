@@ -29,7 +29,6 @@ from .constants import (
     CONTENT_TYPE_SSE,
     CORS_ALLOW_ALL,
     ERROR_METHOD_NOT_ALLOWED,
-    FRAMEWORK_DESCRIPTION,
     HEADER_ACCEPT,
     HEADER_AUTHORIZATION,
     HEADER_CACHE_CONTROL,
@@ -42,12 +41,10 @@ from .constants import (
     HEADER_MCP_SESSION_ID,
     HEADERS_CORS_ONLY,
     JSONRPC_VERSION,
-    MCP_PROTOCOL_FULL,
     MCP_PROTOCOL_VERSION,
     SSE_EVENT_ERROR,
     SSE_EVENT_MESSAGE,
     SSE_LINE_END,
-    STATUS_READY,
     HttpStatus,
     JsonRpcErrorCode,
 )
@@ -148,7 +145,6 @@ class MCPEndpoint:
 
                 return StreamingResponse(
                     _replay_stream(),
-                    media_type=CONTENT_TYPE_SSE,
                     headers=self._sse_headers(session_id),
                 )
 
@@ -166,23 +162,15 @@ class MCPEndpoint:
             logger.debug(f"Opening GET SSE stream for session {session_id[:8]}...")
             return StreamingResponse(
                 self._get_stream_generator(session_id),
-                media_type=CONTENT_TYPE_SSE,
                 headers=self._sse_headers(session_id),
             )
 
-        # Default: return server information
-        server_info = {
-            "name": self.protocol.server_info.name,
-            "version": self.protocol.server_info.version,
-            "protocol": MCP_PROTOCOL_FULL,
-            "status": STATUS_READY,
-            "tools": len(self.protocol.tools),
-            "resources": len(self.protocol.resources),
-            "powered_by": FRAMEWORK_DESCRIPTION,
-        }
-
-        body: bytes = orjson.dumps(server_info)
-        return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_ONLY)
+        # Reject requests that don't accept SSE (matches streamable-http spec)
+        return Response(
+            "Not Acceptable: Client must accept text/event-stream",
+            status_code=HttpStatus.NOT_ACCEPTABLE,
+            headers=HEADERS_CORS_ONLY,
+        )
 
     async def _get_stream_generator(self, session_id: str):
         """Long-lived SSE generator for streamable-http GET streams.
@@ -392,7 +380,6 @@ class MCPEndpoint:
 
         return StreamingResponse(
             self._sse_stream_generator(request_data, created_session_id or session_id, method, oauth_token),
-            media_type=CONTENT_TYPE_SSE,
             headers=self._sse_headers(created_session_id),
         )
 
@@ -494,8 +481,12 @@ class MCPEndpoint:
                     yield line
 
     def _sse_headers(self, session_id: str | None) -> dict[str, str]:
-        """Build SSE response headers."""
+        """Build SSE response headers.
+
+        Sets Content-Type explicitly to avoid Starlette appending '; charset=utf-8'.
+        """
         headers = {
+            "Content-Type": CONTENT_TYPE_SSE,
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
             HEADER_CACHE_CONTROL: "no-cache, no-transform",
             HEADER_CONNECTION: CONNECTION_KEEP_ALIVE,
