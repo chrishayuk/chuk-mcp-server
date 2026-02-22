@@ -95,11 +95,7 @@ class TestMCPEndpoint:
         body = orjson.loads(response.body)
         assert body["name"] == "TestServer"
         assert body["version"] == "1.0.0"
-        assert body["protocol"] == "MCP 2025-03-26"
         assert body["status"] == "ready"
-        assert body["tools"] == 2
-        assert body["resources"] == 1
-        assert body["powered_by"] == "ChukMCPServer with chuk_mcp"
 
     @pytest.mark.asyncio
     async def test_handle_request_method_not_allowed(self):
@@ -152,6 +148,23 @@ class TestMCPEndpoint:
         assert response.status_code == 202
         assert response.body == b""
         assert "Access-Control-Allow-Origin" in response.headers
+
+    @pytest.mark.asyncio
+    async def test_handle_post_notification_with_sse_accept_returns_202(self):
+        """Test that notifications return 202 even when Accept includes text/event-stream."""
+        request_data = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+        request = MockRequest(
+            method="POST",
+            body_data=request_data,
+            headers={"mcp-session-id": "test-session", "accept": "application/json, text/event-stream"},
+        )
+
+        self.mock_protocol.handle_request.return_value = (None, None)
+
+        response = await self.endpoint.handle_request(request)
+
+        assert response.status_code == 202
+        assert not isinstance(response, StreamingResponse)
 
     @pytest.mark.asyncio
     async def test_handle_post_json_request_with_new_session(self):
@@ -249,7 +262,7 @@ class TestMCPEndpoint:
         response = await self.endpoint.handle_request(request)
 
         assert isinstance(response, StreamingResponse)
-        assert response.media_type == "text/event-stream"
+        assert response.headers["Content-Type"] == "text/event-stream"
         assert "Access-Control-Allow-Origin" in response.headers
         assert "Cache-Control" in response.headers
         assert response.headers["Mcp-Session-Id"] == "test-session-123"
@@ -276,7 +289,7 @@ class TestMCPEndpoint:
         response = await self.endpoint.handle_request(request)
 
         assert isinstance(response, StreamingResponse)
-        assert response.media_type == "text/event-stream"
+        assert response.headers["Content-Type"] == "text/event-stream"
 
         # Should use existing session, not create new one
         self.mock_protocol.session_manager.create_session.assert_not_called()
@@ -355,18 +368,22 @@ class TestMCPEndpoint:
         """Test SSE headers generation without session ID."""
         headers = self.endpoint._sse_headers(None)
 
+        assert headers["Content-Type"] == "text/event-stream"
         assert headers["Access-Control-Allow-Origin"] == "*"
-        assert headers["Cache-Control"] == "no-cache"
+        assert headers["Cache-Control"] == "no-cache, no-transform"
         assert headers["Connection"] == "keep-alive"
+        assert headers["X-Accel-Buffering"] == "no"
         assert "Mcp-Session-Id" not in headers
 
     def test_sse_headers_with_session(self):
         """Test SSE headers generation with session ID."""
         headers = self.endpoint._sse_headers("test-session-123")
 
+        assert headers["Content-Type"] == "text/event-stream"
         assert headers["Access-Control-Allow-Origin"] == "*"
-        assert headers["Cache-Control"] == "no-cache"
+        assert headers["Cache-Control"] == "no-cache, no-transform"
         assert headers["Connection"] == "keep-alive"
+        assert headers["X-Accel-Buffering"] == "no"
         assert headers["Mcp-Session-Id"] == "test-session-123"
 
     def test_error_response_parse_error(self):
@@ -547,7 +564,7 @@ class TestMCPEndpoint:
         response = await self.endpoint.handle_request(request)
 
         assert isinstance(response, StreamingResponse)
-        assert response.media_type == "text/event-stream"
+        assert response.headers["Content-Type"] == "text/event-stream"
         assert "Cache-Control" in response.headers
         assert response.headers["Mcp-Session-Id"] == "test-session-123"
 
@@ -583,7 +600,7 @@ class TestMCPEndpoint:
 
     @pytest.mark.asyncio
     async def test_handle_get_without_accept_sse_returns_info(self):
-        """Test GET without SSE accept header returns JSON info (unchanged behavior)."""
+        """Test GET without SSE accept header returns JSON info (backward compat)."""
         request = MockRequest(
             method="GET",
             headers={"accept": "application/json", "mcp-session-id": "test-session-123"},

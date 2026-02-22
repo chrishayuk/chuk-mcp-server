@@ -24,7 +24,6 @@ from ..constants import JSONRPC_KEY, KEY_ID, KEY_METHOD, KEY_PARAMS, McpMethod
 from ..protocol import MCPProtocolHandler
 from .constants import (
     BEARER_PREFIX,
-    CACHE_NO_CACHE,
     CONNECTION_KEEP_ALIVE,
     CONTENT_TYPE_JSON,
     CONTENT_TYPE_SSE,
@@ -149,7 +148,6 @@ class MCPEndpoint:
 
                 return StreamingResponse(
                     _replay_stream(),
-                    media_type=CONTENT_TYPE_SSE,
                     headers=self._sse_headers(session_id),
                 )
 
@@ -167,11 +165,10 @@ class MCPEndpoint:
             logger.debug(f"Opening GET SSE stream for session {session_id[:8]}...")
             return StreamingResponse(
                 self._get_stream_generator(session_id),
-                media_type=CONTENT_TYPE_SSE,
                 headers=self._sse_headers(session_id),
             )
 
-        # Default: return server information
+        # Default: return server information (health checks, browsers, probes)
         server_info = {
             "name": self.protocol.server_info.name,
             "version": self.protocol.server_info.version,
@@ -252,12 +249,15 @@ class MCPEndpoint:
 
             logger.debug(f"Processing {method} request")
 
+            # Notifications (no "id") get a 202 immediately — no SSE stream needed
+            is_notification = KEY_ID not in request_data
+
             # Route based on Accept header
-            if CONTENT_TYPE_SSE in accept_header:
+            if CONTENT_TYPE_SSE in accept_header and not is_notification:
                 # SSE streaming
                 return await self._handle_sse_request(request_data, session_id, oauth_token)
             else:
-                # Regular JSON-RPC request
+                # Regular JSON-RPC request (or notification)
                 return await self._handle_json_request(request_data, session_id, method, oauth_token)
 
         except orjson.JSONDecodeError as e:
@@ -390,7 +390,6 @@ class MCPEndpoint:
 
         return StreamingResponse(
             self._sse_stream_generator(request_data, created_session_id or session_id, method, oauth_token),
-            media_type=CONTENT_TYPE_SSE,
             headers=self._sse_headers(created_session_id),
         )
 
@@ -492,12 +491,17 @@ class MCPEndpoint:
                     yield line
 
     def _sse_headers(self, session_id: str | None) -> dict[str, str]:
-        """Build SSE response headers."""
+        """Build SSE response headers.
+
+        Sets Content-Type explicitly to avoid Starlette appending '; charset=utf-8'.
+        """
         headers = {
+            "Content-Type": CONTENT_TYPE_SSE,
             HEADER_CORS_ORIGIN: CORS_ALLOW_ALL,
-            HEADER_CACHE_CONTROL: CACHE_NO_CACHE,
+            HEADER_CACHE_CONTROL: "no-cache, no-transform",
             HEADER_CONNECTION: CONNECTION_KEEP_ALIVE,
             HEADER_MCP_PROTOCOL_VERSION: self._get_protocol_version(session_id),
+            "X-Accel-Buffering": "no",
         }
 
         if session_id:
