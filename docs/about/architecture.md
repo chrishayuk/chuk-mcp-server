@@ -4,25 +4,25 @@ Deep dive into ChukMCPServer's design and architecture.
 
 ## High-Level Architecture
 
-ChukMCPServer is built on a modular, high-performance architecture that achieves 39,000+ RPS through intelligent design choices.
+ChukMCPServer is built on a modular, high-performance architecture that achieves 36,000+ RPS through intelligent design choices. The codebase follows 15 governing principles documented in `ARCHITECTURE.md`, with zero mypy errors and 96% test coverage.
 
 ```
-┌─────────────────────────────────────────────┐
-│          ChukMCPServer (Core)               │
-│  ┌──────────────┐  ┌──────────────┐        │
-│  │   Decorator  │  │   Registry   │        │
-│  │     API      │  │    System    │        │
-│  └──────────────┘  └──────────────┘        │
-│  ┌──────────────────────────────────┐      │
-│  │      SmartConfig System          │      │
-│  │  Auto-detection & Optimization   │      │
-│  └──────────────────────────────────┘      │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│              ChukMCPServer (Core)                 │
+│  ┌──────────────┐  ┌──────────────────────────┐  │
+│  │   Decorator  │  │  ComponentRegistry       │  │
+│  │     API      │  │  (tools/resources/prompts)│  │
+│  └──────────────┘  └──────────────────────────┘  │
+│  ┌──────────────────────────────────┐            │
+│  │      SmartConfig System          │            │
+│  │  Auto-detection & Optimization   │            │
+│  └──────────────────────────────────┘            │
+└──────────────────────────────────────────────────┘
             │                   │
     ┌───────┴───────┐   ┌──────┴──────┐
     │  HTTP         │   │  STDIO      │
     │  Transport    │   │  Transport  │
-    │  (Starlette)  │   │  (Standard) │
+    │  (Starlette)  │   │  (Sync+Async│
     └───────────────┘   └─────────────┘
 ```
 
@@ -100,14 +100,15 @@ src/chuk_mcp_server/transport/
 
 ### 5. Protocol Layer
 
-MCP JSON-RPC implementation:
+MCP JSON-RPC implementation organized as a package:
 
 ```python
-protocol.py
-    - JSON-RPC request/response handling
-    - Session management
-    - Error handling
-    - Capability negotiation
+src/chuk_mcp_server/protocol/
+    ├── __init__.py          # Package exports
+    ├── handler.py           # MCPProtocolHandler (main router)
+    ├── session_manager.py   # SessionManager (TTL-based sessions)
+    ├── events.py            # SSEEventBuffer (resumability)
+    └── tasks.py             # TaskManager (long-running requests)
 ```
 
 ### 6. OAuth System
@@ -129,18 +130,23 @@ src/chuk_mcp_server/oauth/
 
 ### 7. Cloud Support
 
-Platform-specific adapters:
+Platform-specific adapters with auto-detection:
 
 ```python
 src/chuk_mcp_server/cloud/
-    ├── base.py            # Base adapter
-    ├── gcp.py             # Google Cloud
-    ├── aws.py             # AWS Lambda
-    ├── azure.py           # Azure Functions
-    └── edge.py            # Edge platforms
+    ├── __init__.py        # Detection & registration
+    ├── exports.py         # Handler getters (lazy imports)
+    ├── providers/         # Provider detection
+    │   ├── gcp.py         # Google Cloud
+    │   ├── aws.py         # AWS Lambda
+    │   └── azure.py       # Azure Functions
+    └── adapters/          # Platform adapters
+        ├── gcf.py         # Google Cloud Functions
+        ├── lambda_.py     # AWS Lambda
+        └── azure.py       # Azure Functions
 ```
 
-Auto-detects cloud environment and exports appropriate handler.
+Auto-detects cloud environment and exports appropriate handler. Uses orjson for response serialization.
 
 ## Design Patterns
 
@@ -389,8 +395,9 @@ pool = await asyncpg.create_pool(max_size=100)
 ### 3. Error Handling
 
 - No stack traces in deployed environments
-- Secure error messages
-- Comprehensive logging
+- Sanitized error messages (no `str(e)` in client-facing responses)
+- Framework errors return generic messages; tool errors include type information
+- Comprehensive server-side logging
 
 ## Next Steps
 

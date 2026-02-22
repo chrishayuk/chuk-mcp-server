@@ -9,11 +9,22 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
+from .component_registry import ComponentRegistry
+
 # Import the modular smart configuration system
 from .config import SmartConfig
+from .constants import (
+    ATTR_MCP_PROMPT,
+    ATTR_MCP_RESOURCE,
+    ATTR_MCP_RESOURCE_TEMPLATE,
+    ATTR_MCP_TOOL,
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_PLAIN,
+)
 from .decorators import (
     clear_global_registry,
     get_global_prompts,
+    get_global_resource_templates,
     get_global_resources,
     get_global_tools,
 )
@@ -22,6 +33,7 @@ from .http_server import create_server
 from .mcp_registry import mcp_registry
 from .protocol import MCPProtocolHandler
 from .proxy import ProxyManager
+from .startup import print_smart_config, print_startup_info
 from .stdio_transport import StdioSyncTransport
 
 # Updated imports for clean types API
@@ -34,6 +46,7 @@ from .types import (
     ToolHandler,
     create_server_capabilities,
 )
+from .types.resources import ResourceTemplateHandler
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +76,15 @@ class ChukMCPServer:
         name: str | None = None,
         version: str = "1.0.0",
         title: str | None = None,
-        description: str | None = None,  # noqa: ARG002
+        description: str | None = None,
+        icons: list[dict[str, Any]] | None = None,
+        website_url: str | None = None,
         capabilities=None,
         tools: bool = True,
         resources: bool = True,
         prompts: bool = False,
         logging: bool = False,
+        completions: bool = False,
         experimental: dict[str, Any] | None = None,
         # Smart defaults (all optional - will use SmartConfig)
         host: str | None = None,
@@ -121,7 +137,12 @@ class ChukMCPServer:
             self.capabilities = capabilities
         else:
             self.capabilities = create_server_capabilities(
-                tools=tools, resources=resources, prompts=prompts, logging=logging, experimental=experimental
+                tools=tools,
+                resources=resources,
+                prompts=prompts,
+                logging=logging,
+                completions=completions,
+                experimental=experimental,
             )
 
         # Store smart defaults for run() - using modular config
@@ -139,8 +160,22 @@ class ChukMCPServer:
         self.smart_containerized = smart_defaults["containerized"]
         self.smart_transport_mode = smart_defaults.get("transport_mode", "http")
 
+        # Build extra server info fields for MCP 2025-11-25
+        extra_server_info: dict[str, Any] = {}
+        if description is not None:
+            extra_server_info["description"] = description
+        if icons is not None:
+            extra_server_info["icons"] = icons
+        if website_url is not None:
+            extra_server_info["websiteUrl"] = website_url
+
         # Create protocol handler with direct chuk_mcp types
-        self.protocol = MCPProtocolHandler(self.server_info, self.capabilities)
+        self.protocol = MCPProtocolHandler(
+            self.server_info, self.capabilities, extra_server_info=extra_server_info or None
+        )
+
+        # Component registry for dual-registration (protocol + mcp_registry)
+        self._components = ComponentRegistry(self.protocol)
 
         # Register any globally decorated functions
         self._register_global_functions()
@@ -175,40 +210,32 @@ class ChukMCPServer:
 
     def _print_smart_config(self, actual_log_level: str | None = None):
         """Print smart configuration summary using modular config."""
-        import sys
-
-        # Always use stderr for debug output to keep stdout clean
-        output = sys.stderr
-        log_level_display = actual_log_level or self.smart_log_level
-        print("🧠 ChukMCPServer - Modular Zero Configuration Mode", file=output)
-        print("=" * 60, file=output)
-        print(f"📊 Environment: {self.smart_environment}", file=output)
-        print(f"🌐 Network: {self.smart_host}:{self.smart_port}", file=output)
-        print(f"🔧 Workers: {self.smart_workers}", file=output)
-        print(f"🔗 Max Connections: {self.smart_max_connections}", file=output)
-        print(f"🐳 Container: {self.smart_containerized}", file=output)
-        print(f"⚡ Performance Mode: {self.smart_performance_mode}", file=output)
-        print(f"📝 Log Level: {log_level_display}", file=output)
-        print("=" * 60, file=output)
+        print_smart_config(
+            self.smart_environment,
+            self.smart_host,
+            self.smart_port,
+            self.smart_workers,
+            self.smart_max_connections,
+            self.smart_containerized,
+            self.smart_performance_mode,
+            self.smart_log_level,
+            actual_log_level,
+        )
 
     def _register_global_functions(self):
         """Register globally decorated functions in both protocol and registries."""
-        # Register global tools
         for tool_handler in get_global_tools():
-            self.protocol.register_tool(tool_handler)
-            mcp_registry.register_tool(tool_handler.name, tool_handler)
+            self._components.register_tool(tool_handler)
 
-        # Register global resources
         for resource_handler in get_global_resources():
-            self.protocol.register_resource(resource_handler)
-            mcp_registry.register_resource(resource_handler.uri, resource_handler)
+            self._components.register_resource(resource_handler)
 
-        # Register global prompts
         for prompt_handler in get_global_prompts():
-            self.protocol.register_prompt(prompt_handler)
-            mcp_registry.register_prompt(prompt_handler.name, prompt_handler)
+            self._components.register_prompt(prompt_handler)
 
-        # Clear global registry to avoid duplicate registrations
+        for template_handler in get_global_resource_templates():
+            self._components.register_resource_template(template_handler)
+
         clear_global_registry()
 
     # ============================================================================
@@ -227,6 +254,10 @@ class ChukMCPServer:
             @mcp.tool(tags=["custom"])
             def advanced_tool(data: dict) -> dict:
                 return {"processed": data}
+
+            @mcp.tool(read_only_hint=True, idempotent_hint=True)
+            def safe_lookup(key: str) -> str:
+                return db[key]
         """
 
         def decorator(func: Callable) -> Callable:
@@ -234,11 +265,24 @@ class ChukMCPServer:
             tool_name = name or func.__name__
             tool_description = description or func.__doc__ or f"Execute {tool_name}"
 
-            # Create tool handler from function
-            tool_handler = ToolHandler.from_function(func, name=tool_name, description=tool_description)
+            # Extract annotation, output_schema, and icons kwargs
+            annotation_kwargs = {}
+            for key in (
+                "read_only_hint",
+                "destructive_hint",
+                "idempotent_hint",
+                "open_world_hint",
+                "output_schema",
+                "icons",
+                "meta",
+            ):
+                if key in kwargs:
+                    annotation_kwargs[key] = kwargs.pop(key)
 
-            # Register in protocol handler (for MCP functionality)
-            self.protocol.register_tool(tool_handler)
+            # Create tool handler from function
+            tool_handler = ToolHandler.from_function(
+                func, name=tool_name, description=tool_description, **annotation_kwargs
+            )
 
             # Simple metadata for registry
             metadata = {"function_name": func.__name__, "parameter_count": len(tool_handler.parameters)}
@@ -248,13 +292,11 @@ class ChukMCPServer:
             if "tags" in kwargs:
                 tags.extend(kwargs.pop("tags"))
 
-            # Register in MCP registry
-            mcp_registry.register_tool(tool_handler.name, tool_handler, metadata=metadata, tags=tags, **kwargs)
+            # Register in both protocol and registry
+            self._components.register_tool(tool_handler, metadata=metadata, tags=tags, **kwargs)
 
             # Add tool metadata to function
-            func._mcp_tool = tool_handler
-
-            logger.debug(f"Registered tool: {tool_handler.name}")
+            setattr(func, ATTR_MCP_TOOL, tool_handler)
             return func
 
         # Handle both @mcp.tool and @mcp.tool() usage
@@ -281,15 +323,22 @@ class ChukMCPServer:
             # Simple resource creation
             resource_name = name or func.__name__.replace("_", " ").title()
             resource_description = description or func.__doc__ or f"Resource: {uri}"
-            resource_mime_type = mime_type or "application/json"  # Simple default
+            resource_mime_type = mime_type or CONTENT_TYPE_JSON  # Simple default
+
+            # Extract icons kwarg for resource handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
 
             # Create resource handler from function
             resource_handler = ResourceHandler.from_function(
-                uri=uri, func=func, name=resource_name, description=resource_description, mime_type=resource_mime_type
+                uri=uri,
+                func=func,
+                name=resource_name,
+                description=resource_description,
+                mime_type=resource_mime_type,
+                **handler_kwargs,
             )
-
-            # Register in protocol handler (for MCP functionality)
-            self.protocol.register_resource(resource_handler)
 
             # Simple metadata for registry
             metadata = {
@@ -303,15 +352,54 @@ class ChukMCPServer:
             if "tags" in kwargs:
                 tags.extend(kwargs.pop("tags"))
 
-            # Register in MCP registry
-            mcp_registry.register_resource(
-                resource_handler.uri, resource_handler, metadata=metadata, tags=tags, **kwargs
-            )
+            # Register in both protocol and registry
+            self._components.register_resource(resource_handler, metadata=metadata, tags=tags, **kwargs)
 
             # Add resource metadata to function
-            func._mcp_resource = resource_handler
+            setattr(func, ATTR_MCP_RESOURCE, resource_handler)
+            return func
 
-            logger.debug(f"Registered resource: {resource_handler.uri}")
+        return decorator
+
+    def resource_template(
+        self,
+        uri_template: str,
+        name: str | None = None,
+        description: str | None = None,
+        mime_type: str | None = None,
+        **kwargs,
+    ):
+        """
+        Resource template decorator for parameterized resources (RFC 6570).
+
+        Usage:
+            @mcp.resource_template("users://{user_id}/profile")
+            def get_user_profile(user_id: str) -> dict:
+                return {"id": user_id, "name": "Alice"}
+        """
+
+        def decorator(func: Callable) -> Callable:
+            # Extract icons kwarg for template handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
+
+            template_handler = ResourceTemplateHandler.from_function(
+                uri_template=uri_template,
+                func=func,
+                name=name,
+                description=description,
+                mime_type=mime_type,
+                **handler_kwargs,
+            )
+
+            # Register in protocol handler
+            self._components.register_resource_template(template_handler)
+
+            # Add metadata to function
+            setattr(func, ATTR_MCP_RESOURCE_TEMPLATE, template_handler)
+
+            logger.debug(f"Registered resource template: {uri_template}")
             return func
 
         return decorator
@@ -335,11 +423,15 @@ class ChukMCPServer:
             prompt_name = name or func.__name__
             prompt_description = description or func.__doc__ or f"Prompt: {prompt_name}"
 
-            # Create prompt handler from function
-            prompt_handler = PromptHandler.from_function(func, name=prompt_name, description=prompt_description)
+            # Extract icons kwarg for prompt handler
+            handler_kwargs = {}
+            if "icons" in kwargs:
+                handler_kwargs["icons"] = kwargs.pop("icons")
 
-            # Register in protocol handler (for MCP functionality)
-            self.protocol.register_prompt(prompt_handler)
+            # Create prompt handler from function
+            prompt_handler = PromptHandler.from_function(
+                func, name=prompt_name, description=prompt_description, **handler_kwargs
+            )
 
             # Simple metadata for registry
             metadata = {"function_name": func.__name__, "parameter_count": len(prompt_handler.parameters)}
@@ -349,11 +441,11 @@ class ChukMCPServer:
             if "tags" in kwargs:
                 tags.extend(kwargs.pop("tags"))
 
-            # Register in MCP registry
-            mcp_registry.register_prompt(prompt_handler.name, prompt_handler, metadata=metadata, tags=tags, **kwargs)
+            # Register in both protocol handler and MCP registry
+            self._components.register_prompt(prompt_handler, metadata=metadata, tags=tags, **kwargs)
 
             # Add prompt metadata to function
-            func._mcp_prompt = prompt_handler
+            setattr(func, ATTR_MCP_PROMPT, prompt_handler)
 
             logger.debug(f"Registered prompt: {prompt_handler.name}")
             return func
@@ -493,21 +585,15 @@ class ChukMCPServer:
 
     def add_tool(self, tool_handler: ToolHandler, **kwargs):
         """Manually add an MCP tool handler."""
-        self.protocol.register_tool(tool_handler)
-        mcp_registry.register_tool(tool_handler.name, tool_handler, **kwargs)
-        logger.debug(f"Added tool: {tool_handler.name}")
+        self._components.register_tool(tool_handler, **kwargs)
 
     def add_resource(self, resource_handler: ResourceHandler, **kwargs):
         """Manually add an MCP resource handler."""
-        self.protocol.register_resource(resource_handler)
-        mcp_registry.register_resource(resource_handler.uri, resource_handler, **kwargs)
-        logger.debug(f"Added resource: {resource_handler.uri}")
+        self._components.register_resource(resource_handler, **kwargs)
 
     def add_prompt(self, prompt_handler: PromptHandler, **kwargs):
         """Manually add an MCP prompt handler."""
-        self.protocol.register_prompt(prompt_handler)
-        mcp_registry.register_prompt(prompt_handler.name, prompt_handler, **kwargs)
-        logger.debug(f"Added prompt: {prompt_handler.name}")
+        self._components.register_prompt(prompt_handler, **kwargs)
 
     def add_endpoint(self, path: str, handler: Callable, methods: list[str] | None = None, **kwargs):
         """Manually add a custom HTTP endpoint."""
@@ -528,7 +614,7 @@ class ChukMCPServer:
         uri: str,
         name: str | None = None,
         description: str | None = None,
-        mime_type: str = "text/plain",
+        mime_type: str = CONTENT_TYPE_PLAIN,
         **kwargs,
     ):
         """Register an existing function as an MCP resource."""
@@ -552,22 +638,19 @@ class ChukMCPServer:
 
     def search_tools_by_tag(self, tag: str) -> list[ToolHandler]:
         """Search tools by tag."""
-        configs = mcp_registry.search_by_tag(tag)
-        return [config.component for config in configs if config.component_type.value == "tool"]
+        return self._components.search_tools_by_tag(tag)
 
     def search_resources_by_tag(self, tag: str) -> list[ResourceHandler]:
         """Search resources by tag."""
-        configs = mcp_registry.search_by_tag(tag)
-        return [config.component for config in configs if config.component_type.value == "resource"]
+        return self._components.search_resources_by_tag(tag)
 
     def search_prompts_by_tag(self, tag: str) -> list[PromptHandler]:
         """Search prompts by tag."""
-        configs = mcp_registry.search_by_tag(tag)
-        return [config.component for config in configs if config.component_type.value == "prompt"]
+        return self._components.search_prompts_by_tag(tag)
 
     def search_components_by_tags(self, tags: list[str], match_all: bool = False):
         """Search components by multiple tags."""
-        return mcp_registry.search_by_tags(tags, match_all=match_all)
+        return self._components.search_components_by_tags(tags, match_all=match_all)
 
     # ============================================================================
     # Information and Introspection
@@ -600,7 +683,7 @@ class ChukMCPServer:
 
     def get_component_info(self, name: str) -> dict[str, Any] | None:
         """Get detailed information about an MCP component."""
-        return mcp_registry.get_component_info(name)
+        return self._components.get_component_info(name)
 
     def info(self) -> dict[str, Any]:
         """Get comprehensive server information using modular smart config."""
@@ -631,20 +714,17 @@ class ChukMCPServer:
 
     def clear_tools(self):
         """Clear all registered tools."""
-        self.protocol.tools.clear()
-        mcp_registry.clear_type(mcp_registry.MCPComponentType.TOOL)
+        self._components.clear_tools()
         logger.info("Cleared all tools")
 
     def clear_resources(self):
         """Clear all registered resources."""
-        self.protocol.resources.clear()
-        mcp_registry.clear_type(mcp_registry.MCPComponentType.RESOURCE)
+        self._components.clear_resources()
         logger.info("Cleared all resources")
 
     def clear_prompts(self):
         """Clear all registered prompts."""
-        self.protocol.prompts.clear()
-        mcp_registry.clear_type(mcp_registry.MCPComponentType.PROMPT)
+        self._components.clear_prompts()
         logger.info("Cleared all prompts")
 
     def clear_endpoints(self):
@@ -676,6 +756,11 @@ class ChukMCPServer:
             await self.proxy_manager.stop_servers()
             logger.info("Proxy manager stopped")
 
+    async def _shutdown_all(self) -> None:
+        """Shut down protocol handler and proxy in a single event loop."""
+        await self.protocol.shutdown()
+        await self._stop_proxy_if_enabled()
+
     def run(
         self,
         host: str | None = None,
@@ -684,6 +769,8 @@ class ChukMCPServer:
         stdio: bool | None = None,
         log_level: str = "warning",
         post_register_hook=None,
+        reload: bool = False,
+        inspect: bool = False,
     ):
         """
         Run the MCP server with modular smart defaults.
@@ -695,6 +782,8 @@ class ChukMCPServer:
             stdio: Run in stdio mode instead of HTTP server (auto-detects if None)
             log_level: Logging level for application (debug, info, warning, error, critical)
             post_register_hook: Optional callback to register additional endpoints after default endpoints
+            reload: Enable hot reload (auto-restart on file changes, HTTP mode only)
+            inspect: Open MCP Inspector in browser after starting (HTTP mode only)
         """
         # Set logging level FIRST, before any other operations
         import os
@@ -797,19 +886,37 @@ class ChukMCPServer:
             if self._server is None:
                 self._server = create_server(self.protocol, post_register_hook=post_register_hook)
 
+            # Open MCP Inspector if requested
+            if inspect:
+                import threading
+                import webbrowser
+
+                inspect_url = f"http://{final_host}:{final_port}/docs"
+
+                def _open_browser():
+                    import time
+
+                    time.sleep(1.5)  # Wait for server to start
+                    webbrowser.open(inspect_url)
+
+                threading.Thread(target=_open_browser, daemon=True).start()
+                logger.info(f"Opening MCP Inspector: {inspect_url}")
+
             # Run the server
             try:
-                self._server.run(host=final_host, port=final_port, debug=final_debug, log_level=log_level)
+                self._server.run(
+                    host=final_host,
+                    port=final_port,
+                    debug=final_debug,
+                    log_level=log_level,
+                    reload=reload,
+                )
             except KeyboardInterrupt:
                 logger.info("\n👋 Server shutting down gracefully...")
-                # Stop proxy servers on shutdown
-                if self.proxy_manager:
-                    asyncio.run(self._stop_proxy_if_enabled())
+                asyncio.run(self._shutdown_all())
             except Exception as e:
                 logger.error(f"❌ Server error: {e}")
-                # Stop proxy servers on error
-                if self.proxy_manager:
-                    asyncio.run(self._stop_proxy_if_enabled())
+                asyncio.run(self._shutdown_all())
                 raise
 
     def run_stdio(self, debug: bool | None = None, log_level: str = "warning"):
@@ -852,65 +959,17 @@ class ChukMCPServer:
 
     def _print_startup_info(self, host: str, port: int, debug: bool, actual_log_level: str | None = None):
         """Print comprehensive startup information using modular config."""
-        import sys
-
-        # Use stderr if in stdio mode to keep stdout clean
-        output = sys.stderr if self.smart_transport_mode == "stdio" else sys.stdout
-        print("🚀 ChukMCPServer - Modular Smart Configuration", file=output)
-        print("=" * 60, file=output)
-
-        # Server information
-        info = self.info()
-        print(f"Server: {info['server']['name']}", file=output)
-        print(f"Version: {info['server']['version']}", file=output)
-        print("Framework: ChukMCPServer with Modular Zero Configuration", file=output)
-        print(file=output)
-
-        # Smart configuration summary from modular system (with actual log level override)
-        detection_summary = info["smart_detection_summary"].copy()
-        if actual_log_level:
-            detection_summary["logging"] = f"{actual_log_level} level, debug={debug}"
-        print("🧠 Smart Detection Summary:", file=output)
-        for key, value in detection_summary.items():
-            print(f"   {key.replace('_', ' ').title()}: {value}", file=output)
-        print(file=output)
-
-        # MCP Components
-        mcp_info = info["mcp_components"]
-        print(f"🔧 MCP Tools: {mcp_info['tools']['count']}", file=output)
-        for tool_name in mcp_info["tools"]["names"]:
-            print(f"   - {tool_name}", file=output)
-        print(file=output)
-
-        print(f"📂 MCP Resources: {mcp_info['resources']['count']}", file=output)
-        for resource_uri in mcp_info["resources"]["uris"]:
-            print(f"   - {resource_uri}", file=output)
-        print(file=output)
-
-        print(f"💬 MCP Prompts: {mcp_info['prompts']['count']}", file=output)
-        for prompt_name in mcp_info["prompts"]["names"]:
-            print(f"   - {prompt_name}", file=output)
-        print(file=output)
-
-        # Connection information
-        print("🌐 Server Information:", file=output)
-        print(f"   URL: http://{host}:{port}", file=output)
-        print(f"   MCP Endpoint: http://{host}:{port}/mcp", file=output)
-        print(f"   Debug: {debug}", file=output)
-        print(file=output)
-
-        # Performance mode information
-        print("⚡ Performance Configuration:", file=output)
-        print(f"   Mode: {self.smart_performance_mode}", file=output)
-        print(f"   Workers: {self.smart_workers}", file=output)
-        print(f"   Max Connections: {self.smart_max_connections}", file=output)
-        print(file=output)
-
-        # Inspector compatibility
-        print("🔍 MCP Inspector:", file=output)
-        print(f"   URL: http://{host}:{port}/mcp", file=output)
-        print("   Transport: Streamable HTTP", file=output)
-        print("=" * 60, file=output)
+        print_startup_info(
+            host,
+            port,
+            debug,
+            self.info,
+            self.smart_performance_mode,
+            self.smart_workers,
+            self.smart_max_connections,
+            self.smart_transport_mode,
+            actual_log_level,
+        )
 
     # ============================================================================
     # Configuration Management

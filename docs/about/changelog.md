@@ -5,17 +5,44 @@ All notable changes to ChukMCPServer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.23.0] - 2026-02
 
 ### Added
-- Complete MkDocs documentation site
-- Google Drive OAuth provider
-- Advanced configuration examples
-- Performance benchmarks
+- **Module splitting**: `protocol/` package (extracted SessionManager, SSEEventBuffer, TaskManager), `cli/` package (extracted templates), `cloud/exports.py` (extracted cloud handlers), `component_registry.py`, `startup.py`
+- **Zero mypy errors** across all 86 source files
+- **Thread safety**: `threading.Lock` on `_global_artifact_store` in `artifacts_context.py`
+- **Tasks auto-wire**: Tool calls automatically create/update task entries queryable via `tasks/list`
+- **Pre-initialize enforcement**: `strict_init=True` rejects requests with invalid session IDs
+- **Concurrency tests**: 7 tests for parallel tool execution, context isolation, race conditions
+- **Integration tests**: 14 end-to-end tests covering full MCP session lifecycle
 
 ### Changed
-- Restructured README for clarity
-- Improved documentation navigation
+- **Error sanitization**: Framework errors return generic messages; tool/resource/prompt errors include `type(e).__name__: {e}` for MCP client diagnostics
+- **orjson type safety**: All `.decode()` calls use typed intermediate variables
+- **GCF adapter**: Replaced stdlib `json` with `orjson`, reuse event loops instead of per-request creation, sanitized error responses
+- **Shutdown consolidation**: Single `asyncio.run(_shutdown_all())` replaces multiple separate calls
+- **PyYAML guard**: Lazy import with helpful `ImportError` when PyYAML is not installed
+- **Cloud exports**: Functions use lazy `import chuk_mcp_server` for test patch compatibility
+- Complete MkDocs documentation site
+- Google Drive OAuth provider
+
+### Performance
+- **ping**: 1,027,771 ops/s (0.9 us avg latency)
+- **tools/list**: 377,270 ops/s (2.6 us avg latency)
+- **tools/call**: 76-83K ops/s (12-13 us avg latency)
+- **resources/list**: 558,191 ops/s (1.7 us avg latency)
+- **resources/read**: 483,749 ops/s (2.0 us avg latency)
+- **to_mcp_bytes (cached)**: 26,588,970 ops/s
+- **to_mcp_format (cached)**: 1,442,083 ops/s
+
+### Fixed
+- `type: ignore[untyped-decorator]` for server decorator methods
+- Bare `except` in GCF adapter now logs the error
+
+## [Unreleased]
+
+### Planned
+- Advanced configuration examples
 
 ## [1.0.0] - 2024-XX-XX
 
@@ -33,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Class-based API (ChukMCPServer)
 - Zero-configuration deployment
 - Docker support
-- Comprehensive test suite (1400+ tests, 87%+ coverage)
+- Comprehensive test suite (2335+ tests, 96% coverage)
 
 ### Performance
 - 39,000+ RPS with simple tools

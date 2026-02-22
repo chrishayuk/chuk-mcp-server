@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuk-mcp-server"
-version = "0.17"
+version = "0.18.0"
 description = "A developer-friendly MCP framework powered by chuk_mcp"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -12,11 +12,10 @@ requires-python = ">=3.11"
 dependencies = [
     "chuk-mcp>=0.9.1",
     "chuk-sessions>=0.6.1",
-    "chuk-tool-processor>=0.20.1", # Required for MCP proxy/tool handling
+    "chuk-tool-processor>=0.22.1", # Required for MCP proxy/tool handling
     "httptools>=0.6.4",
     "httpx>=0.27.0", # Required for HTTP proxy transport
     "orjson>=3.11.6",
-    "psutil>=7.0.0",
     "python-multipart>=0.0.6", # Required for OAuth form parsing in middleware
     "pyyaml>=6.0", # Required for composition config loading
     "starlette>=0.47.1",
@@ -48,6 +47,9 @@ google_drive = [
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.1",
     "google-api-python-client>=2.100.0",
+]
+monitoring = [
+    "psutil>=7.0.0",
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -199,6 +201,7 @@ module = [
     "chuk_mcp_server.config.*",
     "chuk_mcp_server.core",
     "chuk_mcp_server.protocol",
+    "chuk_mcp_server.protocol.*",
     "chuk_mcp_server.mcp_registry",
     "chuk_mcp_server.endpoint_registry",
     "chuk_mcp_server.endpoints.*",

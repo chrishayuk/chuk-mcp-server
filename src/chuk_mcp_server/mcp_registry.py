@@ -13,6 +13,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .constants import CONTENT_TYPE_JSON, CORS_ALLOW_ALL, HEADER_CORS_ORIGIN
 from .types import ResourceHandler, ToolHandler
 
 logger = logging.getLogger(__name__)
@@ -431,10 +432,11 @@ async def mcp_registry_info_handler(_request: Request) -> Response:
         "data": mcp_registry.get_info(),
     }
 
+    body: bytes = orjson.dumps(info, option=orjson.OPT_INDENT_2)
     return Response(
-        orjson.dumps(info, option=orjson.OPT_INDENT_2),
-        media_type="application/json",
-        headers={"Access-Control-Allow-Origin": "*"},
+        body,
+        media_type=CONTENT_TYPE_JSON,
+        headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
     )
 
 

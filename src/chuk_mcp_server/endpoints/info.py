@@ -34,8 +34,9 @@ class InfoEndpoint:
 
     async def handle_request(self, request: Request) -> Response:
         if request.method != "GET":
+            body: bytes = orjson.dumps({"error": ERROR_METHOD_NOT_ALLOWED, "code": HttpStatus.METHOD_NOT_ALLOWED})
             return Response(
-                orjson.dumps({"error": ERROR_METHOD_NOT_ALLOWED, "code": HttpStatus.METHOD_NOT_ALLOWED}),
+                body,
                 status_code=HttpStatus.METHOD_NOT_ALLOWED,
                 media_type=CONTENT_TYPE_JSON,
                 headers=HEADERS_INFO,
@@ -117,4 +118,5 @@ class InfoEndpoint:
 
             return Response(docs, media_type=CONTENT_TYPE_MARKDOWN, headers=HEADERS_INFO)
         else:
-            return Response(orjson.dumps(info), media_type=CONTENT_TYPE_JSON, headers=HEADERS_INFO)
+            body: bytes = orjson.dumps(info)
+            return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_INFO)

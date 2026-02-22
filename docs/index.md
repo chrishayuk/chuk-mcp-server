@@ -121,7 +121,7 @@ Full OAuth 2.1 implementation with:
     - Cloud platform auto-detection
     - OAuth 2.1 authentication
     - Comprehensive error handling
-    - 88% test coverage
+    - 96% test coverage
 
 === "Ecosystem"
 

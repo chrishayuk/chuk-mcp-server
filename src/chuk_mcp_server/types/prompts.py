@@ -14,6 +14,8 @@ from typing import Any
 
 import orjson
 
+from chuk_mcp_server.constants import JsonRpcError
+
 from .base import MCPError
 from .errors import ParameterValidationError
 from .parameters import ToolParameter
@@ -54,10 +56,15 @@ class PromptHandler:
     parameters: list[ToolParameter]  # Reuse ToolParameter for prompt arguments
     _cached_mcp_format: dict[str, Any] | None = None  # Cache the MCP format dict
     _cached_mcp_bytes: bytes | None = None  # 🚀 Cache orjson-serialized bytes
+    icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
 
     @classmethod
     def from_function(
-        cls, func: Callable[..., Any], name: str | None = None, description: str | None = None
+        cls,
+        func: Callable[..., Any],
+        name: str | None = None,
+        description: str | None = None,
+        icons: list[dict[str, Any]] | None = None,
     ) -> "PromptHandler":
         """Create PromptHandler from a function with orjson optimization."""
         prompt_name = name or func.__name__
@@ -104,6 +111,7 @@ class PromptHandler:
             parameters=parameters,
             _cached_mcp_format=None,  # Will be computed immediately
             _cached_mcp_bytes=None,  # Will be computed immediately
+            icons=icons,
         )
 
         # Pre-compute and cache both formats during creation for maximum performance
@@ -115,7 +123,11 @@ class PromptHandler:
         """Ensure both dict and orjson formats are cached."""
         if self._cached_mcp_format is None:
             # Cache the expensive schema generation once
-            self._cached_mcp_format = self.mcp_prompt.model_dump(exclude_none=True)
+            fmt = self.mcp_prompt.model_dump(exclude_none=True)
+            # Add icons if present (MCP 2025-11-25)
+            if self.icons:
+                fmt["icons"] = [icon.copy() for icon in self.icons]
+            self._cached_mcp_format = fmt
 
         if self._cached_mcp_bytes is None:
             # Pre-serialize with orjson for maximum speed
@@ -301,15 +313,17 @@ class PromptHandler:
             else:
                 result = self.handler(**validated_args)
 
-            # Ensure we return the correct type
-            return result  # type: ignore[no-any-return]
+            validated_result: str | dict[str, Any] = result
+            return validated_result
 
         except ParameterValidationError:
             # Re-raise validation errors as-is
             raise
         except Exception as e:
             # Wrap other errors in MCPError
-            raise MCPError(f"Failed to generate prompt '{self.name}': {str(e)}", code=-32603) from e
+            raise MCPError(
+                f"Failed to generate prompt '{self.name}': {str(e)}", code=JsonRpcError.INTERNAL_ERROR
+            ) from e
 
 
 # ============================================================================

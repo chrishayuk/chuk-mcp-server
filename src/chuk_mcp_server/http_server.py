@@ -14,11 +14,22 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .constants import CONTENT_TYPE_JSON, CORS_ALLOW_ALL, HEADER_CORS_ORIGIN, HEADER_MCP_SESSION_ID
 from .endpoint_registry import http_endpoint_registry
 
 # Import optimized endpoints
-from .endpoints import HealthEndpoint, InfoEndpoint, MCPEndpoint, handle_health_ultra_fast, handle_ping, handle_version
+from .endpoints import (
+    HealthEndpoint,
+    InfoEndpoint,
+    MCPEndpoint,
+    handle_health_detailed,
+    handle_health_ready,
+    handle_health_ultra_fast,
+    handle_ping,
+    handle_version,
+)
 from .middlewares import ContextMiddleware
+from .openapi import generate_openapi_spec
 from .protocol import MCPProtocolHandler
 
 logger = logging.getLogger(__name__)
@@ -29,8 +40,8 @@ def internal_error_response() -> Response:
     return Response(
         '{"error": "Internal server error", "code": 500}',
         status_code=500,
-        media_type="application/json",
-        headers={"Access-Control-Allow-Origin": "*"},
+        media_type=CONTENT_TYPE_JSON,
+        headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
     )
 
 
@@ -66,6 +77,9 @@ class HTTPServer:
         HealthEndpoint(self.protocol)
         info_endpoint = InfoEndpoint(self.protocol)
 
+        # Create OpenAPI handler
+        openapi_handler = self._create_openapi_handler()
+
         # Create docs handler
         docs_handler = self._create_docs_handler(info_endpoint)
 
@@ -74,10 +88,14 @@ class HTTPServer:
             ("/ping", handle_ping, ["GET"], "ping"),
             ("/version", handle_version, ["GET"], "version"),
             ("/health", handle_health_ultra_fast, ["GET"], "health_fast"),
-            ("/mcp", mcp_endpoint.handle_request, ["GET", "POST", "OPTIONS"], "mcp_protocol"),
+            ("/health/ready", handle_health_ready, ["GET"], "health_ready"),
+            ("/health/detailed", handle_health_detailed, ["GET"], "health_detailed"),
+            ("/mcp", mcp_endpoint.handle_request, ["GET", "POST", "DELETE", "OPTIONS"], "mcp_protocol"),
+            ("/mcp/respond", mcp_endpoint.handle_respond, ["POST", "OPTIONS"], "mcp_respond"),
             ("/", info_endpoint.handle_request, ["GET"], "server_info"),
             ("/info", info_endpoint.handle_request, ["GET"], "server_info_explicit"),
             ("/docs", docs_handler, ["GET"], "documentation"),
+            ("/openapi.json", openapi_handler, ["GET"], "openapi_spec"),
         ]
 
         # Register endpoints
@@ -87,6 +105,23 @@ class HTTPServer:
             )
 
         logger.info(f"📊 Registered {len(endpoints)} endpoints")
+
+    def _create_openapi_handler(self):
+        """Create OpenAPI spec handler."""
+        import orjson
+
+        protocol = self.protocol
+
+        async def openapi_handler(request: Request) -> Response:  # noqa: ARG001
+            spec = generate_openapi_spec(protocol)
+            body: bytes = orjson.dumps(spec)
+            return Response(
+                body,
+                media_type=CONTENT_TYPE_JSON,
+                headers={HEADER_CORS_ORIGIN: CORS_ALLOW_ALL},
+            )
+
+        return openapi_handler
 
     def _create_docs_handler(self, info_endpoint):
         """Create docs handler."""
@@ -106,9 +141,9 @@ class HTTPServer:
             Middleware(
                 CORSMiddleware,
                 allow_origins=["*"],
-                allow_methods=["GET", "POST", "OPTIONS"],
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
                 allow_headers=["*"],
-                expose_headers=["Mcp-Session-Id"],
+                expose_headers=[HEADER_MCP_SESSION_ID],
                 max_age=86400,  # Long cache for preflight
             ),
             # Remove GZip middleware for benchmarking (it adds overhead)
@@ -135,7 +170,14 @@ class HTTPServer:
         logger.error(f"Exception in {request.method} {request.url.path}: {exc}")
         return internal_error_response()
 
-    def run(self, host: str = "localhost", port: int = 8000, debug: bool = False, log_level: str = "warning"):
+    def run(
+        self,
+        host: str = "localhost",
+        port: int = 8000,
+        debug: bool = False,
+        log_level: str = "warning",
+        reload: bool = False,
+    ):
         """Run with maximum performance configuration to break bottlenecks.
 
         Args:
@@ -143,6 +185,7 @@ class HTTPServer:
             port: Port to bind to
             debug: Enable debug mode (more verbose logging)
             log_level: Logging level for application logs (debug, info, warning, error, critical)
+            reload: Enable hot reload (auto-restart on file changes)
         """
 
         # Logging is already configured in core.py before this is called
@@ -186,6 +229,10 @@ class HTTPServer:
             # Buffer optimizations
             "h11_max_incomplete_event_size": 16384,  # Increase buffer
         }
+
+        # Add hot reload if requested
+        if reload:
+            uvicorn_config["reload"] = True
 
         # Add uvloop only on non-Windows platforms (uvloop doesn't support Windows)
         if sys.platform != "win32":

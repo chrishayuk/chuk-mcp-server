@@ -40,23 +40,27 @@ from .constants import (
 )
 
 # Pre-built common error responses for maximum performance
-_ERROR_RESPONSES = {
-    HttpStatus.BAD_REQUEST: orjson.dumps(
-        {"error": ERROR_BAD_REQUEST, "code": HttpStatus.BAD_REQUEST, "type": ERROR_TYPE_BAD_REQUEST}
-    ),
-    HttpStatus.NOT_FOUND: orjson.dumps(
-        {"error": ERROR_NOT_FOUND, "code": HttpStatus.NOT_FOUND, "type": ERROR_TYPE_NOT_FOUND}
-    ),
-    HttpStatus.METHOD_NOT_ALLOWED: orjson.dumps(
-        {
-            "error": ERROR_METHOD_NOT_ALLOWED,
-            "code": HttpStatus.METHOD_NOT_ALLOWED,
-            "type": ERROR_TYPE_METHOD_NOT_ALLOWED,
-        }
-    ),
-    HttpStatus.INTERNAL_SERVER_ERROR: orjson.dumps(
-        {"error": ERROR_INTERNAL, "code": HttpStatus.INTERNAL_SERVER_ERROR, "type": ERROR_TYPE_INTERNAL}
-    ),
+_bad_request_bytes: bytes = orjson.dumps(
+    {"error": ERROR_BAD_REQUEST, "code": HttpStatus.BAD_REQUEST, "type": ERROR_TYPE_BAD_REQUEST}
+)
+_not_found_bytes: bytes = orjson.dumps(
+    {"error": ERROR_NOT_FOUND, "code": HttpStatus.NOT_FOUND, "type": ERROR_TYPE_NOT_FOUND}
+)
+_method_not_allowed_bytes: bytes = orjson.dumps(
+    {
+        "error": ERROR_METHOD_NOT_ALLOWED,
+        "code": HttpStatus.METHOD_NOT_ALLOWED,
+        "type": ERROR_TYPE_METHOD_NOT_ALLOWED,
+    }
+)
+_internal_error_bytes: bytes = orjson.dumps(
+    {"error": ERROR_INTERNAL, "code": HttpStatus.INTERNAL_SERVER_ERROR, "type": ERROR_TYPE_INTERNAL}
+)
+_ERROR_RESPONSES: dict[int, bytes] = {
+    HttpStatus.BAD_REQUEST: _bad_request_bytes,
+    HttpStatus.NOT_FOUND: _not_found_bytes,
+    HttpStatus.METHOD_NOT_ALLOWED: _method_not_allowed_bytes,
+    HttpStatus.INTERNAL_SERVER_ERROR: _internal_error_bytes,
 }
 
 
@@ -84,7 +88,8 @@ def json_response_fast(
     else:
         headers = HEADERS_CORS_NOCACHE
 
-    return Response(orjson.dumps(data), status_code=status_code, media_type=CONTENT_TYPE_JSON, headers=headers)
+    body: bytes = orjson.dumps(data)
+    return Response(body, status_code=status_code, media_type=CONTENT_TYPE_JSON, headers=headers)
 
 
 def json_response_bytes(data_bytes: bytes, status_code: int = HttpStatus.OK, cache_level: str = "none") -> Response:
@@ -118,9 +123,8 @@ def error_response_fast(code: int, message: str | None = None) -> Response:
     else:
         # Custom error message
         error_data = {"error": message or "Error", "code": code}
-        return Response(
-            orjson.dumps(error_data), status_code=code, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE
-        )
+        body: bytes = orjson.dumps(error_data)
+        return Response(body, status_code=code, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_NOCACHE)
 
 
 def success_response_fast(data: Any = None, message: str = STATUS_SUCCESS, cache_level: str = "none") -> Response:
@@ -274,7 +278,7 @@ def pooled_json_response(data: dict[str, Any] | list[Any], status_code: int = Ht
 
     Best for high-frequency endpoints with small responses.
     """
-    content_bytes = orjson.dumps(data)
+    content_bytes: bytes = orjson.dumps(data)
     return _response_pool.get_response(content_bytes, status_code)
 
 

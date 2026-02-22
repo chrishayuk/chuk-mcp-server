@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +42,13 @@ class CompositionConfigLoader:
         if not self.config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
 
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "PyYAML is required for composition config loading. Install with: pip install pyyaml"
+            ) from None
+
         logger.info(f"Loading configuration from {self.config_path}")
 
         with open(self.config_path) as f:
@@ -65,7 +70,9 @@ class CompositionConfigLoader:
             Dictionary with statistics about what was loaded
         """
         if not self.config:
-            self.load()
+            import asyncio
+
+            await asyncio.to_thread(self.load)
 
         stats = {
             "imported": 0,
