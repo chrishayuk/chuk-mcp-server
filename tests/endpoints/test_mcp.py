@@ -82,14 +82,20 @@ class TestMCPEndpoint:
         assert "Access-Control-Allow-Credentials" not in response.headers
 
     @pytest.mark.asyncio
-    async def test_handle_request_get_without_sse_accept_returns_406(self):
-        """Test GET without Accept: text/event-stream returns 406 Not Acceptable."""
+    async def test_handle_request_get_server_info(self):
+        """Test handling GET request for server info."""
         request = MockRequest(method="GET")
 
         response = await self.endpoint.handle_request(request)
 
-        assert response.status_code == 406
-        assert b"text/event-stream" in response.body
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        assert "Access-Control-Allow-Origin" in response.headers
+
+        body = orjson.loads(response.body)
+        assert body["name"] == "TestServer"
+        assert body["version"] == "1.0.0"
+        assert body["status"] == "ready"
 
     @pytest.mark.asyncio
     async def test_handle_request_method_not_allowed(self):
@@ -579,7 +585,7 @@ class TestMCPEndpoint:
 
     @pytest.mark.asyncio
     async def test_handle_get_sse_stream_no_session_id(self):
-        """Test GET with Accept: text/event-stream but no session ID returns 406."""
+        """Test GET with Accept: text/event-stream but no session ID returns info page."""
         request = MockRequest(
             method="GET",
             headers={"accept": "text/event-stream"},
@@ -587,12 +593,14 @@ class TestMCPEndpoint:
 
         response = await self.endpoint.handle_request(request)
 
-        # No session ID means we can't open an SSE stream — 406
-        assert response.status_code == 406
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        body = orjson.loads(response.body)
+        assert body["name"] == "TestServer"
 
     @pytest.mark.asyncio
-    async def test_handle_get_without_accept_sse_returns_406(self):
-        """Test GET without SSE accept header returns 406 Not Acceptable."""
+    async def test_handle_get_without_accept_sse_returns_info(self):
+        """Test GET without SSE accept header returns JSON info (backward compat)."""
         request = MockRequest(
             method="GET",
             headers={"accept": "application/json", "mcp-session-id": "test-session-123"},
@@ -600,5 +608,8 @@ class TestMCPEndpoint:
 
         response = await self.endpoint.handle_request(request)
 
-        assert response.status_code == 406
-        assert b"text/event-stream" in response.body
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        body = orjson.loads(response.body)
+        assert body["name"] == "TestServer"
+        assert body["status"] == "ready"

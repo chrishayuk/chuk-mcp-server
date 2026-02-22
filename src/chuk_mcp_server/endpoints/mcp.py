@@ -29,6 +29,7 @@ from .constants import (
     CONTENT_TYPE_SSE,
     CORS_ALLOW_ALL,
     ERROR_METHOD_NOT_ALLOWED,
+    FRAMEWORK_DESCRIPTION,
     HEADER_ACCEPT,
     HEADER_AUTHORIZATION,
     HEADER_CACHE_CONTROL,
@@ -41,10 +42,12 @@ from .constants import (
     HEADER_MCP_SESSION_ID,
     HEADERS_CORS_ONLY,
     JSONRPC_VERSION,
+    MCP_PROTOCOL_FULL,
     MCP_PROTOCOL_VERSION,
     SSE_EVENT_ERROR,
     SSE_EVENT_MESSAGE,
     SSE_LINE_END,
+    STATUS_READY,
     HttpStatus,
     JsonRpcErrorCode,
 )
@@ -165,12 +168,19 @@ class MCPEndpoint:
                 headers=self._sse_headers(session_id),
             )
 
-        # Reject requests that don't accept SSE (matches streamable-http spec)
-        return Response(
-            "Not Acceptable: Client must accept text/event-stream",
-            status_code=HttpStatus.NOT_ACCEPTABLE,
-            headers=HEADERS_CORS_ONLY,
-        )
+        # Default: return server information (health checks, browsers, probes)
+        server_info = {
+            "name": self.protocol.server_info.name,
+            "version": self.protocol.server_info.version,
+            "protocol": MCP_PROTOCOL_FULL,
+            "status": STATUS_READY,
+            "tools": len(self.protocol.tools),
+            "resources": len(self.protocol.resources),
+            "powered_by": FRAMEWORK_DESCRIPTION,
+        }
+
+        body: bytes = orjson.dumps(server_info)
+        return Response(body, media_type=CONTENT_TYPE_JSON, headers=HEADERS_CORS_ONLY)
 
     async def _get_stream_generator(self, session_id: str):
         """Long-lived SSE generator for streamable-http GET streams.
