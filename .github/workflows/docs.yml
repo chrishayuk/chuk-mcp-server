@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install mkdocs-material mkdocstrings[python] mkdocs-git-revision-date-localized-plugin
+          uv pip install --system mkdocs-material mkdocstrings[python] mkdocs-git-revision-date-localized-plugin
 
       - name: Build docs
         run: uv run mkdocs build --strict

@@ -6,8 +6,8 @@ Build production-ready [Model Context Protocol](https://modelcontextprotocol.io)
 
 [![PyPI](https://img.shields.io/pypi/v/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
 [![Python](https://img.shields.io/pypi/pyversions/chuk-mcp-server)](https://pypi.org/project/chuk-mcp-server/)
-[![Tests](https://github.com/chrishayuk/chuk-mcp-server/actions/workflows/test.yml/badge.svg)](https://github.com/chrishayuk/chuk-mcp-server/actions)
-[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](https://github.com/chrishayuk/chuk-mcp-server)
+[![Tests](https://github.com/IBM/chuk-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/IBM/chuk-mcp-server/actions)
+[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](https://github.com/IBM/chuk-mcp-server)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ```python
@@ -97,14 +97,14 @@ Restart Claude Desktop - your tools are now available!
 
 ## 📚 Documentation
 
-**Full documentation available at:** https://chrishayuk.github.io/chuk-mcp-server/
+**Full documentation available at:** https://IBM.github.io/chuk-mcp-server/
 
-- [Getting Started Guide](https://chrishayuk.github.io/chuk-mcp-server/getting-started)
-- [Building Tools](https://chrishayuk.github.io/chuk-mcp-server/tools)
-- [OAuth Authentication](https://chrishayuk.github.io/chuk-mcp-server/oauth)
-- [Deployment Guide](https://chrishayuk.github.io/chuk-mcp-server/deployment)
-- [API Reference](https://chrishayuk.github.io/chuk-mcp-server/api)
-- [Examples & Tutorials](https://chrishayuk.github.io/chuk-mcp-server/examples)
+- [Getting Started Guide](https://IBM.github.io/chuk-mcp-server/getting-started)
+- [Building Tools](https://IBM.github.io/chuk-mcp-server/tools)
+- [OAuth Authentication](https://IBM.github.io/chuk-mcp-server/oauth)
+- [Deployment Guide](https://IBM.github.io/chuk-mcp-server/deployment)
+- [API Reference](https://IBM.github.io/chuk-mcp-server/api)
+- [Examples & Tutorials](https://IBM.github.io/chuk-mcp-server/examples)
 
 ## 🎯 Core Features
 
@@ -227,24 +227,24 @@ ChukMCPServer is built for high throughput:
 - **<3ms overhead** per tool call
 - **100% success rate** under sustained load
 
-See [Performance Benchmarks](https://chrishayuk.github.io/chuk-mcp-server/benchmarks) for detailed results.
+See [Performance Benchmarks](https://IBM.github.io/chuk-mcp-server/benchmarks) for detailed results.
 
 ## 📖 Learn More
 
-- **[Full Documentation](https://chrishayuk.github.io/chuk-mcp-server/)** - Complete guides and tutorials
-- **[API Reference](https://chrishayuk.github.io/chuk-mcp-server/api)** - Detailed API documentation
-- **[Examples](https://chrishayuk.github.io/chuk-mcp-server/examples)** - Real-world examples
-- **[GitHub](https://github.com/chrishayuk/chuk-mcp-server)** - Source code and issues
+- **[Full Documentation](https://IBM.github.io/chuk-mcp-server/)** - Complete guides and tutorials
+- **[API Reference](https://IBM.github.io/chuk-mcp-server/api)** - Detailed API documentation
+- **[Examples](https://IBM.github.io/chuk-mcp-server/examples)** - Real-world examples
+- **[GitHub](https://github.com/IBM/chuk-mcp-server)** - Source code and issues
 - **[PyPI](https://pypi.org/project/chuk-mcp-server/)** - Package distribution
 
 ### Real-World Examples
 
-- **[chuk-mcp-linkedin](https://github.com/chrishayuk/chuk-mcp-linkedin)** - LinkedIn OAuth integration
-- **[chuk-mcp-stage](https://github.com/chrishayuk/chuk-mcp-stage)** - 3D scene management with Google Drive
+- **[chuk-mcp-linkedin](https://github.com/IBM/chuk-mcp-linkedin)** - LinkedIn OAuth integration
+- **[chuk-mcp-stage](https://github.com/IBM/chuk-mcp-stage)** - 3D scene management with Google Drive
 
 ## 🤝 Contributing
 
-Contributions welcome! See [Contributing Guide](https://chrishayuk.github.io/chuk-mcp-server/contributing) for details.
+Contributions welcome! See [Contributing Guide](https://IBM.github.io/chuk-mcp-server/contributing) for details.
 
 ## 📄 License
 
@@ -252,12 +252,10 @@ Apache 2.0 License - see [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
-- **Documentation**: https://chrishayuk.github.io/chuk-mcp-server/
+- **Documentation**: https://IBM.github.io/chuk-mcp-server/
 - **PyPI Package**: https://pypi.org/project/chuk-mcp-server/
-- **GitHub**: https://github.com/chrishayuk/chuk-mcp-server
-- **Issues**: https://github.com/chrishayuk/chuk-mcp-server/issues
+- **GitHub**: https://github.com/IBM/chuk-mcp-server
+- **Issues**: https://github.com/IBM/chuk-mcp-server/issues
 - **Model Context Protocol**: https://modelcontextprotocol.io
 
 ---
-
-**Built with ❤️ for the Claude ecosystem**
