@@ -247,7 +247,7 @@ class MCPEndpoint:
             request_data = orjson.loads(body) if body else {}
             method = request_data.get(KEY_METHOD)
 
-            logger.debug(f"Processing {method} request")
+            logger.warning(f"MCP: {method} (session={session_id and session_id[:8]})")
 
             # Notifications (no "id") get a 202 immediately — no SSE stream needed
             is_notification = KEY_ID not in request_data

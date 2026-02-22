@@ -434,8 +434,8 @@ class TestMCPEndpoint:
         with patch("chuk_mcp_server.endpoints.mcp.logger") as mock_logger:
             await self.endpoint.handle_request(request)
 
-            # Verify debug logging was called
-            mock_logger.debug.assert_called_with("Processing tools/list request")
+            # Verify method logging was called
+            mock_logger.warning.assert_any_call("MCP: tools/list (session=test-ses)")
 
     @pytest.mark.asyncio
     async def test_complex_sse_initialize_flow(self):
