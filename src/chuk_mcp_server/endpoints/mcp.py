@@ -402,12 +402,17 @@ class MCPEndpoint:
         )
 
     def _emit_sse_event(self, event_type: str, data: dict[str, Any], session_id: str | None) -> tuple[str, ...]:
-        """Build SSE event lines with optional event ID for resumability."""
+        """Build SSE event lines.
+
+        Events are buffered internally for Last-Event-ID resumability but
+        the ``id:`` field is NOT emitted in the SSE stream (matching FastMCP
+        behaviour).  The replay path (_handle_get with Last-Event-ID) does
+        include ``id:`` so clients can resume correctly.
+        """
         lines: list[str] = [event_type]
         if session_id:
             event_id = self.protocol.next_sse_event_id(session_id)
             self.protocol.buffer_sse_event(session_id, event_id, data)
-            lines.append(f"id: {event_id}\r\n")
         data_str: str = orjson.dumps(data).decode()
         lines.append(f"data: {data_str}\r\n")
         lines.append(SSE_LINE_END)
