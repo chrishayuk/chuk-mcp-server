@@ -20,7 +20,19 @@ class TestMetaFieldOnToolHandler:
         handler = ToolHandler.from_function(view_tool, meta=meta)
         fmt = handler.to_mcp_format()
         assert "_meta" in fmt
-        assert fmt["_meta"] == meta
+        assert fmt["_meta"]["ui"] == meta["ui"]
+
+    def test_meta_includes_legacy_flat_key(self):
+        """_meta should include ui/resourceUri flat key when nested ui.resourceUri is set."""
+
+        def view_tool() -> dict:
+            return {"type": "chart"}
+
+        meta = {"ui": {"resourceUri": "ui://test/chart", "viewUrl": "https://example.com/chart/v1"}}
+        handler = ToolHandler.from_function(view_tool, meta=meta)
+        fmt = handler.to_mcp_format()
+        assert fmt["_meta"]["ui/resourceUri"] == "ui://test/chart"
+        assert fmt["_meta"]["ui"]["resourceUri"] == "ui://test/chart"
 
     def test_no_meta_by_default(self):
         """Tools without meta should not include _meta."""
@@ -41,7 +53,7 @@ class TestMetaFieldOnToolHandler:
 
         handler = ToolHandler.from_function(map_view, meta=meta)
         data = orjson.loads(handler.to_mcp_bytes())
-        assert data["_meta"] == meta
+        assert data["_meta"]["ui"] == meta["ui"]
 
     def test_meta_is_copied_not_referenced(self):
         """_meta in MCP format should be a copy, not a reference."""
@@ -121,7 +133,7 @@ class TestMetaFieldOnToolHandler:
 
         # Rebuild should still include _meta
         fmt = handler.to_mcp_format()
-        assert fmt["_meta"] == meta
+        assert fmt["_meta"]["ui"] == meta["ui"]
 
 
 class TestMetaInToolsListViaProtocol:

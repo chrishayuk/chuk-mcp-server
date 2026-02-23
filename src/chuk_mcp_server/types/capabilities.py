@@ -9,6 +9,7 @@ with clean APIs and backward compatibility.
 
 from typing import Any
 
+from ..constants import MCP_APPS_EXTENSION_ID, MCP_APPS_RESOURCE_MIME_TYPE
 from .base import (
     CompletionCapability,
     LoggingCapability,
@@ -44,6 +45,20 @@ class _FilteredServerCapabilities(ServerCapabilities):  # type: ignore[misc]
         self._filter_kwargs["experimental"] = exp
         object.__setattr__(self, "experimental", exp)
 
+    def enable_ui_extension(self) -> None:
+        """Enable the MCP Apps UI extension in server capabilities.
+
+        Advertises ``io.modelcontextprotocol/ui`` support so hosts know
+        this server can serve MCP Apps views.  Called automatically when
+        a tool with ``_meta.ui.resourceUri`` (``ui://`` scheme) is registered.
+        """
+        extensions: dict[str, Any] = getattr(self, "extensions", None) or {}
+        extensions[MCP_APPS_EXTENSION_ID] = {
+            "mimeTypes": [MCP_APPS_RESOURCE_MIME_TYPE],
+        }
+        object.__setattr__(self, "extensions", extensions)
+        self._filter_kwargs["extensions"] = extensions
+
     def model_dump(self, **dump_kwargs: Any) -> dict[str, Any]:
         """Filter out unwanted fields from model_dump"""
         result = super().model_dump(**dump_kwargs)
@@ -54,11 +69,28 @@ class _FilteredServerCapabilities(ServerCapabilities):  # type: ignore[misc]
             if key in self._filter_kwargs or (key == "experimental" and self._experimental is not None):
                 # Special handling for empty capability objects
                 # Keep logging and experimental even if empty (they're valid empty capabilities)
-                if isinstance(value, dict) and not value and key not in ("logging", "experimental", "completion"):
+                if (
+                    isinstance(value, dict)
+                    and not value
+                    and key
+                    not in (
+                        "logging",
+                        "experimental",
+                        "completion",
+                        "extensions",
+                    )
+                ):
                     # Skip empty capability objects (except logging and experimental)
                     # This prevents MCP Inspector UI issues
                     continue
                 filtered[key] = value
+
+        # Extensions are set via object.__setattr__ (bypasses Pydantic
+        # field tracking), so inject them directly when present.
+        extensions = self._filter_kwargs.get("extensions")
+        if extensions is not None and "extensions" not in filtered:
+            filtered["extensions"] = extensions
+
         return filtered
 
 

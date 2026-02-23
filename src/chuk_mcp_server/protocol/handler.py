@@ -30,6 +30,10 @@ from ..constants import (
     LOG_INFO,
     LOG_NOTICE,
     LOG_WARNING,
+    MCP_APPS_EXTENSION_ID,
+    MCP_APPS_LEGACY_META_KEY,
+    MCP_APPS_RESOURCE_MIME_TYPE,
+    MCP_APPS_UI_SCHEME,
     MCP_DEFAULT_PROTOCOL_VERSION,
     PACKAGE_LOGGER,
     PARAM_EXTERNAL_ACCESS_TOKEN,
@@ -162,11 +166,66 @@ class MCPProtocolHandler:
                 self.capabilities.enable_experimental()
                 logger.debug("Enabled experimental capability (tool with _meta registered)")
 
-        # Auto-register view resource when tool has _meta.ui with viewUrl
+        # MCP Apps: enable extension, normalize keys, auto-register resource
         if tool.meta:
+            self._maybe_enable_ui_extension(tool.meta)
+            self._maybe_normalize_meta_keys(tool)
             self._maybe_register_view_resource(tool.meta)
 
         logger.debug(f"Registered tool: {tool.name}")
+
+    def _maybe_enable_ui_extension(self, meta: dict[str, Any]) -> None:
+        """Enable the MCP Apps UI extension if this tool has a ``ui://`` resource."""
+        if not isinstance(meta, dict):
+            return
+        ui = meta.get("ui")
+        if not ui or not isinstance(ui, dict):
+            return
+        resource_uri = ui.get("resourceUri", "")
+        if resource_uri.startswith(MCP_APPS_UI_SCHEME) and hasattr(self.capabilities, "enable_ui_extension"):
+            self.capabilities.enable_ui_extension()
+            logger.debug("Enabled MCP Apps UI extension")
+
+    @staticmethod
+    def _maybe_normalize_meta_keys(tool: ToolHandler) -> None:
+        """Normalize ``_meta`` keys for ext-apps SDK compatibility.
+
+        The ext-apps SDK supports both nested ``_meta.ui.resourceUri``
+        and legacy flat ``_meta["ui/resourceUri"]``.  Ensure both are
+        present when either is set so all hosts can find the URI.
+        """
+        if not tool.meta or not isinstance(tool.meta, dict):
+            return
+
+        flat_uri = tool.meta.get(MCP_APPS_LEGACY_META_KEY)
+
+        ui = tool.meta.get("ui")
+        nested_uri = ui.get("resourceUri") if isinstance(ui, dict) else None
+
+        if nested_uri and not flat_uri:
+            tool.meta[MCP_APPS_LEGACY_META_KEY] = nested_uri
+            tool.invalidate_cache()
+        elif flat_uri and not nested_uri:
+            if "ui" not in tool.meta:
+                tool.meta["ui"] = {}
+            tool.meta["ui"]["resourceUri"] = flat_uri
+            tool.invalidate_cache()
+
+    def _client_supports_ui(self) -> bool:
+        """Check if the current session's client supports MCP Apps."""
+        from ..context import get_session_id
+
+        session_id = get_session_id()
+        if not session_id:
+            return False
+
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return False
+
+        client_caps = session.get("client_capabilities", {})
+        extensions = client_caps.get("extensions", {})
+        return MCP_APPS_EXTENSION_ID in extensions
 
     def _maybe_register_view_resource(self, meta: dict[str, Any]) -> None:
         """Auto-register an MCP resource for a view tool's HTML.
@@ -190,7 +249,7 @@ class MCPProtocolHandler:
             return
 
         # Only handle ui:// scheme URIs
-        if not resource_uri.startswith("ui://"):
+        if not resource_uri.startswith(MCP_APPS_UI_SCHEME):
             return
 
         # Skip if already registered
@@ -214,7 +273,7 @@ class MCPProtocolHandler:
                 func=_fetch_view_html,
                 name=view_name,
                 description=f"{view_name.title()} view HTML",
-                mime_type="text/html;profile=mcp-app",
+                mime_type=MCP_APPS_RESOURCE_MIME_TYPE,
                 cache_ttl=3600,  # Cache for 1 hour — view HTML rarely changes
             )
             self.register_resource(resource)

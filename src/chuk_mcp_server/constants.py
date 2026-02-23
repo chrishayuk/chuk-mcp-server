@@ -224,3 +224,12 @@ MAX_PENDING_REQUESTS = 100
 # ---------------------------------------------------------------------------
 DEFAULT_RATE_LIMIT_RPS = 100.0
 DEFAULT_RATE_LIMIT_BURST = 200.0
+
+
+# ---------------------------------------------------------------------------
+# MCP Apps extension (io.modelcontextprotocol/ui)
+# ---------------------------------------------------------------------------
+MCP_APPS_EXTENSION_ID = "io.modelcontextprotocol/ui"
+MCP_APPS_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
+MCP_APPS_LEGACY_META_KEY = "ui/resourceUri"
+MCP_APPS_UI_SCHEME = "ui://"

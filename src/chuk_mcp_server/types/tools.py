@@ -14,6 +14,7 @@ from typing import Any
 
 import orjson
 
+from ..constants import MCP_APPS_LEGACY_META_KEY
 from .base import MCPTool, MCPToolInputSchema, ValidationError
 from .errors import ParameterValidationError, ToolExecutionError
 from .parameters import ToolParameter
@@ -151,7 +152,13 @@ class ToolHandler:
 
             # Add _meta if present (MCP Apps, etc.)
             if self.meta:
-                fmt["_meta"] = self.meta.copy()
+                meta_copy = self.meta.copy()
+                # Ensure legacy flat key for ext-apps SDK compatibility
+                ui = meta_copy.get("ui")
+                if isinstance(ui, dict) and "resourceUri" in ui:
+                    if MCP_APPS_LEGACY_META_KEY not in meta_copy:
+                        meta_copy[MCP_APPS_LEGACY_META_KEY] = ui["resourceUri"]
+                fmt["_meta"] = meta_copy
 
             self._cached_mcp_format = fmt
 

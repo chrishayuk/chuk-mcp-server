@@ -237,6 +237,7 @@ The server targets **MCP specification 2025-11-25** (latest) and is fully confor
 | **Icons** | Implemented |
 | **List changed notifications** | Implemented (tools, resources, prompts) |
 | **MCP Apps** (`_meta`, structuredContent passthrough) | Implemented |
+| **MCP Apps Extension** (`io.modelcontextprotocol/ui` in capabilities, legacy key normalization) | Implemented (Phase 7.5a) |
 
 ---
 
@@ -416,6 +417,57 @@ Enable large-scale MCP architectures where servers are composed from many source
 
 ---
 
+## Phase 7.5: MCP Apps Extension Protocol -- v0.24
+
+Align the server with the official MCP Apps extension protocol (`@modelcontextprotocol/ext-apps`). The ext-apps spec defines how interactive HTML UIs (Apps) are embedded in MCP hosts via iframes, using a JSON-RPC 2.0 postMessage bridge between the App and the host.
+
+### 7.5a: Quick Fixes (Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Extension ID in capabilities | **Done** | Advertise `io.modelcontextprotocol/ui` in `capabilities.extensions` when a tool has `ui://` resourceUri |
+| Legacy meta key normalization | **Done** | Sync nested `_meta.ui.resourceUri` ↔ flat `_meta["ui/resourceUri"]` for ext-apps SDK compatibility |
+| Client UI detection | **Done** | `_client_supports_ui()` checks `client_capabilities.extensions["io.modelcontextprotocol/ui"]` |
+| MCP Apps constants | **Done** | `MCP_APPS_EXTENSION_ID`, `MCP_APPS_RESOURCE_MIME_TYPE`, `MCP_APPS_LEGACY_META_KEY`, `MCP_APPS_UI_SCHEME` in `constants.py` |
+
+### 7.5b: Python Server Helpers
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| `@view_tool` decorator | Planned | High-level decorator that sets `_meta.ui`, registers `ui://` resource, and wraps return values in `structuredContent` |
+| CSP metadata | Planned | Support `_meta.ui.csp` with `connectDomains`, `resourceDomains`, `frameDomains` on resources |
+| Tool visibility | Planned | `_meta.ui.visibility` support (`["model"]`, `["app"]`, `["model", "app"]`) — app-only tools hidden from LLM |
+| Size hints | Planned | `_meta.ui.preferredSize` with `width`, `height`, `minWidth`, `minHeight` |
+
+### 7.5c: Views Adopt App Protocol
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| App SDK integration | Planned | View HTML uses `@anthropic/ext-apps` `App` class for `connect()`, `ontoolresult`, `ontoolinput` |
+| Auto-resize | Planned | Views report content size via `ResizeObserver` → `ui/notifications/size-changed` |
+| Host theming | Planned | Views consume host CSS variables (85+ tokens) from `ui/context` for theme-aware rendering |
+| Display mode | Planned | Views request `cozy` / `focused` / `fullscreen` via `app.requestDisplayMode()` |
+
+### 7.5d: Bidirectional Interaction
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| `callServerTool` | Planned | App calls server tools via `app.callServerTool()` → host proxies to `tools/call` |
+| `updateModelContext` | Planned | App pushes context updates to the model via `app.updateModelContext()` |
+| `sendMessage` | Planned | App triggers new model turns via `app.sendMessage()` |
+| Input streaming | Planned | App receives partial tool input via `ontoolinputpartial` for progressive rendering |
+
+### 7.5e: Server-Side Protocol Support
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| `ui/notifications/size-changed` | Planned | Handle size-changed notifications from apps |
+| `ui/context` | Planned | Serve host context (theme, containerDimensions, safeAreaInsets, locale, displayMode) |
+| `ui/getContext` | Planned | Handle context requests from apps during initialization |
+| App permission model | Planned | Validate app-requested permissions against server policy |
+
+---
+
 ## Phase 8: Security and Enterprise -- v0.25+
 
 Capabilities required for enterprise deployments with strict compliance, governance, and multi-tenancy requirements.
@@ -436,6 +488,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.24.0 | MCP Apps extension protocol: `io.modelcontextprotocol/ui` capabilities, legacy meta key normalization, MCP Apps constants |
 | v0.23.1 | Streamable HTTP GET SSE streams: `GET /mcp` opens persistent SSE stream for server-to-client messages, fixes Claude.ai connector compatibility |
 | v0.23.0 | Codebase quality: module splitting, magic string elimination, type safety, async fixes, dependency cleanup, test infrastructure, MCP spec compliance |
 | v0.22.0 | MCP Apps: `_meta` on tools, pre-formatted result passthrough, `structuredContent` for interactive HTML UIs |
