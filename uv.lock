@@ -508,7 +508,7 @@ wheels = [
 
 [[package]]
 name = "chuk-mcp-server"
-version = "0.24"
+version = "0.25.1"
 source = { editable = "." }
 dependencies = [
     { name = "chuk-mcp" },
