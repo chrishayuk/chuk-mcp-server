@@ -129,6 +129,10 @@ class MCPProtocolHandler:
             burst = rate_limit_rps * 2  # Default burst = 2x rate
             self._rate_limiter = TokenBucketRateLimiter(rate=rate_limit_rps, burst=burst)
 
+        # SSR data cache: resource_uri → structuredContent from last tool call.
+        # Consumed (popped) on next resources/read so the view can be server-rendered.
+        self._view_data_cache: dict[str, Any] = {}
+
         # Don't log during init to keep stdio mode clean
         logger.debug("MCP protocol handler initialized with chuk_mcp")
 
@@ -266,6 +270,25 @@ class MCPProtocolHandler:
             import httpx  # noqa: F811 — lazy import, transitive dep
 
             async def _fetch_view_html() -> str:
+                # Try SSR first if we have cached data from a recent tool call
+                cached_data = self._view_data_cache.pop(resource_uri, None)
+                if cached_data:
+                    try:
+                        ssr_url = view_url.rstrip("/") + "/ssr"
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.post(
+                                ssr_url,
+                                json={"data": cached_data},
+                                timeout=5.0,
+                            )
+                            if resp.status_code == 200:
+                                logger.debug(f"SSR render succeeded for {resource_uri}")
+                                return resp.text
+                            logger.debug(f"SSR returned {resp.status_code}, falling back to static")
+                    except Exception as ssr_err:
+                        logger.debug(f"SSR failed for {resource_uri}: {ssr_err}, falling back")
+
+                # Fallback: fetch static SPA HTML from CDN
                 async with httpx.AsyncClient() as client:
                     resp = await client.get(view_url, follow_redirects=True)
                     resp.raise_for_status()
@@ -769,6 +792,19 @@ class MCPProtocolHandler:
                 tool_result["_meta"] = tool_result.get("_meta", {})
                 tool_result["_meta"]["links"] = links
             set_resource_links(None)
+
+            # Cache structuredContent for SSR: when resources/read is called
+            # for this tool's view, we can server-render with the actual data.
+            if "structuredContent" in tool_result:
+                ui_meta = (tool_handler.meta or {}).get(MCP_APPS_UI_KEY, {})
+                resource_uri = ui_meta.get(MCP_APPS_UI_RESOURCE_URI, "")
+                if resource_uri:
+                    self._view_data_cache[resource_uri] = tool_result["structuredContent"]
+                    # Invalidate resource cache so next read triggers SSR fetch
+                    resource = self.resources.get(resource_uri)
+                    if resource:
+                        resource._cached_content = None
+                        resource._cache_timestamp = None
 
             response = {JSONRPC_KEY: JSONRPC_VERSION, KEY_ID: msg_id, KEY_RESULT: tool_result}
 
