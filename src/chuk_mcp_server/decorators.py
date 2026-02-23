@@ -18,6 +18,11 @@ from .constants import (
     ATTR_MCP_TOOL,
     ATTR_REQUIRES_AUTH,
     CONTENT_TYPE_PLAIN,
+    MCP_APPS_UI_CSP,
+    MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PREFERS_BORDER,
+    MCP_APPS_UI_RESOURCE_URI,
+    MCP_APPS_UI_VIEW_URL,
 )
 from .types import PromptHandler, ResourceHandler, ToolHandler
 from .types.resources import ResourceTemplateHandler
@@ -146,6 +151,94 @@ def tool(
     else:
         # @tool() or @tool(name="...") usage
         return decorator
+
+
+# ============================================================================
+# View Tool Decorator (MCP Apps convenience)
+# ============================================================================
+
+
+def view_tool(
+    resource_uri: str,
+    view_url: str,
+    name: str | None = None,
+    description: str | None = None,
+    csp: dict[str, Any] | None = None,
+    visibility: list[str] | None = None,
+    prefers_border: bool | None = None,
+    icons: list[dict[str, Any]] | None = None,
+    output_schema: dict[str, Any] | None = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """
+    Decorator to register a function as an MCP Apps view tool.
+
+    Convenience wrapper around @tool that automatically:
+    - Builds the ``_meta.ui`` dict with ``resourceUri`` and ``viewUrl``
+    - Sets ``readOnlyHint=True`` (views are read-only)
+    - Accepts CSP, visibility, and prefersBorder as explicit params
+    - Auto-registers the ``ui://`` resource via the protocol handler
+
+    Usage:
+        @view_tool(
+            resource_uri="ui://my-server/chart",
+            view_url="https://cdn.example.com/chart/v1",
+        )
+        def show_chart(chart_type: str = "bar") -> dict:
+            return {
+                "content": [{"type": "text", "text": "Chart data"}],
+                "structuredContent": {"type": "chart", "chartType": chart_type},
+            }
+
+    Args:
+        resource_uri: The ``ui://`` URI for this view (e.g., ``"ui://server/chart"``)
+        view_url: The HTTPS URL serving the view HTML
+        name: Optional custom tool name (defaults to function name)
+        description: Optional description (defaults to docstring)
+        csp: Optional CSP config with ``connectDomains``, ``resourceDomains``, ``frameDomains``
+        visibility: Optional visibility list (``["model"]``, ``["app"]``, ``["model", "app"]``)
+        prefers_border: Optional border preference for the view resource
+        icons: Optional icons for the tool
+        output_schema: Optional JSON Schema for structured output
+    """
+    # Build the _meta dict
+    ui_meta: dict[str, Any] = {
+        MCP_APPS_UI_RESOURCE_URI: resource_uri,
+        MCP_APPS_UI_VIEW_URL: view_url,
+    }
+    if csp is not None:
+        ui_meta[MCP_APPS_UI_CSP] = csp
+    if prefers_border is not None:
+        ui_meta[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
+
+    meta = {MCP_APPS_UI_KEY: ui_meta}
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        # Create tool from function with readOnlyHint=True by default
+        mcp_tool = ToolHandler.from_function(
+            func,
+            name=name,
+            description=description,
+            read_only_hint=True,
+            output_schema=output_schema,
+            icons=icons,
+            meta=meta,
+            visibility=visibility,
+        )
+
+        # Register globally
+        with _registry_lock:
+            _global_tools.append(mcp_tool)
+
+        # Add tool metadata to function
+        setattr(func, ATTR_MCP_TOOL, mcp_tool)
+
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 # ============================================================================

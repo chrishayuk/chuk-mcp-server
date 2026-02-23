@@ -152,7 +152,7 @@ except ImportError:
 from .core import ChukMCPServer, create_mcp_server, quick_server
 
 # Import traditional decorators for global usage
-from .decorators import prompt, requires_auth, resource, resource_template, tool
+from .decorators import prompt, requires_auth, resource, resource_template, tool, view_tool
 from .modules import ModuleLoader
 
 # Import proxy functionality
@@ -267,6 +267,7 @@ __all__ = [
     "get_mcp_server",
     # 🪄 MAGIC DECORATORS
     "tool",
+    "view_tool",
     "resource",
     "resource_template",
     "prompt",

@@ -33,7 +33,12 @@ from ..constants import (
     MCP_APPS_EXTENSION_ID,
     MCP_APPS_LEGACY_META_KEY,
     MCP_APPS_RESOURCE_MIME_TYPE,
+    MCP_APPS_UI_CSP,
+    MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PREFERS_BORDER,
+    MCP_APPS_UI_RESOURCE_URI,
     MCP_APPS_UI_SCHEME,
+    MCP_APPS_UI_VIEW_URL,
     MCP_DEFAULT_PROTOCOL_VERSION,
     PACKAGE_LOGGER,
     PARAM_EXTERNAL_ACCESS_TOKEN,
@@ -178,10 +183,10 @@ class MCPProtocolHandler:
         """Enable the MCP Apps UI extension if this tool has a ``ui://`` resource."""
         if not isinstance(meta, dict):
             return
-        ui = meta.get("ui")
+        ui = meta.get(MCP_APPS_UI_KEY)
         if not ui or not isinstance(ui, dict):
             return
-        resource_uri = ui.get("resourceUri", "")
+        resource_uri = ui.get(MCP_APPS_UI_RESOURCE_URI, "")
         if resource_uri.startswith(MCP_APPS_UI_SCHEME) and hasattr(self.capabilities, "enable_ui_extension"):
             self.capabilities.enable_ui_extension()
             logger.debug("Enabled MCP Apps UI extension")
@@ -199,16 +204,16 @@ class MCPProtocolHandler:
 
         flat_uri = tool.meta.get(MCP_APPS_LEGACY_META_KEY)
 
-        ui = tool.meta.get("ui")
-        nested_uri = ui.get("resourceUri") if isinstance(ui, dict) else None
+        ui = tool.meta.get(MCP_APPS_UI_KEY)
+        nested_uri = ui.get(MCP_APPS_UI_RESOURCE_URI) if isinstance(ui, dict) else None
 
         if nested_uri and not flat_uri:
             tool.meta[MCP_APPS_LEGACY_META_KEY] = nested_uri
             tool.invalidate_cache()
         elif flat_uri and not nested_uri:
-            if "ui" not in tool.meta:
-                tool.meta["ui"] = {}
-            tool.meta["ui"]["resourceUri"] = flat_uri
+            if MCP_APPS_UI_KEY not in tool.meta:
+                tool.meta[MCP_APPS_UI_KEY] = {}
+            tool.meta[MCP_APPS_UI_KEY][MCP_APPS_UI_RESOURCE_URI] = flat_uri
             tool.invalidate_cache()
 
     def _client_supports_ui(self) -> bool:
@@ -238,12 +243,12 @@ class MCPProtocolHandler:
         """
         if not isinstance(meta, dict):
             return
-        ui = meta.get("ui")
+        ui = meta.get(MCP_APPS_UI_KEY)
         if not ui:
             return
 
-        resource_uri = ui.get("resourceUri", "")
-        view_url = ui.get("viewUrl")
+        resource_uri = ui.get(MCP_APPS_UI_RESOURCE_URI, "")
+        view_url = ui.get(MCP_APPS_UI_VIEW_URL)
 
         if not resource_uri or not view_url:
             return
@@ -268,6 +273,18 @@ class MCPProtocolHandler:
             # Derive a short name from the URI (e.g. "ui://server/chart" → "chart")
             view_name = resource_uri.rsplit("/", 1)[-1] if "/" in resource_uri else resource_uri
 
+            # Build resource-level _meta from tool's ui metadata
+            resource_meta: dict[str, Any] | None = None
+            prefers_border = ui.get(MCP_APPS_UI_PREFERS_BORDER)
+            csp = ui.get(MCP_APPS_UI_CSP)
+            if prefers_border is not None or csp is not None:
+                resource_ui: dict[str, Any] = {}
+                if prefers_border is not None:
+                    resource_ui[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
+                if csp is not None:
+                    resource_ui[MCP_APPS_UI_CSP] = csp
+                resource_meta = {MCP_APPS_UI_KEY: resource_ui}
+
             resource = ResourceHandler.from_function(
                 uri=resource_uri,
                 func=_fetch_view_html,
@@ -275,6 +292,7 @@ class MCPProtocolHandler:
                 description=f"{view_name.title()} view HTML",
                 mime_type=MCP_APPS_RESOURCE_MIME_TYPE,
                 cache_ttl=3600,  # Cache for 1 hour — view HTML rarely changes
+                meta=resource_meta,
             )
             self.register_resource(resource)
             logger.debug(f"Auto-registered view resource: {resource_uri} → {view_url}")
@@ -312,10 +330,20 @@ class MCPProtocolHandler:
         logger.debug(f"Registered completion provider: {ref_type}")
 
     def get_tools_list(self) -> list[dict[str, Any]]:
-        """Get list of tools in MCP format."""
+        """Get list of tools in MCP format.
+
+        Tools with ``visibility=["app"]`` are excluded from the listing
+        (they are app-only and should not be shown to the LLM).
+        They remain callable via ``tools/call``.
+        """
+        from ..constants import MCP_APPS_VISIBILITY_APP_ONLY
+
         tools_list = []
 
         for tool_handler in self.tools.values():
+            # Skip app-only tools (hidden from LLM in tools/list)
+            if tool_handler.visibility == MCP_APPS_VISIBILITY_APP_ONLY:
+                continue
             tools_list.append(tool_handler.to_mcp_format())
 
         return tools_list

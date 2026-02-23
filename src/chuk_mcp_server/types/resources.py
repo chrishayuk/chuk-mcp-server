@@ -41,6 +41,7 @@ class ResourceHandler:
     _cached_mcp_format: dict[str, Any] | None = None  # Cache the MCP format dict
     _cached_mcp_bytes: bytes | None = None  # 🚀 Cache orjson-serialized bytes
     icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
+    meta: dict[str, Any] | None = None  # Resource _meta (MCP Apps prefersBorder, CSP, etc.)
 
     def __post_init__(self) -> None:
         self._cached_content: str | None = None
@@ -51,6 +52,9 @@ class ResourceHandler:
             # Add icons if present (MCP 2025-11-25)
             if self.icons:
                 fmt["icons"] = [icon.copy() for icon in self.icons]
+            # Add _meta if present (MCP Apps)
+            if self.meta:
+                fmt["_meta"] = self.meta.copy()
             self._cached_mcp_format = fmt
         if self._cached_mcp_bytes is None:
             self._cached_mcp_bytes = orjson.dumps(self._cached_mcp_format)
@@ -65,6 +69,7 @@ class ResourceHandler:
         mime_type: str = CONTENT_TYPE_PLAIN,
         cache_ttl: int | None = None,
         icons: list[dict[str, Any]] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> "ResourceHandler":
         """Create ResourceHandler from a function."""
         resource_name = name or func.__name__.replace("_", " ").title()
@@ -80,6 +85,7 @@ class ResourceHandler:
             _cached_mcp_format=None,  # Will be computed in __post_init__
             _cached_mcp_bytes=None,  # Will be computed in __post_init__
             icons=icons,
+            meta=meta,
         )
 
     @property
@@ -103,10 +109,12 @@ class ResourceHandler:
         return cast("str | None", self.mcp_resource.mimeType)
 
     def to_mcp_format(self) -> dict[str, Any]:
-        """Convert to MCP resource format using cached version."""
-        if self._cached_mcp_format is None:
-            self._cached_mcp_format = self.mcp_resource.model_dump(exclude_none=True)
-        return self._cached_mcp_format.copy()  # Return copy to prevent mutation
+        """Convert to MCP resource format using orjson deep-copy from cached bytes."""
+        if self._cached_mcp_bytes is None:
+            self.__post_init__()
+        assert self._cached_mcp_bytes is not None
+        result: dict[str, Any] = orjson.loads(self._cached_mcp_bytes)
+        return result
 
     def to_mcp_bytes(self) -> bytes:
         """🚀 Get orjson-serialized MCP format bytes for ultimate performance."""

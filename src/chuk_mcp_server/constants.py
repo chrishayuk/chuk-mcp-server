@@ -233,3 +233,18 @@ MCP_APPS_EXTENSION_ID = "io.modelcontextprotocol/ui"
 MCP_APPS_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
 MCP_APPS_LEGACY_META_KEY = "ui/resourceUri"
 MCP_APPS_UI_SCHEME = "ui://"
+
+# MCP Apps UI metadata keys (used in _meta.ui dict)
+MCP_APPS_UI_KEY = "ui"
+MCP_APPS_UI_RESOURCE_URI = "resourceUri"
+MCP_APPS_UI_VIEW_URL = "viewUrl"
+MCP_APPS_UI_CSP = "csp"
+MCP_APPS_UI_PREFERS_BORDER = "prefersBorder"
+MCP_APPS_UI_VISIBILITY = "visibility"
+
+# MCP Apps visibility values
+MCP_APPS_VISIBILITY_MODEL = "model"
+MCP_APPS_VISIBILITY_APP = "app"
+MCP_APPS_VISIBILITY_DEFAULT: list[str] = [MCP_APPS_VISIBILITY_MODEL, MCP_APPS_VISIBILITY_APP]
+MCP_APPS_VISIBILITY_APP_ONLY: list[str] = [MCP_APPS_VISIBILITY_APP]
+MCP_APPS_VISIBILITY_MODEL_ONLY: list[str] = [MCP_APPS_VISIBILITY_MODEL]
