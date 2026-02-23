@@ -8,21 +8,17 @@ This guide covers how to build MCP Apps view tools with ChukMCPServer.
 
 ## Quick Start
 
+The `@mcp.view_tool()` decorator is the recommended way to create view tools:
+
 ```python
 from chuk_mcp_server import ChukMCPServer
 
 mcp = ChukMCPServer(name="my-views", version="1.0.0")
 
-@mcp.tool(
-    name="show_chart",
+@mcp.view_tool(
+    resource_uri="ui://my-views/chart",
+    view_url="https://your-cdn.example.com/chart/v1",
     description="Show a bar chart of sales data.",
-    read_only_hint=True,
-    meta={
-        "ui": {
-            "resourceUri": "ui://my-views/chart",
-            "viewUrl": "https://your-cdn.example.com/chart/v1",
-        }
-    },
 )
 async def show_chart() -> dict:
     return {
@@ -41,23 +37,38 @@ async def show_chart() -> dict:
     }
 ```
 
-That's it. ChukMCPServer handles the rest automatically.
+That's it. ChukMCPServer handles the rest automatically:
+- Builds `_meta.ui` with `resourceUri` and `viewUrl`
+- Sets `readOnlyHint=True`
+- Auto-registers a `ui://` resource that serves the view HTML
+- Enables `experimental` capability and `io.modelcontextprotocol/ui` extension
 
 ---
 
 ## How It Works
 
-When you register a tool with `meta.ui`, three things happen at registration time:
+### Three-Party Architecture
+
+MCP Apps involve three parties communicating via two protocols:
+
+```
+View (iframe)  ←— ext-apps postMessage —→  Host (Claude.ai)  ←— MCP JSON-RPC —→  Server
+```
+
+- **Server ↔ Host**: Standard MCP protocol (`tools/call`, `resources/read`)
+- **Host ↔ View**: The ext-apps protocol (`@modelcontextprotocol/ext-apps`) over `window.postMessage`
+
+The Python MCP server does **not** directly handle ext-apps messages. The host (Claude.ai) proxies between views and the server using standard MCP.
+
+### Registration-Time Setup
+
+When you register a tool with `@mcp.view_tool()`, three things happen:
 
 1. **`experimental: {}` capability** is enabled (backward compatibility for Claude.ai)
 2. **`io.modelcontextprotocol/ui` extension** is advertised in server capabilities
 3. **A resource handler** is auto-registered at the `resourceUri` that fetches the view HTML from `viewUrl`
 
-At runtime, when Claude calls your tool:
-
-1. The host reads the view HTML via `resources/read` on the `resourceUri`
-2. The host renders the HTML in a sandboxed iframe
-3. Your tool's `structuredContent` dict is passed to the iframe as the data payload
+### Runtime Flow
 
 ```
 Client (Claude.ai)                    Server
@@ -69,40 +80,139 @@ Client (Claude.ai)                    Server
     |-- resources/read "ui://..." ------>|  (returns view HTML)
     |                                    |
     |   [renders iframe with HTML + data]
+    |                                    |
+    |   View ←→ Host (ext-apps postMessage, handled by host)
 ```
 
 ---
 
-## Tool Metadata (`meta`)
+## `@view_tool` Decorator
 
-The `meta` parameter on `@mcp.tool()` maps to `_meta` in the MCP `tools/list` response.
-
-### Required Fields
-
-| Field | Description | Example |
-|-------|-------------|---------|
-| `ui.resourceUri` | A `ui://` scheme URI identifying the view. Used by the host to call `resources/read`. | `"ui://my-server/chart"` |
-| `ui.viewUrl` | The HTTPS URL serving the view's HTML/JS bundle. The server fetches this to serve via `resources/read`. | `"https://cdn.example.com/chart/v1"` |
-
-### Example
+### Instance Decorator (Recommended)
 
 ```python
-meta={
-    "ui": {
-        "resourceUri": "ui://my-server/chart",
-        "viewUrl": "https://cdn.example.com/chart/v1",
-    }
-}
+@mcp.view_tool(
+    resource_uri="ui://my-server/chart",
+    view_url="https://cdn.example.com/chart/v1",
+    csp={"connectDomains": ["api.example.com"]},
+    visibility=["model", "app"],
+    prefers_border=True,
+    permissions={"camera": {}, "microphone": {}},
+)
+async def show_chart(chart_type: str = "bar") -> dict:
+    ...
 ```
 
-### URI Scheme
+### Standalone Decorator
 
-- `resourceUri` **must** use the `ui://` scheme. This is a virtual URI — it doesn't resolve to a network address. The server maps it to the view HTML served from `viewUrl`.
-- The path structure is up to you. Convention: `ui://{server-name}/{view-name}`.
+```python
+from chuk_mcp_server import view_tool
 
-### Legacy Flat Key
+@view_tool(
+    resource_uri="ui://my-server/chart",
+    view_url="https://cdn.example.com/chart/v1",
+)
+def show_chart() -> dict:
+    ...
+```
 
-For compatibility with the ext-apps SDK, the server automatically adds a flat key `_meta["ui/resourceUri"]` alongside the nested `_meta.ui.resourceUri`. You don't need to set this manually.
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `resource_uri` | `str` | **Required.** A `ui://` URI identifying the view. |
+| `view_url` | `str` | **Required.** HTTPS URL serving the view HTML/JS bundle. |
+| `name` | `str \| None` | Custom tool name (defaults to function name). |
+| `description` | `str \| None` | Tool description (defaults to docstring). |
+| `csp` | `dict \| None` | Content Security Policy with `connectDomains`, `resourceDomains`, `frameDomains`. |
+| `visibility` | `list[str] \| None` | Who sees the tool: `["model"]`, `["app"]`, or `["model", "app"]`. |
+| `prefers_border` | `bool \| None` | Whether the view prefers a border in the host UI. |
+| `permissions` | `dict \| None` | Ext-apps permissions for the iframe (e.g., `{"camera": {}, "clipboard-write": {}}`). |
+| `icons` | `list[dict] \| None` | Tool icons. |
+| `output_schema` | `dict \| None` | JSON Schema for structured output. |
+
+---
+
+## Permissions
+
+Views can request browser permissions for their iframe sandbox. Declare them via the `permissions` parameter:
+
+```python
+@mcp.view_tool(
+    resource_uri="ui://my-server/video-recorder",
+    view_url="https://cdn.example.com/recorder/v1",
+    permissions={"camera": {}, "microphone": {}},
+)
+async def record_video() -> dict:
+    return {
+        "content": [{"type": "text", "text": "Video recorder ready."}],
+        "structuredContent": {"mode": "record"},
+    }
+```
+
+Permissions are serialized into `_meta.ui.permissions` and passed through to the auto-registered resource's metadata. The host uses these to configure the iframe's `allow` attribute.
+
+Common permissions:
+- `camera` — Access the device camera
+- `microphone` — Access the device microphone
+- `geolocation` — Access the device location
+- `clipboard-write` — Write to the system clipboard
+
+---
+
+## Display Modes
+
+Views can request different display modes from the host via the ext-apps SDK:
+
+| Mode | Description |
+|------|-------------|
+| `inline` | Default. View renders inline within the conversation. |
+| `fullscreen` | View expands to fill the available screen area. |
+| `pip` | Picture-in-picture mode (view floats over the conversation). |
+
+Display modes are requested by the view at runtime using `app.requestDisplayMode("fullscreen")`, not configured on the server. The server provides constants for reference:
+
+```python
+from chuk_mcp_server.constants import (
+    MCP_APPS_DISPLAY_INLINE,
+    MCP_APPS_DISPLAY_FULLSCREEN,
+    MCP_APPS_DISPLAY_PIP,
+)
+```
+
+---
+
+## Visibility
+
+Control who sees the tool — the model (LLM), the app (view iframe), or both:
+
+```python
+from chuk_mcp_server.constants import (
+    MCP_APPS_VISIBILITY_APP_ONLY,
+    MCP_APPS_VISIBILITY_MODEL_ONLY,
+    MCP_APPS_VISIBILITY_DEFAULT,
+)
+
+# Only visible to views (hidden from tools/list for the LLM)
+@mcp.view_tool(
+    resource_uri="ui://my-server/helper",
+    view_url="https://cdn.example.com/helper/v1",
+    visibility=MCP_APPS_VISIBILITY_APP_ONLY,
+)
+async def app_helper() -> dict:
+    ...
+
+# Only visible to the model (not exposed to views via callServerTool)
+@mcp.view_tool(
+    resource_uri="ui://my-server/analysis",
+    view_url="https://cdn.example.com/analysis/v1",
+    visibility=MCP_APPS_VISIBILITY_MODEL_ONLY,
+)
+async def model_analysis() -> dict:
+    ...
+```
+
+App-only tools are hidden from `tools/list` but remain callable via `tools/call`. This lets views use `callServerTool()` to invoke server-side logic without exposing those tools to the LLM.
 
 ---
 
@@ -138,8 +248,9 @@ When a tool has both `resourceUri` (with `ui://` scheme) and `viewUrl` in its me
 1. Creates an async resource handler that fetches the HTML from `viewUrl` via `httpx`
 2. Registers it at the `resourceUri` with MIME type `text/html;profile=mcp-app`
 3. Caches the HTML for 1 hour (`cache_ttl=3600`)
+4. Passes through `prefersBorder`, `csp`, and `permissions` metadata to the resource
 
-This means you don't need to manually register a resource — the `@mcp.tool()` decorator handles everything.
+This means you don't need to manually register a resource — the `@mcp.view_tool()` decorator handles everything.
 
 ### Requirements
 
@@ -171,41 +282,44 @@ When the resource already exists, auto-registration is skipped.
 
 ---
 
-## Server Capabilities
+## Ext-Apps Protocol (Host ↔ View)
 
-When a tool with `_meta.ui` is registered, the server enables two capabilities:
+The ext-apps protocol defines communication between the iframe view and the host (Claude.ai) via `window.postMessage`. It uses JSON-RPC 2.0 format.
 
-### `experimental: {}`
+### Key Methods
 
-Required by Claude.ai to know the server supports structured content. Enabled automatically when any tool has `meta` set.
+| Method | Direction | Purpose |
+|--------|-----------|---------|
+| `ui/initialize` | View → Host | Initialize the ext-apps connection |
+| `ui/getContext` | View → Host | Get host context (theme, display mode) |
+| `ui/notifications/tool-result` | Host → View | Deliver tool result data |
+| `ui/notifications/tool-input` | Host → View | Deliver tool input parameters |
+| `ui/notifications/size-changed` | View → Host | Report view size change |
+| `ui/update-model-context` | View → Host | Push context updates to the model |
+| `ui/message` | View → Host | Send a message to trigger a model turn |
+| `ui/request-display-mode` | View → Host | Request fullscreen/pip/inline mode |
+| `ui/open-link` | View → Host | Open a link in the host browser |
+| `ui/resource-teardown` | Host → View | Notify view it's being removed |
 
-### `extensions.io.modelcontextprotocol/ui`
+These methods are all handled by the host, not by the MCP server. The server provides constants for these method names for reference and logging:
 
-The official MCP Apps extension ID. Advertised in `capabilities.extensions` when a tool has a `ui://` resourceUri. This tells hosts that the server can serve MCP Apps views.
-
-```json
-{
-  "capabilities": {
-    "tools": {"listChanged": true},
-    "resources": {"listChanged": true, "subscribe": true},
-    "experimental": {},
-    "extensions": {
-      "io.modelcontextprotocol/ui": {
-        "mimeTypes": ["text/html;profile=mcp-app"]
-      }
-    }
-  }
-}
+```python
+from chuk_mcp_server.constants import (
+    MCP_APPS_METHOD_UI_INITIALIZE,
+    MCP_APPS_METHOD_UI_TOOL_RESULT,
+    MCP_APPS_METHOD_UI_UPDATE_CONTEXT,
+    MCP_APPS_METHOD_UI_SEND_MESSAGE,
+    # ... etc.
+)
 ```
+
+### Defensive Handling
+
+If the server receives a `ui/*` method (e.g., due to misconfigured routing), it responds with a clear `METHOD_NOT_FOUND` error explaining the method is handled by the host, not the server.
 
 ---
 
-## View HTML
-
-The view HTML is a standalone page that receives data from the host. At minimum, it needs to:
-
-1. Listen for a `message` event containing the `structuredContent` data
-2. Render the data into the DOM
+## View HTML and the Ext-Apps SDK
 
 ### Minimal Example
 
@@ -227,7 +341,7 @@ The view HTML is a standalone page that receives data from the host. At minimum,
 </html>
 ```
 
-### Using the ext-apps SDK
+### Using the Ext-Apps SDK (Recommended)
 
 For production views, use the official `@anthropic/ext-apps` SDK:
 
@@ -236,36 +350,33 @@ For production views, use the official `@anthropic/ext-apps` SDK:
   import { App } from "https://cdn.jsdelivr.net/npm/@anthropic/ext-apps/+esm";
 
   const app = new App();
+
+  // Receive tool result data
   app.ontoolresult = (result) => {
-    // result.structuredContent contains your data
     renderChart(result.structuredContent);
   };
+
+  // Receive tool input (parameters the model chose)
+  app.ontoolinput = (input) => {
+    console.log("Tool called with:", input);
+  };
+
+  // Connect to the host
   await app.connect();
 </script>
 ```
 
+### SDK Features
+
 The ext-apps SDK provides:
-- Automatic theme integration (dark/light mode, host CSS variables)
-- Auto-resize reporting via `ResizeObserver`
-- `callServerTool()` for bidirectional interaction
-- `updateModelContext()` to push context updates to the model
-- `sendMessage()` to trigger new model turns
 
----
-
-## Tool Annotations
-
-View tools should typically set `read_only_hint=True` since they only display data:
-
-```python
-@mcp.tool(
-    name="show_chart",
-    read_only_hint=True,
-    meta={"ui": {...}},
-)
-async def show_chart() -> dict:
-    ...
-```
+- **Theme integration**: Automatic dark/light mode via CSS variables (`--primary`, `--background`, etc.)
+- **Auto-resize**: Reports view size changes to the host via `ResizeObserver`
+- **`callServerTool(name, args)`**: Call another MCP tool from the view (bidirectional interaction)
+- **`updateModelContext(context)`**: Push context updates to the model (e.g., user selections)
+- **`sendMessage(text)`**: Trigger a new model turn with a message
+- **`requestDisplayMode(mode)`**: Request fullscreen, pip, or inline display
+- **`openLink(url)`**: Open a link in the host's browser
 
 ---
 
@@ -297,8 +408,7 @@ async def test_chart_tool_has_meta(runner):
     assert chart["_meta"]["ui"]["resourceUri"] == "ui://my-views/chart"
 
 async def test_view_resource_auto_registered(server):
-    handler = server.protocol_handler
-    assert "ui://my-views/chart" in handler.resources
+    assert "ui://my-views/chart" in server.protocol.resources
 ```
 
 ---

@@ -35,6 +35,7 @@ from ..constants import (
     MCP_APPS_RESOURCE_MIME_TYPE,
     MCP_APPS_UI_CSP,
     MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PERMISSIONS,
     MCP_APPS_UI_PREFERS_BORDER,
     MCP_APPS_UI_RESOURCE_URI,
     MCP_APPS_UI_SCHEME,
@@ -277,12 +278,15 @@ class MCPProtocolHandler:
             resource_meta: dict[str, Any] | None = None
             prefers_border = ui.get(MCP_APPS_UI_PREFERS_BORDER)
             csp = ui.get(MCP_APPS_UI_CSP)
-            if prefers_border is not None or csp is not None:
+            permissions = ui.get(MCP_APPS_UI_PERMISSIONS)
+            if prefers_border is not None or csp is not None or permissions is not None:
                 resource_ui: dict[str, Any] = {}
                 if prefers_border is not None:
                     resource_ui[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
                 if csp is not None:
                     resource_ui[MCP_APPS_UI_CSP] = csp
+                if permissions is not None:
+                    resource_ui[MCP_APPS_UI_PERMISSIONS] = permissions
                 resource_meta = {MCP_APPS_UI_KEY: resource_ui}
 
             resource = ResourceHandler.from_function(
@@ -478,6 +482,18 @@ class MCPProtocolHandler:
                 return await self._handle_tasks_list(params, msg_id)
             elif method == McpTaskMethod.TASKS_CANCEL:
                 return await self._handle_tasks_cancel(params, msg_id)
+            # Ext-apps protocol methods (ui/*) — handled by the host, not the server
+            elif method and isinstance(method, str) and method.startswith("ui/"):
+                if msg_id is None:
+                    # Notification — silently acknowledge
+                    logger.debug("Received ext-apps notification %s — handled by host", method)
+                    return None, None
+                else:
+                    return self._create_error_response(
+                        msg_id,
+                        JsonRpcError.METHOD_NOT_FOUND,
+                        f"Method '{method}' is an ext-apps protocol method handled by the host, not the MCP server",
+                    ), None
             else:
                 return self._create_error_response(
                     msg_id, JsonRpcError.METHOD_NOT_FOUND, f"Method not found: {method}"

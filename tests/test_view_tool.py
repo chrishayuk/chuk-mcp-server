@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for Phase 7.5b: @view_tool decorator, visibility filtering, CSP, prefersBorder."""
+"""Tests for @view_tool decorator, visibility filtering, CSP, prefersBorder, permissions."""
 
 import orjson
 import pytest
@@ -8,6 +8,7 @@ from chuk_mcp_server.constants import (
     MCP_APPS_LEGACY_META_KEY,
     MCP_APPS_UI_CSP,
     MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PERMISSIONS,
     MCP_APPS_UI_PREFERS_BORDER,
     MCP_APPS_UI_RESOURCE_URI,
     MCP_APPS_UI_VIEW_URL,
@@ -475,3 +476,129 @@ class TestStructuredContentRegression:
         result = response["result"]
         assert result["structuredContent"]["type"] == "chart"
         assert result["content"][0]["text"] == "Revenue chart"
+
+
+# ============================================================================
+# Permissions (Phase 7.5c)
+# ============================================================================
+
+
+class TestPermissions:
+    """Test permissions on standalone @view_tool."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_registry(self):
+        clear_global_registry()
+        yield
+        clear_global_registry()
+
+    def test_permissions_in_meta(self):
+        """Permissions should appear in _meta.ui.permissions."""
+        perms = {"camera": {}, "microphone": {}}
+
+        @view_tool(
+            resource_uri="ui://test/perm",
+            view_url="https://cdn.example.com/perm/v1",
+            permissions=perms,
+        )
+        def perm_tool() -> dict:
+            return {}
+
+        handler = perm_tool._mcp_tool
+        fmt = handler.to_mcp_format()
+        assert fmt["_meta"][MCP_APPS_UI_KEY][MCP_APPS_UI_PERMISSIONS] == perms
+
+    def test_no_permissions_when_none(self):
+        """No permissions key when permissions is None."""
+
+        @view_tool(
+            resource_uri="ui://test/noperm",
+            view_url="https://cdn.example.com/noperm/v1",
+        )
+        def no_perm_tool() -> dict:
+            return {}
+
+        handler = no_perm_tool._mcp_tool
+        fmt = handler.to_mcp_format()
+        assert MCP_APPS_UI_PERMISSIONS not in fmt["_meta"][MCP_APPS_UI_KEY]
+
+    def test_permissions_deep_copy(self):
+        """Permissions should be deep-copied — mutation safety."""
+        perms = {"camera": {"facingMode": "user"}}
+
+        @view_tool(
+            resource_uri="ui://test/permdeepcopy",
+            view_url="https://cdn.example.com/permdeepcopy/v1",
+            permissions=perms,
+        )
+        def deep_perm() -> dict:
+            return {}
+
+        handler = deep_perm._mcp_tool
+        fmt1 = handler.to_mcp_format()
+        fmt1["_meta"][MCP_APPS_UI_KEY][MCP_APPS_UI_PERMISSIONS]["camera"]["facingMode"] = "environment"
+
+        fmt2 = handler.to_mcp_format()
+        assert fmt2["_meta"][MCP_APPS_UI_KEY][MCP_APPS_UI_PERMISSIONS]["camera"]["facingMode"] == "user"
+
+    def test_permissions_in_bytes(self):
+        """Permissions should appear in orjson bytes."""
+        perms = {"geolocation": {}}
+
+        @view_tool(
+            resource_uri="ui://test/permbytes",
+            view_url="https://cdn.example.com/permbytes/v1",
+            permissions=perms,
+        )
+        def bytes_perm() -> dict:
+            return {}
+
+        handler = bytes_perm._mcp_tool
+        data: dict = orjson.loads(handler.to_mcp_bytes())
+        assert data["_meta"][MCP_APPS_UI_KEY][MCP_APPS_UI_PERMISSIONS] == perms
+
+
+class TestInstanceViewToolPermissions:
+    """Test permissions on instance @mcp.view_tool()."""
+
+    @pytest.fixture
+    def server(self):
+        from chuk_mcp_server.core import ChukMCPServer
+
+        return ChukMCPServer(name="test-perms", version="0.1.0")
+
+    async def test_permissions_in_tools_list(self, server):
+        """Permissions should appear in tools/list response."""
+        perms = {"camera": {}, "clipboard-write": {}}
+
+        @server.view_tool(
+            resource_uri="ui://test-perms/cam",
+            view_url="https://cdn.example.com/cam/v1",
+            permissions=perms,
+        )
+        def cam_tool() -> dict:
+            return {"content": [{"type": "text", "text": "cam"}], "structuredContent": {"mode": "photo"}}
+
+        from chuk_mcp_server.testing import ToolRunner
+
+        runner = ToolRunner(server)
+        tools = await runner.list_tools()
+        tool_info = next(t for t in tools if t["name"] == "cam_tool")
+        assert tool_info["_meta"][MCP_APPS_UI_KEY][MCP_APPS_UI_PERMISSIONS] == perms
+
+    async def test_no_permissions_key_when_none(self, server):
+        """No permissions key when not set on instance view_tool."""
+
+        @server.view_tool(
+            resource_uri="ui://test-perms/noperm",
+            view_url="https://cdn.example.com/noperm/v1",
+        )
+        def no_perm() -> dict:
+            return {"content": [{"type": "text", "text": "test"}], "structuredContent": {}}
+
+        from chuk_mcp_server.testing import ToolRunner
+
+        runner = ToolRunner(server)
+        tools = await runner.list_tools()
+        tool_info = next(t for t in tools if t["name"] == "no_perm")
+        assert MCP_APPS_UI_PERMISSIONS not in tool_info["_meta"][MCP_APPS_UI_KEY]

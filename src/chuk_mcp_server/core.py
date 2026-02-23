@@ -22,6 +22,7 @@ from .constants import (
     CONTENT_TYPE_PLAIN,
     MCP_APPS_UI_CSP,
     MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PERMISSIONS,
     MCP_APPS_UI_PREFERS_BORDER,
     MCP_APPS_UI_RESOURCE_URI,
     MCP_APPS_UI_VIEW_URL,
@@ -321,6 +322,7 @@ class ChukMCPServer:
         csp: dict[str, Any] | None = None,
         visibility: list[str] | None = None,
         prefers_border: bool | None = None,
+        permissions: dict[str, Any] | None = None,
         icons: list[dict[str, Any]] | None = None,
         output_schema: dict[str, Any] | None = None,
         **kwargs: Any,
@@ -331,7 +333,7 @@ class ChukMCPServer:
         Convenience wrapper around ``@mcp.tool()`` that automatically:
         - Builds the ``_meta.ui`` dict with ``resourceUri`` and ``viewUrl``
         - Sets ``readOnlyHint=True``
-        - Accepts CSP, visibility, and prefersBorder params
+        - Accepts CSP, visibility, prefersBorder, and permissions params
         - Auto-registers the ``ui://`` resource
 
         Usage:
@@ -354,6 +356,8 @@ class ChukMCPServer:
             ui_meta[MCP_APPS_UI_CSP] = csp
         if prefers_border is not None:
             ui_meta[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
+        if permissions is not None:
+            ui_meta[MCP_APPS_UI_PERMISSIONS] = permissions
 
         meta = {MCP_APPS_UI_KEY: ui_meta}
 

@@ -20,6 +20,7 @@ from .constants import (
     CONTENT_TYPE_PLAIN,
     MCP_APPS_UI_CSP,
     MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PERMISSIONS,
     MCP_APPS_UI_PREFERS_BORDER,
     MCP_APPS_UI_RESOURCE_URI,
     MCP_APPS_UI_VIEW_URL,
@@ -166,6 +167,7 @@ def view_tool(
     csp: dict[str, Any] | None = None,
     visibility: list[str] | None = None,
     prefers_border: bool | None = None,
+    permissions: dict[str, Any] | None = None,
     icons: list[dict[str, Any]] | None = None,
     output_schema: dict[str, Any] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -175,7 +177,7 @@ def view_tool(
     Convenience wrapper around @tool that automatically:
     - Builds the ``_meta.ui`` dict with ``resourceUri`` and ``viewUrl``
     - Sets ``readOnlyHint=True`` (views are read-only)
-    - Accepts CSP, visibility, and prefersBorder as explicit params
+    - Accepts CSP, visibility, prefersBorder, and permissions as explicit params
     - Auto-registers the ``ui://`` resource via the protocol handler
 
     Usage:
@@ -197,6 +199,7 @@ def view_tool(
         csp: Optional CSP config with ``connectDomains``, ``resourceDomains``, ``frameDomains``
         visibility: Optional visibility list (``["model"]``, ``["app"]``, ``["model", "app"]``)
         prefers_border: Optional border preference for the view resource
+        permissions: Optional ext-apps permissions (e.g., ``{"camera": {}, "microphone": {}}``)
         icons: Optional icons for the tool
         output_schema: Optional JSON Schema for structured output
     """
@@ -209,6 +212,8 @@ def view_tool(
         ui_meta[MCP_APPS_UI_CSP] = csp
     if prefers_border is not None:
         ui_meta[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
+    if permissions is not None:
+        ui_meta[MCP_APPS_UI_PERMISSIONS] = permissions
 
     meta = {MCP_APPS_UI_KEY: ui_meta}
 
