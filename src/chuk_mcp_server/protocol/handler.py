@@ -793,11 +793,17 @@ class MCPProtocolHandler:
                 tool_result["_meta"]["links"] = links
             set_resource_links(None)
 
-            # Cache structuredContent for SSR: when resources/read is called
-            # for this tool's view, we can server-render with the actual data.
+            # Forward _meta.ui from tool definition to tool result so
+            # clients (Claude.ai) know this result is linked to a view resource.
             if "structuredContent" in tool_result:
                 ui_meta = (tool_handler.meta or {}).get(MCP_APPS_UI_KEY, {})
                 resource_uri = ui_meta.get(MCP_APPS_UI_RESOURCE_URI, "")
+                if ui_meta:
+                    tool_result["_meta"] = tool_result.get("_meta", {})
+                    tool_result["_meta"][MCP_APPS_UI_KEY] = ui_meta
+
+                # Cache structuredContent for SSR: when resources/read is called
+                # for this tool's view, we can server-render with the actual data.
                 if resource_uri:
                     self._view_data_cache[resource_uri] = tool_result["structuredContent"]
                     # Invalidate resource cache so next read triggers SSR fetch
