@@ -224,3 +224,57 @@ MAX_PENDING_REQUESTS = 100
 # ---------------------------------------------------------------------------
 DEFAULT_RATE_LIMIT_RPS = 100.0
 DEFAULT_RATE_LIMIT_BURST = 200.0
+
+
+# ---------------------------------------------------------------------------
+# MCP Apps extension (io.modelcontextprotocol/ui)
+# ---------------------------------------------------------------------------
+MCP_APPS_EXTENSION_ID = "io.modelcontextprotocol/ui"
+MCP_APPS_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
+MCP_APPS_LEGACY_META_KEY = "ui/resourceUri"
+MCP_APPS_UI_SCHEME = "ui://"
+
+# MCP Apps UI metadata keys (used in _meta.ui dict)
+MCP_APPS_UI_KEY = "ui"
+MCP_APPS_UI_RESOURCE_URI = "resourceUri"
+MCP_APPS_UI_VIEW_URL = "viewUrl"
+MCP_APPS_UI_CSP = "csp"
+MCP_APPS_UI_PREFERS_BORDER = "prefersBorder"
+MCP_APPS_UI_VISIBILITY = "visibility"
+MCP_APPS_UI_PERMISSIONS = "permissions"
+
+# MCP Apps visibility values
+MCP_APPS_VISIBILITY_MODEL = "model"
+MCP_APPS_VISIBILITY_APP = "app"
+MCP_APPS_VISIBILITY_DEFAULT: list[str] = [MCP_APPS_VISIBILITY_MODEL, MCP_APPS_VISIBILITY_APP]
+MCP_APPS_VISIBILITY_APP_ONLY: list[str] = [MCP_APPS_VISIBILITY_APP]
+MCP_APPS_VISIBILITY_MODEL_ONLY: list[str] = [MCP_APPS_VISIBILITY_MODEL]
+
+
+# ---------------------------------------------------------------------------
+# Ext-apps protocol method names (host ↔ view postMessage bridge)
+# ---------------------------------------------------------------------------
+# These are defined by @modelcontextprotocol/ext-apps and handled by the host
+# (Claude.ai), NOT by the MCP server.  Constants are provided for reference,
+# logging, and defensive method routing.
+MCP_APPS_METHOD_UI_INITIALIZE = "ui/initialize"
+MCP_APPS_METHOD_UI_GET_CONTEXT = "ui/getContext"
+MCP_APPS_METHOD_UI_SIZE_CHANGED = "ui/notifications/size-changed"
+MCP_APPS_METHOD_UI_TOOL_RESULT = "ui/notifications/tool-result"
+MCP_APPS_METHOD_UI_TOOL_INPUT = "ui/notifications/tool-input"
+MCP_APPS_METHOD_UI_TOOL_INPUT_PARTIAL = "ui/notifications/tool-input-partial"
+MCP_APPS_METHOD_UI_CONTEXT_CHANGED = "ui/notifications/host-context-changed"
+MCP_APPS_METHOD_UI_UPDATE_CONTEXT = "ui/update-model-context"
+MCP_APPS_METHOD_UI_SEND_MESSAGE = "ui/message"
+MCP_APPS_METHOD_UI_REQUEST_DISPLAY_MODE = "ui/request-display-mode"
+MCP_APPS_METHOD_UI_OPEN_LINK = "ui/open-link"
+MCP_APPS_METHOD_UI_TEARDOWN = "ui/resource-teardown"
+MCP_APPS_METHOD_UI_TOOL_CANCELLED = "ui/notifications/tool-cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Ext-apps display modes
+# ---------------------------------------------------------------------------
+MCP_APPS_DISPLAY_INLINE = "inline"
+MCP_APPS_DISPLAY_FULLSCREEN = "fullscreen"
+MCP_APPS_DISPLAY_PIP = "pip"

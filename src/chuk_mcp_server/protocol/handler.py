@@ -30,6 +30,16 @@ from ..constants import (
     LOG_INFO,
     LOG_NOTICE,
     LOG_WARNING,
+    MCP_APPS_EXTENSION_ID,
+    MCP_APPS_LEGACY_META_KEY,
+    MCP_APPS_RESOURCE_MIME_TYPE,
+    MCP_APPS_UI_CSP,
+    MCP_APPS_UI_KEY,
+    MCP_APPS_UI_PERMISSIONS,
+    MCP_APPS_UI_PREFERS_BORDER,
+    MCP_APPS_UI_RESOURCE_URI,
+    MCP_APPS_UI_SCHEME,
+    MCP_APPS_UI_VIEW_URL,
     MCP_DEFAULT_PROTOCOL_VERSION,
     PACKAGE_LOGGER,
     PARAM_EXTERNAL_ACCESS_TOKEN,
@@ -162,11 +172,66 @@ class MCPProtocolHandler:
                 self.capabilities.enable_experimental()
                 logger.debug("Enabled experimental capability (tool with _meta registered)")
 
-        # Auto-register view resource when tool has _meta.ui with viewUrl
+        # MCP Apps: enable extension, normalize keys, auto-register resource
         if tool.meta:
+            self._maybe_enable_ui_extension(tool.meta)
+            self._maybe_normalize_meta_keys(tool)
             self._maybe_register_view_resource(tool.meta)
 
         logger.debug(f"Registered tool: {tool.name}")
+
+    def _maybe_enable_ui_extension(self, meta: dict[str, Any]) -> None:
+        """Enable the MCP Apps UI extension if this tool has a ``ui://`` resource."""
+        if not isinstance(meta, dict):
+            return
+        ui = meta.get(MCP_APPS_UI_KEY)
+        if not ui or not isinstance(ui, dict):
+            return
+        resource_uri = ui.get(MCP_APPS_UI_RESOURCE_URI, "")
+        if resource_uri.startswith(MCP_APPS_UI_SCHEME) and hasattr(self.capabilities, "enable_ui_extension"):
+            self.capabilities.enable_ui_extension()
+            logger.debug("Enabled MCP Apps UI extension")
+
+    @staticmethod
+    def _maybe_normalize_meta_keys(tool: ToolHandler) -> None:
+        """Normalize ``_meta`` keys for ext-apps SDK compatibility.
+
+        The ext-apps SDK supports both nested ``_meta.ui.resourceUri``
+        and legacy flat ``_meta["ui/resourceUri"]``.  Ensure both are
+        present when either is set so all hosts can find the URI.
+        """
+        if not tool.meta or not isinstance(tool.meta, dict):
+            return
+
+        flat_uri = tool.meta.get(MCP_APPS_LEGACY_META_KEY)
+
+        ui = tool.meta.get(MCP_APPS_UI_KEY)
+        nested_uri = ui.get(MCP_APPS_UI_RESOURCE_URI) if isinstance(ui, dict) else None
+
+        if nested_uri and not flat_uri:
+            tool.meta[MCP_APPS_LEGACY_META_KEY] = nested_uri
+            tool.invalidate_cache()
+        elif flat_uri and not nested_uri:
+            if MCP_APPS_UI_KEY not in tool.meta:
+                tool.meta[MCP_APPS_UI_KEY] = {}
+            tool.meta[MCP_APPS_UI_KEY][MCP_APPS_UI_RESOURCE_URI] = flat_uri
+            tool.invalidate_cache()
+
+    def _client_supports_ui(self) -> bool:
+        """Check if the current session's client supports MCP Apps."""
+        from ..context import get_session_id
+
+        session_id = get_session_id()
+        if not session_id:
+            return False
+
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return False
+
+        client_caps = session.get("client_capabilities", {})
+        extensions = client_caps.get("extensions", {})
+        return MCP_APPS_EXTENSION_ID in extensions
 
     def _maybe_register_view_resource(self, meta: dict[str, Any]) -> None:
         """Auto-register an MCP resource for a view tool's HTML.
@@ -179,18 +244,18 @@ class MCPProtocolHandler:
         """
         if not isinstance(meta, dict):
             return
-        ui = meta.get("ui")
+        ui = meta.get(MCP_APPS_UI_KEY)
         if not ui:
             return
 
-        resource_uri = ui.get("resourceUri", "")
-        view_url = ui.get("viewUrl")
+        resource_uri = ui.get(MCP_APPS_UI_RESOURCE_URI, "")
+        view_url = ui.get(MCP_APPS_UI_VIEW_URL)
 
         if not resource_uri or not view_url:
             return
 
         # Only handle ui:// scheme URIs
-        if not resource_uri.startswith("ui://"):
+        if not resource_uri.startswith(MCP_APPS_UI_SCHEME):
             return
 
         # Skip if already registered
@@ -209,13 +274,29 @@ class MCPProtocolHandler:
             # Derive a short name from the URI (e.g. "ui://server/chart" → "chart")
             view_name = resource_uri.rsplit("/", 1)[-1] if "/" in resource_uri else resource_uri
 
+            # Build resource-level _meta from tool's ui metadata
+            resource_meta: dict[str, Any] | None = None
+            prefers_border = ui.get(MCP_APPS_UI_PREFERS_BORDER)
+            csp = ui.get(MCP_APPS_UI_CSP)
+            permissions = ui.get(MCP_APPS_UI_PERMISSIONS)
+            if prefers_border is not None or csp is not None or permissions is not None:
+                resource_ui: dict[str, Any] = {}
+                if prefers_border is not None:
+                    resource_ui[MCP_APPS_UI_PREFERS_BORDER] = prefers_border
+                if csp is not None:
+                    resource_ui[MCP_APPS_UI_CSP] = csp
+                if permissions is not None:
+                    resource_ui[MCP_APPS_UI_PERMISSIONS] = permissions
+                resource_meta = {MCP_APPS_UI_KEY: resource_ui}
+
             resource = ResourceHandler.from_function(
                 uri=resource_uri,
                 func=_fetch_view_html,
                 name=view_name,
                 description=f"{view_name.title()} view HTML",
-                mime_type="text/html;profile=mcp-app",
+                mime_type=MCP_APPS_RESOURCE_MIME_TYPE,
                 cache_ttl=3600,  # Cache for 1 hour — view HTML rarely changes
+                meta=resource_meta,
             )
             self.register_resource(resource)
             logger.debug(f"Auto-registered view resource: {resource_uri} → {view_url}")
@@ -253,10 +334,20 @@ class MCPProtocolHandler:
         logger.debug(f"Registered completion provider: {ref_type}")
 
     def get_tools_list(self) -> list[dict[str, Any]]:
-        """Get list of tools in MCP format."""
+        """Get list of tools in MCP format.
+
+        Tools with ``visibility=["app"]`` are excluded from the listing
+        (they are app-only and should not be shown to the LLM).
+        They remain callable via ``tools/call``.
+        """
+        from ..constants import MCP_APPS_VISIBILITY_APP_ONLY
+
         tools_list = []
 
         for tool_handler in self.tools.values():
+            # Skip app-only tools (hidden from LLM in tools/list)
+            if tool_handler.visibility == MCP_APPS_VISIBILITY_APP_ONLY:
+                continue
             tools_list.append(tool_handler.to_mcp_format())
 
         return tools_list
@@ -391,6 +482,18 @@ class MCPProtocolHandler:
                 return await self._handle_tasks_list(params, msg_id)
             elif method == McpTaskMethod.TASKS_CANCEL:
                 return await self._handle_tasks_cancel(params, msg_id)
+            # Ext-apps protocol methods (ui/*) — handled by the host, not the server
+            elif method and isinstance(method, str) and method.startswith("ui/"):
+                if msg_id is None:
+                    # Notification — silently acknowledge
+                    logger.debug("Received ext-apps notification %s — handled by host", method)
+                    return None, None
+                else:
+                    return self._create_error_response(
+                        msg_id,
+                        JsonRpcError.METHOD_NOT_FOUND,
+                        f"Method '{method}' is an ext-apps protocol method handled by the host, not the MCP server",
+                    ), None
             else:
                 return self._create_error_response(
                     msg_id, JsonRpcError.METHOD_NOT_FOUND, f"Method not found: {method}"

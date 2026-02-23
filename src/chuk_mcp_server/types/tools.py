@@ -14,6 +14,12 @@ from typing import Any
 
 import orjson
 
+from ..constants import (
+    MCP_APPS_LEGACY_META_KEY,
+    MCP_APPS_UI_KEY,
+    MCP_APPS_UI_RESOURCE_URI,
+    MCP_APPS_UI_VISIBILITY,
+)
 from .base import MCPTool, MCPToolInputSchema, ValidationError
 from .errors import ParameterValidationError, ToolExecutionError
 from .parameters import ToolParameter
@@ -38,6 +44,7 @@ class ToolHandler:
     output_schema: dict[str, Any] | None = None  # MCP structured output schema
     icons: list[dict[str, Any]] | None = None  # MCP icons (2025-11-25)
     meta: dict[str, Any] | None = None  # Tool _meta (MCP Apps ui, etc.)
+    visibility: list[str] | None = None  # MCP Apps visibility (["model"], ["app"], ["model", "app"])
 
     @classmethod
     def from_function(
@@ -52,6 +59,7 @@ class ToolHandler:
         output_schema: dict[str, Any] | None = None,
         icons: list[dict[str, Any]] | None = None,
         meta: dict[str, Any] | None = None,
+        visibility: list[str] | None = None,
     ) -> "ToolHandler":
         """Create ToolHandler from a function with orjson optimization."""
         from chuk_mcp_server.constants import TOOL_NAME_PATTERN
@@ -124,6 +132,7 @@ class ToolHandler:
             output_schema=output_schema,
             icons=icons,
             meta=meta,
+            visibility=visibility,
         )
 
         # Pre-compute and cache both formats during creation for maximum performance
@@ -151,7 +160,22 @@ class ToolHandler:
 
             # Add _meta if present (MCP Apps, etc.)
             if self.meta:
-                fmt["_meta"] = self.meta.copy()
+                meta_copy = self.meta.copy()
+                # Ensure legacy flat key for ext-apps SDK compatibility
+                ui = meta_copy.get(MCP_APPS_UI_KEY)
+                if isinstance(ui, dict) and MCP_APPS_UI_RESOURCE_URI in ui:
+                    if MCP_APPS_LEGACY_META_KEY not in meta_copy:
+                        meta_copy[MCP_APPS_LEGACY_META_KEY] = ui[MCP_APPS_UI_RESOURCE_URI]
+                # Add visibility to _meta.ui if set
+                if self.visibility is not None:
+                    if MCP_APPS_UI_KEY not in meta_copy:
+                        meta_copy[MCP_APPS_UI_KEY] = {}
+                    if isinstance(meta_copy.get(MCP_APPS_UI_KEY), dict):
+                        meta_copy[MCP_APPS_UI_KEY][MCP_APPS_UI_VISIBILITY] = list(self.visibility)
+                fmt["_meta"] = meta_copy
+            elif self.visibility is not None:
+                # Visibility set but no other meta — create _meta with ui.visibility
+                fmt["_meta"] = {MCP_APPS_UI_KEY: {MCP_APPS_UI_VISIBILITY: list(self.visibility)}}
 
             self._cached_mcp_format = fmt
 

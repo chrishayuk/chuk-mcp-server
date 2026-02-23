@@ -4,18 +4,18 @@ This document outlines the development roadmap for `chuk-mcp-server`, the Python
 
 ---
 
-## Current State: v0.23.1
+## Current State: v0.24.0
 
-**2396 tests | 95.79% coverage | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call | 0 mypy errors**
+**2446 tests | 95.47% coverage | 1M+ ops/s ping, 377K ops/s tools/list, 76K+ ops/s tools/call | 0 mypy errors**
 
 ChukMCPServer provides a decorator-based framework for building production-ready Model Context Protocol servers in Python. Full conformance with MCP specification **2025-11-25** (latest), including MCP Apps support. The current release includes:
 
 | Area | Capabilities |
 |------|-------------|
-| **Core API** | `@tool`, `@resource`, `@resource_template`, `@prompt` decorators with automatic JSON schema generation |
+| **Core API** | `@tool`, `@view_tool`, `@resource`, `@resource_template`, `@prompt` decorators with automatic JSON schema generation |
 | **Transports** | Streamable HTTP (Starlette/Uvicorn) with GET SSE streams, STDIO (sync + async), bidirectional on both transports |
 | **Protocol** | JSON-RPC 2.0, MCP specification 2025-11-25, full protocol surface |
-| **MCP Apps** | `_meta.ui.resourceUri` on tools, `structuredContent` passthrough for interactive HTML UIs (SEP-1865) |
+| **MCP Apps** | `@view_tool` decorator, `_meta.ui` (resourceUri, viewUrl, csp, visibility, prefersBorder, permissions), `structuredContent` passthrough, auto view resource registration, ext-apps constants, defensive `ui/*` handling |
 | **Context** | Session management, user context, progress reporting, log notifications, resource links, metadata, sampling, elicitation, roots |
 | **Types** | `ToolHandler`, `ResourceHandler`, `ResourceTemplateHandler`, `PromptHandler` with orjson caching |
 | **Tool Annotations** | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` metadata on tools |
@@ -47,7 +47,21 @@ ChukMCPServer provides a decorator-based framework for building production-ready
 | **Health** | `/health` (liveness), `/health/ready` (readiness), `/health/detailed` (full state) |
 | **Telemetry** | Thin OpenTelemetry wrapper, zero overhead without otel |
 
-### Recently Completed (v0.23.1 -- Streamable HTTP GET SSE Streams)
+### Recently Completed (v0.24.0 -- MCP Apps Extension Protocol)
+
+- **`@view_tool` decorator** -- Standalone (`@view_tool(...)`) and instance (`@mcp.view_tool(...)`) decorators that build `_meta.ui` with `resourceUri`/`viewUrl`, set `readOnlyHint=True` by default, and accept `csp`, `visibility`, `prefersBorder`, `permissions` params
+- **Tool visibility** -- `_meta.ui.visibility` support: app-only tools (`["app"]`) are hidden from `tools/list` but remain callable via `tools/call`; model-only and default visibility tools appear normally
+- **CSP metadata** -- `_meta.ui.csp` with `connectDomains`, `resourceDomains`, `frameDomains` passed through to auto-registered view resources
+- **Resource border hint** -- `_meta.ui.prefersBorder` boolean propagated from tool meta to auto-registered view resource `_meta`
+- **Permissions metadata** -- `_meta.ui.permissions` dict (e.g., `{"camera": {}, "microphone": {}}`) on `@view_tool`, passed through to auto-registered view resource for iframe `allow` attribute configuration
+- **Ext-apps protocol constants** -- 13 `MCP_APPS_METHOD_UI_*` constants for all ext-apps JSON-RPC method names, 3 display mode constants (`MCP_APPS_DISPLAY_INLINE/FULLSCREEN/PIP`), `MCP_APPS_UI_PERMISSIONS` key constant (Principle 3)
+- **Defensive `ui/*` handling** -- `ui/*` requests return `METHOD_NOT_FOUND` with "ext-apps protocol method handled by the host" message; `ui/*` notifications return `(None, None)` silently
+- **UI meta key constants** -- `MCP_APPS_UI_KEY`, `MCP_APPS_UI_RESOURCE_URI`, `MCP_APPS_UI_VIEW_URL`, `MCP_APPS_UI_CSP`, `MCP_APPS_UI_PREFERS_BORDER`, `MCP_APPS_UI_VISIBILITY`, `MCP_APPS_UI_PERMISSIONS` eliminate magic strings (Principle 3)
+- **Resource deep copy fix** -- `ResourceHandler.to_mcp_format()` now uses orjson round-trip deep copy instead of shallow `.copy()`, preventing nested dict mutation (Principle 1/5)
+- **Extension ID in capabilities** -- Advertise `io.modelcontextprotocol/ui` in `capabilities.extensions` when a tool has `ui://` resourceUri
+- **Legacy meta key normalization** -- Sync nested `_meta.ui.resourceUri` ↔ flat `_meta["ui/resourceUri"]` for ext-apps SDK compatibility
+
+### Previously Completed (v0.23.1 -- Streamable HTTP GET SSE Streams)
 
 - **GET SSE stream for streamable-http** -- `GET /mcp` with `Accept: text/event-stream` and a valid session ID now opens a persistent SSE stream for server-to-client notifications and requests, matching the streamable-http transport spec. Previously, GET always returned a JSON info page, which caused Claude.ai's MCP connector to hang. Backward compatible: GET without the SSE accept header still returns the JSON info page.
 
@@ -237,6 +251,9 @@ The server targets **MCP specification 2025-11-25** (latest) and is fully confor
 | **Icons** | Implemented |
 | **List changed notifications** | Implemented (tools, resources, prompts) |
 | **MCP Apps** (`_meta`, structuredContent passthrough) | Implemented |
+| **MCP Apps Extension** (`io.modelcontextprotocol/ui` in capabilities, legacy key normalization) | Implemented (Phase 7.5a) |
+| **MCP Apps Helpers** (`@view_tool`, visibility filtering, CSP, `prefersBorder`) | Implemented (Phase 7.5b) |
+| **MCP Apps Protocol** (permissions, ext-apps constants, defensive `ui/*` handling) | Implemented (Phase 7.5c/d/e) |
 
 ---
 
@@ -382,7 +399,7 @@ Refactoring, dependency cleanup, and test improvements driven by the architectur
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Fix `telemetry.py` coverage (63%) | **Done** | Added mock-otel tests; now at 100% coverage |
-| Add MCP Apps tests | **Done** | 12 tests for `meta` field, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough |
+| Add MCP Apps tests | **Done** | 38 tests for `meta` field, `_meta` in `tools/list`, pre-formatted `structuredContent` passthrough, ext-apps constants, defensive `ui/*` handling, permissions on auto-registered resources |
 | Consolidate test files | **Done** | 21 `*_coverage.py` files consolidated: 6 orphans renamed, 15 supplements merged into base files, all deleted |
 | Fix skipped tests | **Done** | Replaced 7 `pytest.skip()` in `test_core_final_coverage.py` with real STDIO detection and shutdown tests; removed dead decorator fallback tests |
 | Add concurrency tests | **Done** | 7 tests: parallel tool execution, context isolation across coroutines, concurrent registration and session creation |
@@ -416,6 +433,63 @@ Enable large-scale MCP architectures where servers are composed from many source
 
 ---
 
+## Phase 7.5: MCP Apps Extension Protocol -- v0.24
+
+Align the server with the official MCP Apps extension protocol (`@modelcontextprotocol/ext-apps`). The ext-apps spec defines how interactive HTML UIs (Apps) are embedded in MCP hosts via iframes, using a JSON-RPC 2.0 postMessage bridge between the App and the host.
+
+### 7.5a: Quick Fixes (Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Extension ID in capabilities | **Done** | Advertise `io.modelcontextprotocol/ui` in `capabilities.extensions` when a tool has `ui://` resourceUri |
+| Legacy meta key normalization | **Done** | Sync nested `_meta.ui.resourceUri` ↔ flat `_meta["ui/resourceUri"]` for ext-apps SDK compatibility |
+| Client UI detection | **Done** | `_client_supports_ui()` checks `client_capabilities.extensions["io.modelcontextprotocol/ui"]` |
+| MCP Apps constants | **Done** | `MCP_APPS_EXTENSION_ID`, `MCP_APPS_RESOURCE_MIME_TYPE`, `MCP_APPS_LEGACY_META_KEY`, `MCP_APPS_UI_SCHEME` in `constants.py` |
+
+### 7.5b: Python Server Helpers (Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| `@view_tool` decorator | **Done** | Standalone and instance (`@mcp.view_tool()`) decorators that build `_meta.ui` with `resourceUri`/`viewUrl`, set `readOnlyHint=True`, accept CSP/visibility/prefersBorder |
+| CSP metadata | **Done** | `_meta.ui.csp` with `connectDomains`, `resourceDomains`, `frameDomains` passed through to auto-registered view resources |
+| Tool visibility | **Done** | `_meta.ui.visibility` support — app-only tools (`["app"]`) hidden from `tools/list` but still callable via `tools/call` |
+| Resource border hint | **Done** | `_meta.ui.prefersBorder` boolean propagated from tool meta to auto-registered view resource `_meta` |
+| UI meta key constants | **Done** | `MCP_APPS_UI_KEY`, `MCP_APPS_UI_RESOURCE_URI`, `MCP_APPS_UI_VIEW_URL`, `MCP_APPS_UI_CSP`, `MCP_APPS_UI_PREFERS_BORDER`, `MCP_APPS_UI_VISIBILITY` in `constants.py` (Principle 3) |
+| Resource deep copy fix | **Done** | `ResourceHandler.to_mcp_format()` now uses orjson round-trip deep copy instead of shallow `.copy()` (Principle 1/5) |
+
+### 7.5c: Views Adopt App Protocol (Server-Side Helpers Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Ext-apps method constants | **Done** | 13 `MCP_APPS_METHOD_UI_*` constants for all ext-apps JSON-RPC method names (`ui/initialize`, `ui/getContext`, `ui/notifications/*`, etc.) |
+| Display mode constants | **Done** | `MCP_APPS_DISPLAY_INLINE`, `MCP_APPS_DISPLAY_FULLSCREEN`, `MCP_APPS_DISPLAY_PIP` constants for reference |
+| App SDK integration | View-side | View HTML uses `@anthropic/ext-apps` `App` class for `connect()`, `ontoolresult`, `ontoolinput` (implemented in view HTML, not server) |
+| Auto-resize | View-side | Views report content size via `ResizeObserver` → `ui/notifications/size-changed` (handled by host) |
+| Host theming | View-side | Views consume host CSS variables (85+ tokens) from `ui/context` for theme-aware rendering (handled by host) |
+| Display mode | View-side | Views request `inline` / `fullscreen` / `pip` via `app.requestDisplayMode()` (handled by host) |
+
+### 7.5d: Bidirectional Interaction (Server-Side Helpers Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Defensive `ui/*` handling | **Done** | Server returns `METHOD_NOT_FOUND` for `ui/*` requests and silently ignores `ui/*` notifications (these are host-side methods) |
+| `callServerTool` | Host-side | App calls server tools via `app.callServerTool()` → host proxies to `tools/call` (already works — server handles `tools/call` normally) |
+| `updateModelContext` | Host-side | App pushes context updates to the model via `app.updateModelContext()` (handled by host, not server) |
+| `sendMessage` | Host-side | App triggers new model turns via `app.sendMessage()` (handled by host, not server) |
+| Input streaming | Host-side | App receives partial tool input via `ontoolinputpartial` (handled by host, not server) |
+
+### 7.5e: Server-Side Protocol Support (Complete)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Permissions metadata | **Done** | `permissions` parameter on `@view_tool` (`{"camera": {}, "microphone": {}}` etc.), serialized to `_meta.ui.permissions` and passed through to auto-registered view resource |
+| Permissions key constant | **Done** | `MCP_APPS_UI_PERMISSIONS` constant in `constants.py` (Principle 3: No Magic Strings) |
+| Defensive `ui/*` method dispatch | **Done** | `ui/*` requests → `METHOD_NOT_FOUND` with "ext-apps protocol method handled by the host" message; `ui/*` notifications → silent `(None, None)` |
+| Documentation | **Done** | Comprehensive `docs/guides/mcp-apps.md` with three-party architecture, permissions, display modes, visibility, ext-apps SDK, testing guide |
+| Example with permissions | **Done** | `examples/mcp_apps_view_example.py` updated with `@mcp.view_tool()` usage and camera/microphone permissions example |
+
+---
+
 ## Phase 8: Security and Enterprise -- v0.25+
 
 Capabilities required for enterprise deployments with strict compliance, governance, and multi-tenancy requirements.
@@ -436,6 +510,7 @@ Capabilities required for enterprise deployments with strict compliance, governa
 
 | Version | Milestone |
 |---------|-----------|
+| v0.24.0 | MCP Apps extension protocol: `@view_tool` decorator, visibility filtering, CSP metadata, `prefersBorder`, permissions metadata, `io.modelcontextprotocol/ui` capabilities, legacy meta key normalization, ext-apps protocol constants, defensive `ui/*` handling |
 | v0.23.1 | Streamable HTTP GET SSE streams: `GET /mcp` opens persistent SSE stream for server-to-client messages, fixes Claude.ai connector compatibility |
 | v0.23.0 | Codebase quality: module splitting, magic string elimination, type safety, async fixes, dependency cleanup, test infrastructure, MCP spec compliance |
 | v0.22.0 | MCP Apps: `_meta` on tools, pre-formatted result passthrough, `structuredContent` for interactive HTML UIs |

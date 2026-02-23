@@ -552,5 +552,91 @@ def test_register_tool_with_non_ui_resource_uri_no_auto_register():
     assert "https://example.com/chart" not in protocol.resources
 
 
+def test_enable_ui_extension():
+    """Test that enable_ui_extension adds the extension to capabilities."""
+    from chuk_mcp_server.types import create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    caps.enable_ui_extension()
+    result = caps.model_dump(exclude_none=True)
+    assert "extensions" in result
+    ext = result["extensions"]
+    assert "io.modelcontextprotocol/ui" in ext
+    assert ext["io.modelcontextprotocol/ui"]["mimeTypes"] == ["text/html;profile=mcp-app"]
+
+
+def test_register_tool_with_ui_meta_enables_ui_extension():
+    """Test that registering a tool with ui:// resourceUri enables the UI extension."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True, resources=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def view_tool(x: str) -> str:
+        """View."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="show_chart",
+        meta={"ui": {"resourceUri": "ui://test/chart", "viewUrl": "https://example.com/chart/v1"}},
+    )
+    protocol.register_tool(tool)
+
+    result = caps.model_dump(exclude_none=True)
+    # UI extension should be enabled
+    assert "extensions" in result
+    assert "io.modelcontextprotocol/ui" in result["extensions"]
+    # experimental should also be enabled (backward compat)
+    assert "experimental" in result
+
+
+def test_meta_normalization_nested_to_flat():
+    """Test that nested _meta.ui.resourceUri gets a flat key added."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def view_tool(x: str) -> str:
+        """View."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="v",
+        meta={"ui": {"resourceUri": "ui://test/chart"}},
+    )
+    protocol.register_tool(tool)
+
+    assert tool.meta["ui/resourceUri"] == "ui://test/chart"
+    assert tool.meta["ui"]["resourceUri"] == "ui://test/chart"
+
+
+def test_meta_normalization_flat_to_nested():
+    """Test that flat _meta['ui/resourceUri'] gets nested key added."""
+    from chuk_mcp_server.protocol import MCPProtocolHandler
+    from chuk_mcp_server.types import ServerInfo, ToolHandler, create_server_capabilities
+
+    caps = create_server_capabilities(tools=True)
+    protocol = MCPProtocolHandler(ServerInfo(name="test", version="0.1.0"), caps)
+
+    def view_tool(x: str) -> str:
+        """View."""
+        return x
+
+    tool = ToolHandler.from_function(
+        view_tool,
+        name="v",
+        meta={"ui/resourceUri": "ui://test/chart"},
+    )
+    protocol.register_tool(tool)
+
+    assert tool.meta["ui"]["resourceUri"] == "ui://test/chart"
+    assert tool.meta["ui/resourceUri"] == "ui://test/chart"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -91,6 +91,18 @@ Smart configuration, logging, and transport options.
 
 **Best for:** Production configuration, debugging, deployment
 
+### 🖼 MCP Apps (Interactive Views)
+
+Render rich interactive UIs (charts, maps, tables) in Claude.ai via MCP Apps.
+
+| Example | Description | Key Features |
+|---------|-------------|--------------|
+| **[mcp_apps_view_example.py](mcp_apps_view_example.py)** | Interactive views in Claude.ai | `_meta.ui`, `structuredContent`, auto-resource registration, chart + markdown views |
+
+**Documentation:** See [docs/guides/mcp-apps.md](../docs/guides/mcp-apps.md)
+
+**Best for:** Building visual tools for Claude.ai, dashboards, data visualization
+
 ### 🔌 Protocol Features
 
 Demonstrations of MCP protocol capabilities.
@@ -216,6 +228,7 @@ if __name__ == "__main__":
 - **Sampling + Tools:** `advanced_protocol_example.py`
 - **URL Elicitation:** `advanced_protocol_example.py`
 - **Tasks System:** `advanced_protocol_example.py`
+- **MCP Apps (Views):** `mcp_apps_view_example.py`
 - **Async/Await:** `async_example.py`, `zero_config_example.py`
 - **Session Management:** `context_session_isolation_example.py`
 - **User Auth:** `context_user_persistence_example.py`
@@ -225,6 +238,7 @@ if __name__ == "__main__":
 
 **By Use Case:**
 - **Claude Desktop:** `stdio_example.py`
+- **Claude.ai Views:** `mcp_apps_view_example.py`
 - **Web API:** `zero_config_example.py` (HTTP mode)
 - **Multi-server:** `proxy_multi_server_example.py`
 - **Production:** `async_example.py`, `demo_smart_config.py`
@@ -263,6 +277,7 @@ python examples/zero_config_example.py --port 8001
 - [Getting Started Guide](../docs/getting-started/) - Step-by-step guides
 - [API Reference](../docs/api-reference/README.md) - Complete API docs
 - [Context Management](../docs/guides/context-management.md) - Context guide
+- [MCP Apps Guide](../docs/guides/mcp-apps.md) - Interactive views for Claude.ai
 - [Artifacts](../docs/guides/artifacts.md) - Artifact storage guide
 - [OAuth Integration](../docs/OAUTH.md) - OAuth setup
 - [Transport Modes](../docs/TRANSPORT_MODES.md) - STDIO vs HTTP
@@ -287,7 +302,7 @@ Have a cool example? Add it!
 ## 📊 Example Statistics
 
 - **Total Examples:** 29 Python files
-- **Categories:** 8 (Basic, Async, Context, Composition, Proxy, Config, Protocol, Advanced)
+- **Categories:** 9 (Basic, Async, Context, Composition, Proxy, Config, MCP Apps, Protocol, Advanced)
 - **Test Coverage:** Examples are tested in CI
 - **Documentation:** All major features have examples
 

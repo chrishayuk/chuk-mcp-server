@@ -31,24 +31,20 @@ mcp = ChukMCPServer(
 # A tool that renders a chart view in Claude.ai
 # ---------------------------------------------------------------------------
 #
-# The `meta` dict tells Claude.ai this tool produces a rich view:
-#   - resourceUri: a ui:// URI identifying the view (used for resources/read)
-#   - viewUrl: the HTTPS URL serving the view's HTML/JS bundle
+# The @mcp.view_tool() decorator tells Claude.ai this tool produces a rich view:
+#   - resource_uri: a ui:// URI identifying the view (used for resources/read)
+#   - view_url: the HTTPS URL serving the view's HTML/JS bundle
 #
 # ChukMCPServer automatically:
+#   - Builds _meta.ui with resourceUri and viewUrl
+#   - Sets readOnlyHint=True
 #   - Registers a resource at the resourceUri that fetches HTML from viewUrl
-#   - Enables the `experimental` capability
+#   - Enables the `experimental` capability and `io.modelcontextprotocol/ui` extension
 #
-@mcp.tool(
-    name="show_chart",
+@mcp.view_tool(
+    resource_uri="ui://view-example/chart",
+    view_url="https://chuk-mcp-ui-views.fly.dev/chart/v1",
     description="Show programming language popularity as a chart.",
-    read_only_hint=True,
-    meta={
-        "ui": {
-            "resourceUri": "ui://view-example/chart",
-            "viewUrl": "https://chuk-mcp-ui-views.fly.dev/chart/v1",
-        }
-    },
 )
 async def show_chart(chart_type: str = "bar") -> dict:
     """Render a chart. Returns structured content for the view iframe."""
@@ -80,16 +76,10 @@ async def show_chart(chart_type: str = "bar") -> dict:
 # ---------------------------------------------------------------------------
 # A tool that renders a markdown view
 # ---------------------------------------------------------------------------
-@mcp.tool(
-    name="show_readme",
+@mcp.view_tool(
+    resource_uri="ui://view-example/markdown",
+    view_url="https://chuk-mcp-ui-views.fly.dev/markdown/v1",
     description="Show a rich markdown document.",
-    read_only_hint=True,
-    meta={
-        "ui": {
-            "resourceUri": "ui://view-example/markdown",
-            "viewUrl": "https://chuk-mcp-ui-views.fly.dev/markdown/v1",
-        }
-    },
 )
 async def show_readme() -> dict:
     """Render a markdown document in a rich view."""
@@ -107,9 +97,35 @@ async def show_readme() -> dict:
                 "- Rich markdown rendering\n"
                 "- Data tables with sorting\n\n"
                 "```python\n"
-                'mcp.tool(meta={"ui": {...}})\n'
+                "@mcp.view_tool(\n"
+                '    resource_uri="ui://server/chart",\n'
+                '    view_url="https://cdn.example.com/chart/v1",\n'
+                ")\n"
                 "```\n"
             ),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# A tool with permissions — requests camera and microphone access
+# ---------------------------------------------------------------------------
+@mcp.view_tool(
+    resource_uri="ui://view-example/recorder",
+    view_url="https://chuk-mcp-ui-views.fly.dev/recorder/v1",
+    description="Record a video using the device camera.",
+    permissions={"camera": {}, "microphone": {}},
+    prefers_border=True,
+)
+async def show_recorder(max_duration_sec: int = 30) -> dict:
+    """Open a video recorder view that uses the device camera and microphone."""
+    return {
+        "content": [{"type": "text", "text": "Video recorder ready."}],
+        "structuredContent": {
+            "type": "recorder",
+            "version": "1.0",
+            "maxDurationSec": max_duration_sec,
+            "mode": "video",
         },
     }
 
