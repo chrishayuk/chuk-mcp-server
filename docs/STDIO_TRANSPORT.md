@@ -198,6 +198,16 @@ MCP_STDIO=1 python server.py
 echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | nc localhost <stdin_pipe>
 ```
 
+## Timeout Configuration
+
+The STDIO transport enforces a timeout when waiting for the client to respond to a server-initiated request (e.g. `sampling/createMessage`). The default is 120 seconds and can be overridden:
+
+```bash
+export MCP_STDIO_CLIENT_RESPONSE_TIMEOUT=60   # shorten to 60 s
+```
+
+If the client does not reply within the timeout, the request raises a `RuntimeError` and the pending future is cancelled.
+
 ## Configuration Detection
 
 The smart configuration system automatically detects the appropriate transport mode:

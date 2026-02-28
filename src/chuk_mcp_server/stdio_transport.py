@@ -25,6 +25,7 @@ from .constants import (
     KEY_PARAMS,
     KEY_PROTOCOL_VERSION,
     MCP_PROTOCOL_VERSION_2025_03,
+    STDIO_CLIENT_RESPONSE_TIMEOUT,
     JsonRpcError,
     McpMethod,
 )
@@ -95,7 +96,7 @@ class StdioTransport:
             await self._send_response(request)
 
             # Wait for the client's response (with timeout)
-            return await asyncio.wait_for(future, timeout=120.0)
+            return await asyncio.wait_for(future, timeout=STDIO_CLIENT_RESPONSE_TIMEOUT)
         except TimeoutError:
             raise RuntimeError(f"Timeout waiting for client response to request {request_id}")
         finally:
@@ -367,7 +368,7 @@ class StdioSyncTransport:
         try:
             line = await asyncio.wait_for(
                 asyncio.to_thread(sys.stdin.readline),
-                timeout=120.0,
+                timeout=STDIO_CLIENT_RESPONSE_TIMEOUT,
             )
         except TimeoutError:
             raise RuntimeError(f"Timeout waiting for client response to request {request_id}")

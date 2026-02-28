@@ -44,6 +44,8 @@ from ..constants import (
     PACKAGE_LOGGER,
     PARAM_EXTERNAL_ACCESS_TOKEN,
     PARAM_USER_ID,
+    SPA_FETCH_TIMEOUT,
+    SSR_FETCH_TIMEOUT,
     JsonRpcError,
     McpMethod,
     McpTaskMethod,
@@ -279,7 +281,7 @@ class MCPProtocolHandler:
                             resp = await client.post(
                                 ssr_url,
                                 json={"data": cached_data},
-                                timeout=5.0,
+                                timeout=SSR_FETCH_TIMEOUT,
                             )
                             if resp.status_code == 200:
                                 logger.debug(f"SSR render succeeded for {resource_uri}")
@@ -288,9 +290,9 @@ class MCPProtocolHandler:
                     except Exception as ssr_err:
                         logger.debug(f"SSR failed for {resource_uri}: {ssr_err}, falling back")
 
-                # Fallback: fetch static SPA HTML from CDN
+                # Fallback: fetch static SPA HTML from CDN (30s timeout for large bundles)
                 async with httpx.AsyncClient() as client:
-                    resp = await client.get(view_url, follow_redirects=True)
+                    resp = await client.get(view_url, follow_redirects=True, timeout=SPA_FETCH_TIMEOUT)
                     resp.raise_for_status()
                     return resp.text
 
