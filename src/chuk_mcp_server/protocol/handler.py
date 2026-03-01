@@ -44,6 +44,8 @@ from ..constants import (
     PACKAGE_LOGGER,
     PARAM_EXTERNAL_ACCESS_TOKEN,
     PARAM_USER_ID,
+    SPA_FETCH_TIMEOUT,
+    SSR_FETCH_TIMEOUT,
     JsonRpcError,
     McpMethod,
     McpTaskMethod,
@@ -270,6 +272,8 @@ class MCPProtocolHandler:
             import httpx  # noqa: F811 — lazy import, transitive dep
 
             async def _fetch_view_html() -> str:
+                import json as _json
+
                 # Try SSR first if we have cached data from a recent tool call
                 cached_data = self._view_data_cache.pop(resource_uri, None)
                 if cached_data:
@@ -279,7 +283,7 @@ class MCPProtocolHandler:
                             resp = await client.post(
                                 ssr_url,
                                 json={"data": cached_data},
-                                timeout=5.0,
+                                timeout=SSR_FETCH_TIMEOUT,
                             )
                             if resp.status_code == 200:
                                 logger.debug(f"SSR render succeeded for {resource_uri}")
@@ -288,11 +292,27 @@ class MCPProtocolHandler:
                     except Exception as ssr_err:
                         logger.debug(f"SSR failed for {resource_uri}: {ssr_err}, falling back")
 
-                # Fallback: fetch static SPA HTML from CDN
+                # Fallback: fetch static SPA HTML from CDN (30s timeout for large bundles)
                 async with httpx.AsyncClient() as client:
-                    resp = await client.get(view_url, follow_redirects=True)
+                    resp = await client.get(view_url, follow_redirects=True, timeout=SPA_FETCH_TIMEOUT)
                     resp.raise_for_status()
-                    return resp.text
+                    html = resp.text
+
+                # Inject cached data into static HTML so the SPA can hydrate
+                # without needing postMessage or ext-apps SDK.  This mirrors
+                # what the SSR server does with __SSR_DATA__.
+                if cached_data and "</body>" in html:
+                    try:
+                        data_json = _json.dumps(cached_data, separators=(",", ":"))
+                        # Escape </script> sequences to prevent premature tag closing
+                        data_json = data_json.replace("</", "<\\/")
+                        inject = f"<script>window.__SSR_DATA__={data_json}</script>"
+                        html = html.replace("</body>", inject + "</body>", 1)
+                        logger.debug(f"Injected __SSR_DATA__ into static HTML for {resource_uri}")
+                    except Exception as inject_err:
+                        logger.debug(f"Failed to inject SSR data: {inject_err}")
+
+                return html
 
             # Derive a short name from the URI (e.g. "ui://server/chart" → "chart")
             view_name = resource_uri.rsplit("/", 1)[-1] if "/" in resource_uri else resource_uri

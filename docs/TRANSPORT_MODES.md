@@ -140,11 +140,23 @@ curl -X POST http://localhost:8000/mcp \
 
 ## Environment Variables
 
+### Transport selection
+
 - `MCP_TRANSPORT`: Force transport mode (`stdio` or `http`)
 - `MCP_STDIO`: Set to `1` to enable stdio mode
 - `USE_STDIO`: Alternative to `MCP_STDIO`
 - `MCP_SERVER_NAME`: Custom server name
 - `MCP_SERVER_VERSION`: Custom server version
+
+### Timeouts (seconds)
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_STDIO_CLIENT_RESPONSE_TIMEOUT` | `120` | Max wait for a client response to a server-initiated request (STDIO) |
+| `MCP_HTTP_CLIENT_RESPONSE_TIMEOUT` | `120` | Same limit for HTTP/SSE transport |
+| `MCP_PROXY_TOOL_TIMEOUT` | `30` | Default call timeout when forwarding to upstream MCP servers |
+| `MCP_SSR_FETCH_TIMEOUT` | `15` | Timeout for SSR POST requests when serving MCP Apps views |
+| `MCP_SPA_FETCH_TIMEOUT` | `30` | Timeout for fetching the static SPA bundle from a CDN |
 
 ## Performance Tuning
 

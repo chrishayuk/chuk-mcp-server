@@ -35,6 +35,31 @@ export GOOGLE_REDIRECT_URI=http://localhost:8000/oauth/callback
 export OAUTH_SERVER_URL=http://localhost:8000
 ```
 
+## Timeouts
+
+All timeouts are in seconds. Defaults shown below.
+
+```bash
+# How long to wait for the client to respond to a server-initiated
+# request (e.g. sampling/createMessage) over STDIO transport
+export MCP_STDIO_CLIENT_RESPONSE_TIMEOUT=120
+
+# Same limit for the HTTP/SSE transport
+export MCP_HTTP_CLIENT_RESPONSE_TIMEOUT=120
+
+# Default call timeout used by the proxy manager when forwarding
+# tool calls to upstream MCP servers
+export MCP_PROXY_TOOL_TIMEOUT=30
+
+# HTTP timeout for SSR (server-side render) POST requests when
+# serving MCP Apps view resources
+export MCP_SSR_FETCH_TIMEOUT=15
+
+# HTTP timeout for fetching the static SPA bundle from a CDN when
+# SSR is unavailable or fails
+export MCP_SPA_FETCH_TIMEOUT=30
+```
+
 ## Next Steps
 
 - [Deployment Guide](production.md) - Best practices

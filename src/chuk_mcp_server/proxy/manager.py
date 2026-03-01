@@ -10,6 +10,8 @@ from typing import Any
 
 from chuk_tool_processor.mcp import MCPTool, StreamManager, register_mcp_tools
 
+from ..constants import PROXY_TOOL_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -174,7 +176,7 @@ class ProxyManager:
             mcp_tool = MCPTool(
                 tool_name=tool_name,
                 stream_manager=stream_manager,
-                default_timeout=30.0,
+                default_timeout=PROXY_TOOL_TIMEOUT,
                 enable_resilience=True,
             )
 

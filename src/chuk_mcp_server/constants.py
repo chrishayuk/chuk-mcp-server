@@ -3,6 +3,7 @@
 Top-level constants shared across the chuk_mcp_server package.
 """
 
+import os
 import re
 from enum import IntEnum
 
@@ -224,6 +225,16 @@ MAX_PENDING_REQUESTS = 100
 # ---------------------------------------------------------------------------
 DEFAULT_RATE_LIMIT_RPS = 100.0
 DEFAULT_RATE_LIMIT_BURST = 200.0
+
+
+# ---------------------------------------------------------------------------
+# Timeout defaults (seconds) — override via environment variables
+# ---------------------------------------------------------------------------
+STDIO_CLIENT_RESPONSE_TIMEOUT = float(os.getenv("MCP_STDIO_CLIENT_RESPONSE_TIMEOUT", "120.0"))
+HTTP_CLIENT_RESPONSE_TIMEOUT = float(os.getenv("MCP_HTTP_CLIENT_RESPONSE_TIMEOUT", "120.0"))
+PROXY_TOOL_TIMEOUT = float(os.getenv("MCP_PROXY_TOOL_TIMEOUT", "30.0"))
+SSR_FETCH_TIMEOUT = float(os.getenv("MCP_SSR_FETCH_TIMEOUT", "15.0"))
+SPA_FETCH_TIMEOUT = float(os.getenv("MCP_SPA_FETCH_TIMEOUT", "30.0"))
 
 
 # ---------------------------------------------------------------------------

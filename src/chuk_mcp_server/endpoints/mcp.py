@@ -20,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
 # chuk_mcp_server - Fix import path
-from ..constants import JSONRPC_KEY, KEY_ID, KEY_METHOD, KEY_PARAMS, McpMethod
+from ..constants import HTTP_CLIENT_RESPONSE_TIMEOUT, JSONRPC_KEY, KEY_ID, KEY_METHOD, KEY_PARAMS, McpMethod
 from ..protocol import MCPProtocolHandler
 from .constants import (
     BEARER_PREFIX,
@@ -371,7 +371,7 @@ class MCPEndpoint:
         await sse_queue.put(request)
 
         try:
-            return await asyncio.wait_for(future, timeout=120.0)
+            return await asyncio.wait_for(future, timeout=HTTP_CLIENT_RESPONSE_TIMEOUT)
         except TimeoutError:
             raise RuntimeError(f"Timeout waiting for client response to request {request_id}")
         finally:
